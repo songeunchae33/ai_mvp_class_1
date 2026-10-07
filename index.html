@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>캐치캐치</title>
+<style>
+  :root{
+    --bg:#f6f6f7;
+    --app-bg:#ffffff;
+    --surface:#f6f6f7;
+    --surface2:#efeff1;
+    --line:#e7e7e9;
+    --text:#191919;
+    --dim:#8e8f93;
+    --faint:#b7b8bc;
+    --yellow:#ffe100;
+    --yellow-soft:#fff6c4;
+    --yellow-press:#f3d400;
+    --tier-near:#2f6fed;
+    --tier-mid:#1fa463;
+    --tier-far:#e8a900;
+    --tier-veryfar:#e4453c;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{height:100%;margin:0;}
+  body{
+    background:var(--bg);
+    font-family:-apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo','Malgun Gothic',sans-serif;
+    color:var(--text);
+  }
+  button{font-family:inherit;}
+  .title-font{font-weight:800;}
+
+  #app{
+    width:100%;
+    max-width:430px;
+    margin:0 auto;
+    height:100dvh;
+    background:var(--app-bg);
+    position:relative;
+    overflow:hidden;
+  }
+  @media (min-width:431px){
+    body{display:flex;align-items:flex-start;justify-content:center;padding-top:24px;}
+    #app{
+      height:calc(100dvh - 48px);
+      border-radius:32px;
+      box-shadow:0 30px 70px rgba(0,0,0,0.18);
+      border:1px solid #ddd;
+    }
+  }
+
+  .screen{
+    position:absolute;inset:0;
+    display:none;flex-direction:column;
+    background:var(--app-bg);
+  }
+  .screen.active{display:flex;}
+
+  .statusbar{height:env(safe-area-inset-top,14px);flex-shrink:0;}
+
+  /* ---- 공통 헤더 ---- */
+  .topbar{
+    flex-shrink:0;
+    padding:10px 18px 14px;
+    display:flex;align-items:center;justify-content:space-between;
+  }
+  .topbar .back{
+    width:34px;height:34px;border-radius:999px;background:var(--surface);
+    border:none;display:flex;align-items:center;justify-content:center;
+    font-size:16px;color:var(--text);
+  }
+  .topbar .back:active{background:var(--surface2);}
+  .topbar.home{padding-top:26px;}
+  .wordmark{
+    display:flex;align-items:center;gap:8px;
+    font-weight:800;
+    font-size:26px;color:var(--text);
+  }
+  .wordmark .mark{width:30px;height:30px;flex-shrink:0;}
+  .title-mid{font-size:18.5px;font-weight:800;}
+  .ghost-icon{
+    width:34px;height:34px;border-radius:999px;background:var(--surface);
+    display:flex;align-items:center;justify-content:center;font-size:14px;color:var(--dim);border:none;
+  }
+
+  /* ---- 홈 ---- */
+  .home-body{flex:1;min-height:0;position:relative;display:flex;flex-direction:column;overflow:hidden;}
+  .range-row{
+    position:absolute;top:0;left:0;right:0;z-index:2;
+    display:flex;gap:8px;padding:2px 18px 14px;
+    background:var(--app-bg);
+    transform:translateY(0);opacity:1;
+    transition:transform .25s ease, opacity .2s ease;
+  }
+  .range-row.hide{transform:translateY(-115%);opacity:0;pointer-events:none;}
+  .pill-btn{
+    height:50px;font-size:16.5px;font-weight:700;padding:0 18px;border-radius:999px;
+    background:var(--yellow-soft);border:none;color:#7a5f00;display:flex;align-items:center;gap:7px;
+    white-space:nowrap;
+  }
+  .pill-btn:active{background:var(--yellow);}
+  .search-fake{
+    flex:1;height:50px;border-radius:999px;background:var(--surface);
+    display:flex;align-items:center;padding:0 18px;font-size:16.5px;color:var(--dim);gap:8px;
+  }
+
+  .list{
+    flex:1;min-height:0;
+    overflow-y:auto;padding:82px 14px 110px;display:flex;flex-direction:column;gap:12px;
+    -webkit-overflow-scrolling:touch;
+  }
+  .trade-card{
+    border:1px solid var(--line);border-radius:20px;padding:12px;
+    text-align:left;width:100%;transition:filter .15s, transform .15s;
+  }
+  .trade-card:active{filter:brightness(0.96);transform:scale(0.98);}
+  .tier-bg-near{background:rgba(47,111,237,0.7);border-color:rgba(47,111,237,0.8);}
+  .tier-bg-mid{background:rgba(31,164,99,0.7);border-color:rgba(31,164,99,0.8);}
+  .tier-bg-far{background:rgba(255,203,51,0.7);border-color:rgba(255,189,20,0.85);}
+  .tier-bg-veryfar{background:rgba(228,69,60,0.7);border-color:rgba(228,69,60,0.8);}
+  .trade-card[class*="tier-bg-"] .g-name{color:var(--text);}
+  .trade-card[class*="tier-bg-"] .g-sub{color:var(--text);}
+  .trade-card[class*="tier-bg-"] .tc-place{color:var(--text);}
+  .trade-card[class*="tier-bg-"] .tc-time{color:var(--text);}
+  .trade-card.just-added{animation:pop-in .5s ease;}
+  @keyframes pop-in{
+    0%{background:var(--yellow-soft);transform:scale(0.96);}
+    100%{background:var(--surface);transform:scale(1);}
+  }
+  .tc-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;}
+  .tc-tag{font-size:15.5px;font-weight:800;padding:5px 12px;border-radius:999px;background:#fff;color:var(--text);}
+  .tc-dist{font-size:12.5px;}
+  .tc-time{font-weight:700;}
+  .tc-place{color:var(--dim);}
+  .tier-near{color:var(--tier-near);}
+  .tier-mid{color:var(--tier-mid);}
+  .tier-far{color:var(--tier-far);}
+  .tier-veryfar{color:var(--tier-veryfar);}
+  .goods-row{display:flex;align-items:center;gap:8px;}
+  .thumb{
+    width:38px;height:38px;border-radius:11px;background:#fff;border:1px solid var(--line);
+    display:flex;align-items:center;justify-content:center;font-size:17px;flex-shrink:0;
+  }
+  .g-block{min-width:0;}
+  .g-name{
+    font-size:17px;color:var(--text);white-space:nowrap;
+    overflow-x:auto;text-overflow:clip;-webkit-overflow-scrolling:touch;
+    scrollbar-width:none;
+  }
+  .g-name::-webkit-scrollbar{display:none;}
+  .g-sub{
+    font-size:12.5px;color:var(--dim);margin-top:3px;white-space:nowrap;
+    overflow-x:auto;text-overflow:clip;-webkit-overflow-scrolling:touch;
+    scrollbar-width:none;
+  }
+  .g-sub::-webkit-scrollbar{display:none;}
+  .swap-icon{
+    width:20px;height:20px;border-radius:999px;background:var(--yellow-soft);color:#7a5f00;
+    display:flex;align-items:center;justify-content:center;font-size:10px;flex-shrink:0;
+  }
+
+  .fab{
+    position:absolute;right:20px;bottom:26px;
+    width:56px;height:56px;border-radius:999px;background:var(--yellow);
+    border:none;display:flex;align-items:center;justify-content:center;
+    font-size:24px;color:var(--text);box-shadow:0 10px 24px rgba(255,225,0,0.5);
+  }
+  .fab:active{background:var(--yellow-press);transform:scale(0.95);}
+
+  /* ---- 굿즈등록 ---- */
+  .reg-body{flex:1;overflow-y:auto;padding:4px 18px 20px;display:flex;flex-direction:column;gap:22px;}
+  .capture-box{
+    height:150px;border-radius:20px;background:var(--surface);
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;
+    color:var(--dim);font-size:14px;
+  }
+  .capture-box .cam{font-size:28px;}
+  .divider{display:flex;align-items:center;gap:10px;color:var(--faint);font-size:12.5px;}
+  .divider::before,.divider::after{content:'';flex:1;height:1px;background:var(--line);}
+
+  .field-label{font-size:14.5px;font-weight:700;margin-bottom:10px;}
+  .chip-row{display:flex;flex-wrap:wrap;gap:8px;}
+  .chip{
+    font-size:14px;font-weight:600;padding:9px 15px;border-radius:999px;
+    background:var(--surface);border:none;color:var(--dim);
+  }
+  .chip.on{background:var(--yellow);color:var(--text);}
+
+  .segmented{display:flex;background:var(--surface);border-radius:14px;padding:4px;gap:4px;}
+  .segmented button{
+    flex:1;padding:11px;border-radius:11px;border:none;background:transparent;
+    font-size:14px;font-weight:600;color:var(--dim);
+  }
+  .segmented button.on{background:#fff;color:var(--text);box-shadow:0 2px 6px rgba(0,0,0,0.08);}
+
+  .cta{
+    flex-shrink:0;margin:0 18px 20px;padding:16px;border-radius:16px;
+    background:var(--yellow);border:none;font-size:16.5px;font-weight:800;color:var(--text);
+  }
+  .cta:active{background:var(--yellow-press);}
+  .cta[disabled]{background:var(--surface2);color:var(--faint);}
+
+  /* ---- 거래 ---- */
+  .deal-head{display:flex;align-items:center;gap:10px;padding:10px 18px 14px;flex-shrink:0;}
+  .avatar{width:32px;height:32px;border-radius:999px;background:var(--surface);flex-shrink:0;}
+  .who{font-size:15.5px;font-weight:700;}
+  .who-sub{font-size:12px;color:var(--dim);}
+
+  .deal-summary{
+    margin:0 18px 10px;background:var(--surface);border-radius:18px;padding:13px;flex-shrink:0;
+  }
+  .deal-summary .goods-row{justify-content:space-between;}
+  .deal-note{font-size:11.5px;color:var(--faint);text-align:center;margin-top:10px;}
+
+  .chat-body{flex:1;overflow-y:auto;padding:12px 18px;display:flex;flex-direction:column;gap:9px;}
+  .bubble{max-width:75%;padding:10px 14px;border-radius:18px;font-size:14.5px;line-height:1.5;}
+  .bubble.them{background:var(--surface);align-self:flex-start;border-bottom-left-radius:5px;}
+  .bubble.me{background:var(--yellow);color:var(--text);align-self:flex-end;border-bottom-right-radius:5px;font-weight:600;}
+  .sys-note{
+    align-self:center;font-size:12px;color:var(--dim);background:var(--surface);
+    padding:6px 13px;border-radius:999px;
+  }
+
+  .chat-input{
+    flex-shrink:0;display:flex;align-items:center;gap:10px;
+    padding:10px 16px calc(16px + env(safe-area-inset-bottom,0px));
+    border-top:1px solid var(--line);
+  }
+  .box-fake{flex:1;height:40px;border-radius:999px;background:var(--surface);display:flex;
+    align-items:center;padding:0 16px;font-size:14px;color:var(--dim);}
+  .send-btn{
+    width:40px;height:40px;border-radius:999px;background:var(--yellow);border:none;
+    display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;color:var(--text);
+  }
+  .send-btn:active{background:var(--yellow-press);}
+  .send-btn[disabled]{background:var(--surface2);color:var(--faint);}
+</style>
+</head>
+<body>
+
+<div id="app">
+
+  <!-- 홈 화면 -->
+  <section class="screen active" id="screen-home">
+    <div class="statusbar"></div>
+    <div class="topbar home">
+      <div class="wordmark">
+        <svg class="mark" viewBox="0 0 34 34" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+          <circle cx="17" cy="17" r="15" fill="#ffffff" stroke="#191919" stroke-width="2"/>
+          <path d="M2.4,17 A14.6,14.6 0 0 1 31.6,17 Z" fill="#ffe100" stroke="#191919" stroke-width="2"/>
+          <rect x="2" y="15.4" width="30" height="3.2" fill="#191919"/>
+          <circle cx="17" cy="17" r="4.6" fill="#ffffff" stroke="#191919" stroke-width="2.2"/>
+        </svg>
+        캐치캐치
+      </div>
+      <button class="ghost-icon" type="button">☰</button>
+    </div>
+    <div class="home-body">
+      <div class="range-row" id="search-row">
+        <button class="pill-btn" type="button">📍 잠실 · 20분</button>
+        <div class="search-fake">🔍 상품명으로 검색</div>
+      </div>
+      <div class="list" id="home-list"></div>
+    </div>
+    <button class="fab" id="btn-open-register" type="button">＋</button>
+  </section>
+
+  <!-- 굿즈등록 화면 -->
+  <section class="screen" id="screen-register">
+    <div class="statusbar"></div>
+    <div class="topbar">
+      <button class="back" id="btn-register-back" type="button">←</button>
+      <div class="title-mid">굿즈 등록</div>
+      <div style="width:34px;"></div>
+    </div>
+    <div class="reg-body">
+      <div class="capture-box">
+        <div class="cam">📷</div>
+        <div>사진을 찍으면 상품을 인식해요</div>
+      </div>
+      <div class="divider">또는</div>
+      <div>
+        <div class="field-label">유명 상품에서 선택</div>
+        <div class="chip-row" id="chip-group">
+          <button class="chip" type="button" data-name="토끼 캐릭터 피규어" data-icon="🐰">토끼 캐릭터</button>
+          <button class="chip" type="button" data-name="곰돌이 인형" data-icon="🐻">곰돌이 인형</button>
+          <button class="chip" type="button" data-name="펭귄 키링" data-icon="🐧">펭귄 키링</button>
+          <button class="chip" type="button" data-name="고양이 미니어처" data-icon="🐱">고양이 미니어처</button>
+        </div>
+      </div>
+      <div>
+        <div class="field-label">거래 방식</div>
+        <div class="segmented" id="mode-group">
+          <button class="on" type="button" data-mode="교환">교환</button>
+          <button type="button" data-mode="즉시교환">바로 교환</button>
+        </div>
+      </div>
+    </div>
+    <button class="cta" id="btn-register-submit" type="button">등록하기</button>
+  </section>
+
+  <!-- 거래 화면 -->
+  <section class="screen" id="screen-deal">
+    <div class="statusbar"></div>
+    <div class="deal-head">
+      <button class="back" id="btn-deal-back" type="button">←</button>
+      <div class="avatar"></div>
+      <div>
+        <div class="who" id="deal-who">수집가_1234</div>
+        <div class="who-sub">접속중</div>
+      </div>
+    </div>
+    <div class="deal-summary">
+      <div class="goods-row" id="deal-goods-row"></div>
+      <div class="deal-note">"거래합시다" 전송 시 게시물이 자동으로 내려가요</div>
+    </div>
+    <div class="chat-body" id="chat-body">
+      <div class="bubble them">상태 좋아요! 교환 괜찮으세요?</div>
+      <div class="bubble me">네 좋습니다. 역 앞에서 뵐까요?</div>
+      <div class="bubble them">네 20분 뒤에 뵈요</div>
+    </div>
+    <div class="chat-input">
+      <div class="box-fake">메시지 입력</div>
+      <button class="send-btn" id="btn-send" type="button">↑</button>
+    </div>
+  </section>
+
+</div>
+
+<script>
+  // ---- 상태 ----
+  var tradeItems = [
+    {tag:"교환", timeLabel:"도보 6분", place:"잠실", tier:"near", premium:-3000,
+      icon1:"🐹", name1:"치이카와 모몽가", sub1:"보유중",
+      icon2:"🐺", name2:"치이카와 하치와레", sub2:"상대방 보유"},
+    {tag:"교환", timeLabel:"도보 12분", place:"잠실", tier:"mid", premium:1000,
+      icon1:"🐧", name1:"펭귄 키링", sub1:"보유중",
+      icon2:"🐱", name2:"고양이 미니어처", sub2:"상대방 보유"},
+    {tag:"교환", timeLabel:"지하철 3정거장", place:"홍대", tier:"far", premium:0,
+      icon1:"🦊", name1:"여우 인형", sub1:"보유중",
+      icon2:"🐥", name2:"병아리 키링", sub2:"상대방 보유"},
+    {tag:"교환", timeLabel:"도보 9분", place:"홍대", tier:"mid", premium:-500,
+      icon1:"🐰", name1:"토끼 캐릭터 피규어", sub1:"보유중",
+      icon2:"🐻", name2:"곰돌이 인형", sub2:"상대방 보유"},
+    {tag:"교환", timeLabel:"도보 4분", place:"용산", tier:"near", premium:0,
+      icon1:"🐼", name1:"판다 미니어처", sub1:"보유중",
+      icon2:"🤷", name2:"상관없음", sub2:"무엇이든 OK"},
+    {tag:"교환", timeLabel:"지하철 2정거장", place:"용산", tier:"far", premium:2000,
+      icon1:"🐣", name1:"병아리 인형", sub1:"보유중",
+      icon2:"🐹", name2:"햄스터 피규어", sub2:"상대방 보유"},
+    {tag:"교환", timeLabel:"도보 15분", place:"잠실", tier:"veryfar", premium:0,
+      icon1:"🦝", name1:"너구리 키링", sub1:"보유중",
+      icon2:"🤷", name2:"상관없음", sub2:"무엇이든 OK"},
+    {tag:"교환", timeLabel:"도보 7분", place:"홍대", tier:"near", premium:-1500,
+      icon1:"🐢", name1:"거북이 미니어처", sub1:"보유중",
+      icon2:"🐙", name2:"문어 키링", sub2:"상대방 보유"}
+  ];
+  var currentDealItem = null;
+  var justAddedItem = null;
+
+  function tagText(item){
+    // item.premium은 게시자(보유자) 기준 금액. 뱃지는 조회자(나) 기준으로 보여주므로 부호를 뒤집는다.
+    var amt = -item.premium;
+    if (amt === 0) return "교환";
+    var sign = amt > 0 ? "+" : "-";
+    var abs = Math.abs(amt).toLocaleString("ko-KR");
+    return sign + abs + "원";
+  }
+
+  function distHtml(item){
+    return '<span class="tc-time tier-' + item.tier + '">' + item.timeLabel + '</span>' +
+      ' <span class="tc-place title-font">· ' + item.place + '</span>';
+  }
+
+  function renderHome(){
+    var list = document.getElementById("home-list");
+    list.innerHTML = "";
+    // 같은 교환 제시 기준, 프리미엄을 적게 주고받는(0에 가까운) 거래가 위로 오도록 정렬
+    var sorted = tradeItems.slice().sort(function(a, b){
+      return Math.abs(a.premium) - Math.abs(b.premium);
+    });
+    sorted.forEach(function(item){
+      var card = document.createElement("button");
+      card.type = "button";
+      card.className = "trade-card tier-bg-" + item.tier + (item === justAddedItem ? " just-added" : "");
+      card.innerHTML =
+        '<div class="tc-top">' +
+          '<span class="tc-tag title-font">' + tagText(item) + '</span>' +
+          '<span class="tc-dist">' + distHtml(item) + '</span>' +
+        '</div>' +
+        '<div class="goods-row">' +
+          '<div class="thumb">' + item.icon1 + '</div>' +
+          '<div class="g-block" style="flex:0.8;">' +
+            '<div class="g-name title-font">' + item.name1 + '</div>' +
+            '<div class="g-sub title-font">' + item.sub1 + '</div>' +
+          '</div>' +
+          '<div class="swap-icon">⇄</div>' +
+          '<div class="thumb">' + item.icon2 + '</div>' +
+          '<div class="g-block" style="flex:1.3;">' +
+            '<div class="g-name title-font">' + item.name2 + '</div>' +
+            '<div class="g-sub title-font">' + item.sub2 + '</div>' +
+          '</div>' +
+        '</div>';
+      card.addEventListener("click", function(){ openDeal(item); });
+      list.appendChild(card);
+    });
+    justAddedItem = null;
+  }
+
+  function showScreen(id){
+    document.querySelectorAll(".screen").forEach(function(s){ s.classList.remove("active"); });
+    document.getElementById(id).classList.add("active");
+  }
+
+  function openDeal(item){
+    currentDealItem = item;
+    var row = document.getElementById("deal-goods-row");
+    row.innerHTML =
+      '<div class="thumb">' + item.icon2 + '</div>' +
+      '<div class="g-block" style="flex:1.3;">' +
+        '<div class="g-name title-font">' + item.name2 + '</div>' +
+        '<div class="g-sub title-font">' + item.sub2 + '</div>' +
+      '</div>' +
+      '<div class="swap-icon">⇄</div>' +
+      '<div class="thumb">' + item.icon1 + '</div>' +
+      '<div class="g-block" style="flex:0.8; text-align:right;">' +
+        '<div class="g-name title-font">' + item.name1 + '</div>' +
+        '<div class="g-sub title-font">내 보유</div>' +
+      '</div>';
+
+    var chat = document.getElementById("chat-body");
+    chat.innerHTML =
+      '<div class="bubble them">상태 좋아요! 교환 괜찮으세요?</div>' +
+      '<div class="bubble me">네 좋습니다. 역 앞에서 뵐까요?</div>' +
+      '<div class="bubble them">네 20분 뒤에 뵈요</div>';
+
+    var sendBtn = document.getElementById("btn-send");
+    sendBtn.disabled = false;
+
+    showScreen("screen-deal");
+  }
+
+  // ---- 홈 ----
+  document.getElementById("btn-open-register").addEventListener("click", function(){
+    showScreen("screen-register");
+  });
+
+  var homeList = document.getElementById("home-list");
+  var searchRow = document.getElementById("search-row");
+  var lastScroll = 0;
+  homeList.addEventListener("scroll", function(){
+    var cur = homeList.scrollTop;
+    if (cur > lastScroll && cur > 24){
+      searchRow.classList.add("hide");
+    } else {
+      searchRow.classList.remove("hide");
+    }
+    lastScroll = cur;
+  });
+
+  // ---- 굿즈등록 ----
+  document.getElementById("btn-register-back").addEventListener("click", function(){
+    showScreen("screen-home");
+  });
+
+  var chipGroup = document.getElementById("chip-group");
+  chipGroup.querySelectorAll(".chip").forEach(function(chip){
+    chip.addEventListener("click", function(){
+      chipGroup.querySelectorAll(".chip").forEach(function(c){ c.classList.remove("on"); });
+      chip.classList.add("on");
+    });
+  });
+
+  var modeGroup = document.getElementById("mode-group");
+  modeGroup.querySelectorAll("button").forEach(function(btn){
+    btn.addEventListener("click", function(){
+      modeGroup.querySelectorAll("button").forEach(function(b){ b.classList.remove("on"); });
+      btn.classList.add("on");
+    });
+  });
+
+  document.getElementById("btn-register-submit").addEventListener("click", function(){
+    var pickedChip = chipGroup.querySelector(".chip.on");
+    var holdingName = pickedChip ? pickedChip.dataset.name : "새 굿즈";
+    var holdingIcon = pickedChip ? pickedChip.dataset.icon : "🎁";
+
+    var newItem = {
+      tag:"교환", timeLabel:"방금 등록", place:"내 주변", tier:"near", premium:0,
+      icon1: holdingIcon, name1: holdingName, sub1:"보유중",
+      icon2:"❓", name2:"원하는 굿즈 대기중", sub2:"상대 찾는 중"
+    };
+    tradeItems.unshift(newItem);
+    justAddedItem = newItem;
+
+    chipGroup.querySelectorAll(".chip").forEach(function(c){ c.classList.remove("on"); });
+    modeGroup.querySelectorAll("button").forEach(function(b){ b.classList.remove("on"); });
+    modeGroup.querySelector('[data-mode="교환"]').classList.add("on");
+
+    renderHome();
+    showScreen("screen-home");
+  });
+
+  // ---- 거래 ----
+  document.getElementById("btn-deal-back").addEventListener("click", function(){
+    showScreen("screen-home");
+  });
+
+  document.getElementById("btn-send").addEventListener("click", function(){
+    var btn = this;
+    if (btn.disabled) return;
+
+    var chat = document.getElementById("chat-body");
+    var bubble = document.createElement("div");
+    bubble.className = "bubble me";
+    bubble.textContent = "거래합시다";
+    chat.appendChild(bubble);
+    chat.scrollTop = chat.scrollHeight;
+
+    btn.disabled = true;
+
+    setTimeout(function(){
+      var note = document.createElement("div");
+      note.className = "sys-note";
+      note.textContent = "게시물이 자동으로 내려갔어요";
+      chat.appendChild(note);
+      chat.scrollTop = chat.scrollHeight;
+
+      if (currentDealItem !== null){
+        var pos = tradeItems.indexOf(currentDealItem);
+        if (pos !== -1) tradeItems.splice(pos, 1);
+        currentDealItem = null;
+      }
+    }, 500);
+  });
+
+  renderHome();
+</script>
+
+</body>
+</html>
