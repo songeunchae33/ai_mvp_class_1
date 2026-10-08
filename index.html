@@ -238,22 +238,85 @@
   .send-btn[disabled]{background:var(--surface2);color:var(--faint);}
 
   /* ---- 지도 ---- */
-  .map-area-row{display:flex;gap:8px;padding:0 18px 12px;overflow-x:auto;flex-shrink:0;scrollbar-width:none;}
-  .map-area-row::-webkit-scrollbar{display:none;}
-  .map-area-row .chip{white-space:nowrap;}
-  .map-wrap{flex:1;min-height:0;position:relative;}
+  /* 네이버 지도는 바닥 타일로만 쓰고, 위에 올라가는 UI는 전부 캐치캐치 스타일로 그린다 */
+  #screen-map{background:var(--surface);}
   #naver-map{position:absolute;inset:0;background:var(--surface);}
+  .map-top{
+    position:absolute;top:0;left:0;right:0;z-index:5;pointer-events:none;
+    padding:calc(env(safe-area-inset-top,0px) + 14px) 14px 0;display:flex;flex-direction:column;gap:10px;
+  }
+  .map-top > *{pointer-events:auto;}
+  .map-head{display:flex;align-items:center;gap:8px;}
+  .map-head .back{
+    width:44px;height:44px;border-radius:999px;background:#fff;border:none;flex-shrink:0;
+    font-size:17px;color:var(--text);box-shadow:0 4px 14px rgba(0,0,0,0.12);
+  }
+  .map-filter{
+    flex:1;display:flex;background:#fff;border-radius:999px;padding:4px;gap:4px;
+    box-shadow:0 4px 14px rgba(0,0,0,0.12);
+  }
+  .map-filter button{
+    flex:1;height:36px;border-radius:999px;border:none;background:transparent;
+    font-size:14px;font-weight:700;color:var(--dim);font-family:inherit;
+  }
+  .map-filter button.on{background:var(--yellow);color:var(--text);}
+  .map-area-row{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;padding-bottom:4px;}
+  .map-area-row::-webkit-scrollbar{display:none;}
+  .map-area-row .chip{
+    white-space:nowrap;background:#fff;color:var(--text);padding:8px 14px;
+    box-shadow:0 3px 10px rgba(0,0,0,0.1);
+  }
+  .map-area-row .chip.on{background:var(--text);color:#fff;}
   .map-status{
-    position:absolute;left:50%;bottom:20px;transform:translateX(-50%);z-index:5;
-    background:#fff;border:1px solid var(--line);border-radius:999px;padding:8px 14px;
-    font-size:13px;color:var(--text);box-shadow:0 6px 16px rgba(0,0,0,0.1);white-space:nowrap;
+    align-self:center;background:rgba(25,25,25,0.85);color:#fff;border-radius:999px;
+    padding:7px 14px;font-size:12.5px;font-weight:600;white-space:nowrap;
   }
   .map-status:empty{display:none;}
-  .shop-info{padding:12px 14px;font-size:13px;line-height:1.5;max-width:230px;color:var(--text);}
-  .shop-info b{font-size:14.5px;}
-  .shop-info .dim{color:var(--dim);font-size:12px;}
-  .shop-info .soon{margin-top:6px;font-size:11.5px;color:var(--faint);}
-  .shop-info a{display:inline-block;margin-top:8px;color:#03c75a;font-weight:700;text-decoration:none;}
+
+  /* 지도 위 핀 (0x0 래퍼 기준으로 말풍선 꼬리가 좌표를 가리키게) */
+  .pin-anchor{position:relative;width:0;height:0;}
+  .pin{
+    position:absolute;left:0;bottom:0;transform:translate(-50%,-8px);
+    display:flex;align-items:center;gap:5px;padding:6px 11px 6px 7px;border-radius:999px;
+    background:#fff;border:2px solid var(--text);white-space:nowrap;
+    font-size:12.5px;font-weight:800;color:var(--text);box-shadow:0 4px 10px rgba(0,0,0,0.18);
+    transition:transform .15s;
+  }
+  .pin::after{
+    content:'';position:absolute;left:50%;bottom:-8px;transform:translateX(-50%);
+    border:6px solid transparent;border-top:8px solid var(--text);border-bottom:0;
+  }
+  .pin .pin-emoji{
+    width:22px;height:22px;border-radius:999px;display:flex;align-items:center;justify-content:center;font-size:13px;
+  }
+  .pin-gacha .pin-emoji{background:var(--yellow-soft);}
+  .pin-popup .pin-emoji{background:#ffe1ea;}
+  .pin.selected{background:var(--yellow);transform:translate(-50%,-8px) scale(1.12);}
+
+  /* 하단 카드 캐러셀 */
+  .place-cards{
+    position:absolute;left:0;right:0;bottom:calc(18px + env(safe-area-inset-bottom,0px));z-index:5;
+    display:flex;gap:10px;overflow-x:auto;scroll-snap-type:x mandatory;padding:0 14px;scrollbar-width:none;
+  }
+  .place-cards::-webkit-scrollbar{display:none;}
+  .place-cards:empty{display:none;}
+  .place-card{
+    flex:0 0 calc(100% - 36px);scroll-snap-align:center;background:#fff;border-radius:20px;
+    padding:14px;display:flex;gap:12px;align-items:center;border:2px solid transparent;
+    box-shadow:0 8px 22px rgba(0,0,0,0.14);
+  }
+  .place-card.selected{border-color:var(--yellow);}
+  .place-card .pc-thumb{
+    width:52px;height:52px;border-radius:16px;flex-shrink:0;font-size:26px;
+    display:flex;align-items:center;justify-content:center;background:var(--yellow-soft);
+  }
+  .place-card.popup .pc-thumb{background:#ffe1ea;}
+  .pc-body{flex:1;min-width:0;}
+  .pc-tag{font-size:11px;font-weight:800;color:#7a5f00;}
+  .place-card.popup .pc-tag{color:#c2335b;}
+  .pc-name{font-size:16px;font-weight:800;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .pc-addr{font-size:12.5px;color:var(--dim);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .pc-soon{font-size:11.5px;color:var(--faint);margin-top:5px;}
 
   /* ---- 사진 인식 ---- */
   label.capture-box{cursor:pointer;position:relative;overflow:hidden;}
@@ -366,23 +429,26 @@
 
   <!-- 지도 화면 -->
   <section class="screen" id="screen-map">
-    <div class="statusbar"></div>
-    <div class="topbar">
-      <button class="back" id="btn-map-back" type="button">←</button>
-      <div class="title-mid">가챠샵 지도</div>
-      <div style="width:34px;"></div>
-    </div>
-    <div class="map-area-row" id="map-area-group">
-      <button class="chip" type="button" data-area="잠실" data-lat="37.5133" data-lng="127.1001">잠실</button>
-      <button class="chip" type="button" data-area="홍대" data-lat="37.5563" data-lng="126.9236">홍대</button>
-      <button class="chip" type="button" data-area="용산" data-lat="37.5298" data-lng="126.9648">용산</button>
-      <button class="chip" type="button" data-area="강남" data-lat="37.4979" data-lng="127.0276">강남</button>
-      <button class="chip" type="button" data-area="명동" data-lat="37.5609" data-lng="126.9858">명동</button>
-    </div>
-    <div class="map-wrap">
-      <div id="naver-map"></div>
+    <div id="naver-map"></div>
+    <div class="map-top">
+      <div class="map-head">
+        <button class="back" id="btn-map-back" type="button" aria-label="뒤로">←</button>
+        <div class="map-filter" id="map-filter">
+          <button class="on" type="button" data-filter="all">전체</button>
+          <button type="button" data-filter="gacha">🎰 가챠샵</button>
+          <button type="button" data-filter="popup">🎪 팝업</button>
+        </div>
+      </div>
+      <div class="map-area-row" id="map-area-group">
+        <button class="chip" type="button" data-area="잠실" data-lat="37.5133" data-lng="127.1001">잠실</button>
+        <button class="chip" type="button" data-area="홍대" data-lat="37.5563" data-lng="126.9236">홍대</button>
+        <button class="chip" type="button" data-area="용산" data-lat="37.5298" data-lng="126.9648">용산</button>
+        <button class="chip" type="button" data-area="강남" data-lat="37.4979" data-lng="127.0276">강남</button>
+        <button class="chip" type="button" data-area="명동" data-lat="37.5609" data-lng="126.9858">명동</button>
+      </div>
       <div class="map-status" id="map-status"></div>
     </div>
+    <div class="place-cards" id="place-cards"></div>
   </section>
 
   <!-- 거래 화면 -->
@@ -710,12 +776,26 @@
   });
 
   // ---- 지도 ----
+  // 네이버 지도는 바닥 타일로만 쓰고, 핀·카드·필터는 우리가 그린다.
+  // 장소 데이터: 가챠샵은 /api/shops(네이버 검색), 팝업은 우리가 관리하는 /data/popups.json
   var naverMap = null;
-  var shopMarkers = [];
-  var shopInfoWindow = null;
+  var mapScriptPromise = null;
   var mapStatus = document.getElementById("map-status");
   var mapAreaGroup = document.getElementById("map-area-group");
-  var mapScriptPromise = null;
+  var mapFilter = document.getElementById("map-filter");
+  var placeCards = document.getElementById("place-cards");
+  var gachaPlaces = [];
+  var popupPlaces = [];
+  var visiblePlaces = [];
+  var placeMarkers = [];
+  var selectedIdx = -1;
+  var currentFilter = "all";
+  var currentArea = "";
+
+  var PLACE_TYPES = {
+    gacha: { tag: "가챠샵", emoji: "🎰" },
+    popup: { tag: "진행중 팝업", emoji: "🎪" }
+  };
 
   function loadNaverMaps(){
     if (mapScriptPromise) return mapScriptPromise;
@@ -723,8 +803,10 @@
       if (!cfg.naverMapKeyId) throw new Error("지도 키가 아직 설정되지 않았어요");
       return new Promise(function(resolve, reject){
         var s = document.createElement("script");
-        s.src = "https://oapi.map.naver.com/openapi/v3/maps.js?ncpKeyId=" + encodeURIComponent(cfg.naverMapKeyId);
-        s.onload = resolve;
+        // 커스텀 스타일(Style Editor)을 쓰려면 GL 서브모듈이 필요하다
+        s.src = "https://oapi.map.naver.com/openapi/v3/maps.js?ncpKeyId=" +
+          encodeURIComponent(cfg.naverMapKeyId) + (cfg.naverMapStyleId ? "&submodules=gl" : "");
+        s.onload = function(){ resolve(cfg); };
         s.onerror = function(){ reject(new Error("네이버 지도를 불러오지 못했어요")); };
         document.head.appendChild(s);
       });
@@ -735,55 +817,140 @@
     return mapScriptPromise;
   }
 
-  function clearShopMarkers(){
-    shopMarkers.forEach(function(m){ m.setMap(null); });
-    shopMarkers = [];
-    if (shopInfoWindow) shopInfoWindow.close();
+  function pinHtml(place, selected){
+    return '<div class="pin-anchor"><div class="pin pin-' + place.type + (selected ? ' selected' : '') + '">' +
+      '<span class="pin-emoji">' + escapeHtml(place.emoji || PLACE_TYPES[place.type].emoji) + '</span>' +
+      escapeHtml(place.name) +
+    '</div></div>';
   }
 
-  function shopInfoHtml(shop){
-    return '<div class="shop-info">' +
-      '<b>' + escapeHtml(shop.name) + '</b><br>' +
-      '<span class="dim">' + escapeHtml(shop.address) + '</span>' +
-      '<div class="soon">혼잡도 · 진행중 팝업: 준비중</div>' +
-      '<a href="https://map.naver.com/p/search/' + encodeURIComponent(shop.name) +
-        '" target="_blank" rel="noopener">네이버 지도에서 보기 →</a>' +
-    '</div>';
+  function cardHtml(place){
+    var t = PLACE_TYPES[place.type];
+    var extra = place.type === "popup" && place.period
+      ? escapeHtml(place.period)
+      : "혼잡도 · 실시간 정보 준비중";
+    return '<div class="pc-thumb">' + escapeHtml(place.emoji || t.emoji) + '</div>' +
+      '<div class="pc-body">' +
+        '<div class="pc-tag">' + t.tag + '</div>' +
+        '<div class="pc-name">' + escapeHtml(place.name) + '</div>' +
+        '<div class="pc-addr">' + escapeHtml(place.address || "") + '</div>' +
+        '<div class="pc-soon">' + extra + '</div>' +
+      '</div>';
   }
 
-  function loadShops(chip){
+  function setPinSelected(i, selected){
+    var m = placeMarkers[i];
+    if (!m) return;
+    m.setIcon({ content: pinHtml(visiblePlaces[i], selected), anchor: new naver.maps.Point(0, 0) });
+    m.setZIndex(selected ? 1000 : 100);
+  }
+
+  function selectPlace(i, opts){
+    opts = opts || {};
+    if (i === selectedIdx) return;
+    if (selectedIdx !== -1) {
+      setPinSelected(selectedIdx, false);
+      var prev = placeCards.children[selectedIdx];
+      if (prev) prev.classList.remove("selected");
+    }
+    selectedIdx = i;
+    setPinSelected(i, true);
+    var card = placeCards.children[i];
+    if (card) {
+      card.classList.add("selected");
+      if (opts.scrollCard) card.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
+    }
+    if (opts.pan) naverMap.panTo(placeMarkers[i].getPosition());
+  }
+
+  function renderPlaces(fit){
+    placeMarkers.forEach(function(m){ m.setMap(null); });
+    placeMarkers = [];
+    placeCards.innerHTML = "";
+    selectedIdx = -1;
+
+    var all = gachaPlaces.concat(popupPlaces);
+    visiblePlaces = all.filter(function(p){ return currentFilter === "all" || p.type === currentFilter; });
+
+    var bounds = null;
+    visiblePlaces.forEach(function(place, i){
+      var pos = new naver.maps.LatLng(place.lat, place.lng);
+      var marker = new naver.maps.Marker({
+        position: pos, map: naverMap, zIndex: 100,
+        icon: { content: pinHtml(place, false), anchor: new naver.maps.Point(0, 0) }
+      });
+      naver.maps.Event.addListener(marker, "click", function(){ selectPlace(i, { scrollCard: true }); });
+      placeMarkers.push(marker);
+
+      var card = document.createElement("div");
+      card.className = "place-card " + place.type;
+      card.innerHTML = cardHtml(place);
+      card.addEventListener("click", function(){ selectPlace(i, { pan: true }); });
+      placeCards.appendChild(card);
+
+      if (!bounds) bounds = new naver.maps.LatLngBounds(pos, pos);
+      else bounds.extend(pos);
+    });
+
+    if (fit && bounds && visiblePlaces.length > 1) {
+      naverMap.fitBounds(bounds, { top: 150, right: 40, bottom: 150, left: 40 });
+    }
+
+    var label = currentFilter === "all" ? "장소" : PLACE_TYPES[currentFilter].tag;
+    mapStatus.textContent = visiblePlaces.length
+      ? currentArea + " " + label + " " + visiblePlaces.length + "곳"
+      : currentArea + " 근처에 표시할 " + label + "이(가) 없어요";
+  }
+
+  // 카드를 옆으로 넘기면 가운데 카드의 핀으로 지도를 옮긴다
+  var cardScrollTimer = null;
+  placeCards.addEventListener("scroll", function(){
+    clearTimeout(cardScrollTimer);
+    cardScrollTimer = setTimeout(function(){
+      var mid = placeCards.scrollLeft + placeCards.clientWidth / 2;
+      var best = -1, bestDist = Infinity;
+      Array.prototype.forEach.call(placeCards.children, function(card, i){
+        var d = Math.abs(card.offsetLeft + card.offsetWidth / 2 - mid);
+        if (d < bestDist) { bestDist = d; best = i; }
+      });
+      if (best !== -1) selectPlace(best, { pan: true });
+    }, 120);
+  });
+
+  function loadPopups(){
+    return fetch("/data/popups.json").then(function(r){ return r.ok ? r.json() : { popups: [] }; })
+      .then(function(body){
+        popupPlaces = (body.popups || []).filter(function(p){ return p.lat && p.lng; })
+          .map(function(p){
+            return { type: "popup", name: p.name, address: p.address, lat: p.lat, lng: p.lng,
+              emoji: p.emoji, period: p.start && p.end ? p.start + " ~ " + p.end : "" };
+          });
+      }).catch(function(){ popupPlaces = []; });
+  }
+
+  function loadArea(chip){
     mapAreaGroup.querySelectorAll(".chip").forEach(function(c){ c.classList.remove("on"); });
     chip.classList.add("on");
-    var area = chip.dataset.area;
+    currentArea = chip.dataset.area;
     naverMap.setCenter(new naver.maps.LatLng(Number(chip.dataset.lat), Number(chip.dataset.lng)));
     naverMap.setZoom(15);
-    clearShopMarkers();
-    mapStatus.textContent = area + " 가챠샵 찾는 중…";
+    gachaPlaces = [];
+    renderPlaces(false);
+    mapStatus.textContent = currentArea + " 둘러보는 중…";
 
-    fetch("/api/shops?area=" + encodeURIComponent(area)).then(function(r){
+    fetch("/api/shops?area=" + encodeURIComponent(currentArea)).then(function(r){
       return r.json().then(function(body){
         if (!r.ok) throw new Error(body.error || "검색 실패");
         return body;
       });
     }).then(function(body){
-      if (!chip.classList.contains("on")) return; // 그새 다른 지역을 눌렀으면 무시
-      var bounds = null;
-      body.shops.forEach(function(shop){
-        var pos = new naver.maps.LatLng(shop.lat, shop.lng);
-        var marker = new naver.maps.Marker({ position: pos, map: naverMap, title: shop.name });
-        naver.maps.Event.addListener(marker, "click", function(){
-          shopInfoWindow.setContent(shopInfoHtml(shop));
-          shopInfoWindow.open(naverMap, marker);
-        });
-        shopMarkers.push(marker);
-        if (!bounds) bounds = new naver.maps.LatLngBounds(pos, pos);
-        else bounds.extend(pos);
+      if (body.area !== currentArea) return; // 그새 다른 지역을 눌렀으면 무시
+      gachaPlaces = body.shops.map(function(s){
+        return { type: "gacha", name: s.name, address: s.address, lat: s.lat, lng: s.lng };
       });
-      if (bounds && body.shops.length > 1) naverMap.fitBounds(bounds, {top:40, right:40, bottom:80, left:40});
-      mapStatus.textContent = body.shops.length
-        ? area + " 가챠샵 " + body.shops.length + "곳"
-        : area + " 근처에서 가챠샵을 찾지 못했어요";
+      renderPlaces(true);
     }).catch(function(e){
+      renderPlaces(false);
       mapStatus.textContent = e.message;
     });
   }
@@ -792,22 +959,31 @@
     showScreen("screen-map");
     if (naverMap) return;
     mapStatus.textContent = "지도를 불러오는 중…";
-    loadNaverMaps().then(function(){
+    Promise.all([loadNaverMaps(), loadPopups()]).then(function(results){
+      var cfg = results[0];
       var first = mapAreaGroup.querySelector(".chip");
-      naverMap = new naver.maps.Map("naver-map", {
+      var options = {
         center: new naver.maps.LatLng(Number(first.dataset.lat), Number(first.dataset.lng)),
-        zoom: 15
-      });
-      shopInfoWindow = new naver.maps.InfoWindow({ borderColor: "#e7e7e9", anchorSize: new naver.maps.Size(10, 10) });
-      loadShops(first);
+        zoom: 15,
+        // 네이버 기본 UI는 끄고 우리 UI만 보이게 (네이버 로고는 약관상 유지)
+        zoomControl: false,
+        mapTypeControl: false,
+        scaleControl: false,
+        mapDataControl: false,
+        logoControlOptions: { position: naver.maps.Position.BOTTOM_LEFT }
+      };
+      if (cfg.naverMapStyleId) {
+        options.gl = true;
+        options.customStyleId = cfg.naverMapStyleId;
+      }
+      naverMap = new naver.maps.Map("naver-map", options);
+      loadArea(first);
 
-      // 위치 권한을 주면 내 위치를 중심으로 보여준다 (마커 검색은 지역 칩 기준)
       if (navigator.geolocation) {
         navigator.geolocation.getCurrentPosition(function(p){
-          var me = new naver.maps.LatLng(p.coords.latitude, p.coords.longitude);
           new naver.maps.Marker({
-            position: me, map: naverMap,
-            icon: { content: '<div style="width:14px;height:14px;border-radius:50%;background:#2f6fed;border:3px solid #fff;box-shadow:0 0 0 1px #2f6fed;"></div>', anchor: new naver.maps.Point(10, 10) }
+            position: new naver.maps.LatLng(p.coords.latitude, p.coords.longitude), map: naverMap, zIndex: 50,
+            icon: { content: '<div style="width:16px;height:16px;border-radius:50%;background:#2f6fed;border:3px solid #fff;box-shadow:0 0 0 6px rgba(47,111,237,0.2);"></div>', anchor: new naver.maps.Point(8, 8) }
           });
         }, function(){}, { timeout: 5000 });
       }
@@ -822,7 +998,15 @@
   });
   mapAreaGroup.querySelectorAll(".chip").forEach(function(chip){
     chip.addEventListener("click", function(){
-      if (naverMap) loadShops(chip);
+      if (naverMap) loadArea(chip);
+    });
+  });
+  mapFilter.querySelectorAll("button").forEach(function(btn){
+    btn.addEventListener("click", function(){
+      mapFilter.querySelectorAll("button").forEach(function(b){ b.classList.remove("on"); });
+      btn.classList.add("on");
+      currentFilter = btn.dataset.filter;
+      if (naverMap) renderPlaces(true);
     });
   });
 
