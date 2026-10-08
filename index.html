@@ -240,7 +240,8 @@
   /* ---- 지도 ---- */
   /* 네이버 지도는 바닥 타일로만 쓰고, 위에 올라가는 UI는 전부 캐치캐치 스타일로 그린다 */
   #screen-map{background:var(--surface);}
-  #naver-map{position:absolute;inset:0;background:var(--surface);}
+  /* 네이버 지도 라이브러리가 position을 inline으로 덮어쓰므로, flex로도 화면을 꽉 채우게 해둔다 */
+  #naver-map{position:absolute;inset:0;flex:1;width:100%;min-height:0;background:var(--surface);}
   .map-top{
     position:absolute;top:0;left:0;right:0;z-index:5;pointer-events:none;
     padding:calc(env(safe-area-inset-top,0px) + 14px) 14px 0;display:flex;flex-direction:column;gap:10px;
@@ -269,7 +270,8 @@
   .map-area-row .chip.on{background:var(--text);color:#fff;}
   .map-status{
     align-self:center;background:rgba(25,25,25,0.85);color:#fff;border-radius:999px;
-    padding:7px 14px;font-size:12.5px;font-weight:600;white-space:nowrap;
+    padding:7px 14px;font-size:12.5px;font-weight:600;max-width:100%;text-align:center;
+    word-break:keep-all;
   }
   .map-status:empty{display:none;}
 

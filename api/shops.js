@@ -23,7 +23,9 @@ export default async function handler(req, res) {
   const id = process.env.NAVER_SEARCH_ID;
   const secret = process.env.NAVER_SEARCH_SECRET;
   if (!id || !secret) {
-    return res.status(500).json({ error: "NAVER_SEARCH_ID / NAVER_SEARCH_SECRET 환경변수가 없어요" });
+    // 키 이름은 서버 로그로만 남기고, 화면에는 일반 사용자용 문구를 보낸다
+    console.error("NAVER_SEARCH_ID / NAVER_SEARCH_SECRET 환경변수가 없어요");
+    return res.status(503).json({ error: "가챠샵 검색은 준비 중이에요" });
   }
 
   const area = String(req.query.area || "").trim().slice(0, 20);
