@@ -6,6 +6,7 @@
     "node": ">=20"
   },
   "dependencies": {
-    "@google/genai": "^2.28.0"
+    "openai": "^7.30.0",
+    "zod": "^4.6.5"
   }
 }

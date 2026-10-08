@@ -1,43 +1,29 @@
 // 굿즈 사진 → 상품 정보 / 예상 시세 / 교환·판매 전략을 JSON으로 돌려준다.
-// Google Gemini API 무료 등급 사용. (무료 등급은 구글 검색 연동이 없어서 시세는 모델 지식 기반 추정)
-import { GoogleGenAI } from "@google/genai";
+// OpenAI Responses API 사용. (웹 검색은 비용 절약을 위해 끔 → 시세는 모델 지식 기반 추정)
+import OpenAI from "openai";
+import { zodTextFormat } from "openai/helpers/zod";
+import { z } from "zod";
 
-const MODEL = "gemini-3.8-flash";
+const MODEL = "gpt-6.1-sol";
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
 const MAX_BASE64_LEN = 4_000_000; // Vercel 요청 본문 4.5MB 제한 안쪽
 
-const GOODS_SCHEMA = {
-  type: "object",
-  required: [
-    "recognized", "name", "character", "series", "condition", "emoji",
-    "price_min", "price_max", "recommended_mode", "recommended_premium",
-    "wanted_suggestions", "tips", "confidence",
-  ],
-  properties: {
-    recognized: { type: "boolean", description: "사진에서 굿즈를 식별했는지" },
-    name: { type: "string", description: "목록에 보일 짧은 상품명. 예: 치이카와 모몽가 키링" },
-    character: { type: "string", description: "캐릭터 / IP 이름" },
-    series: { type: "string", description: "시리즈·제조사·가챠 라인업. 모르면 빈 문자열" },
-    condition: { type: "string", enum: ["미개봉", "개봉-상태좋음", "사용감있음", "판단불가"] },
-    emoji: { type: "string", description: "목록 썸네일로 쓸 이모지 1개" },
-    price_min: { type: "integer", description: "중고 시세 하한 (원)" },
-    price_max: { type: "integer", description: "중고 시세 상한 (원)" },
-    recommended_mode: { type: "string", enum: ["교환", "판매", "교환+웃돈"] },
-    recommended_premium: {
-      type: "integer",
-      description: "교환 시 내가 받으면 양수, 내가 얹어주면 음수 (원). 판매·순수교환이면 0",
-    },
-    wanted_suggestions: {
-      type: "array", items: { type: "string" },
-      description: "교환 상대로 제시하면 성사율이 높을 굿즈 1~3개",
-    },
-    tips: {
-      type: "array", items: { type: "string" },
-      description: "교환/판매 가능성을 높이는 구체적 팁 2~3개, 각 40자 이내",
-    },
-    confidence: { type: "string", enum: ["high", "medium", "low"] },
-  },
-};
+const Goods = z.object({
+  recognized: z.boolean().describe("사진에서 굿즈를 식별했는지"),
+  name: z.string().describe("목록에 보일 짧은 상품명. 예: 치이카와 모몽가 키링"),
+  character: z.string().describe("캐릭터 / IP 이름"),
+  series: z.string().describe("시리즈·제조사·가챠 라인업. 모르면 빈 문자열"),
+  condition: z.enum(["미개봉", "개봉-상태좋음", "사용감있음", "판단불가"]),
+  emoji: z.string().describe("목록 썸네일로 쓸 이모지 1개"),
+  price_min: z.number().int().describe("중고 시세 하한 (원)"),
+  price_max: z.number().int().describe("중고 시세 상한 (원)"),
+  recommended_mode: z.enum(["교환", "판매", "교환+웃돈"]),
+  recommended_premium: z.number().int()
+    .describe("교환 시 내가 받으면 양수, 내가 얹어주면 음수 (원). 판매·순수교환이면 0"),
+  wanted_suggestions: z.array(z.string()).describe("교환 상대로 제시하면 성사율이 높을 굿즈 1~3개"),
+  tips: z.array(z.string()).describe("교환/판매 가능성을 높이는 구체적 팁 2~3개, 각 40자 이내"),
+  confidence: z.enum(["high", "medium", "low"]),
+});
 
 const SYSTEM = `너는 한국 캐릭터 굿즈(가챠, 키링, 인형, 피규어) 중고 거래 도우미야.
 사용자가 올린 굿즈 사진을 보고 등록 폼을 채울 정보를 만든다.
@@ -51,8 +37,8 @@ const SYSTEM = `너는 한국 캐릭터 굿즈(가챠, 키링, 인형, 피규어
 
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "POST만 지원해요" });
-  if (!process.env.GEMINI_API_KEY) {
-    return res.status(503).json({ error: "AI 분석이 아직 설정되지 않았어요 (GEMINI_API_KEY 없음)" });
+  if (!process.env.OPENAI_API_KEY) {
+    return res.status(503).json({ error: "AI 분석이 아직 설정되지 않았어요 (OPENAI_API_KEY 없음)" });
   }
 
   const { image, mediaType } = req.body || {};
@@ -63,41 +49,42 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: "지원하지 않는 이미지 형식이에요" });
   }
 
-  const client = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+  const client = new OpenAI();
 
-  let interaction;
+  let response;
   try {
-    interaction = await client.interactions.create({
+    response = await client.responses.parse({
       model: MODEL,
-      system_instruction: SYSTEM,
+      reasoning: { effort: "low" },
       input: [
-        { type: "image", data: image, mime_type: mediaType },
-        { type: "text", text: "이 굿즈를 등록하려고 해. 등록 정보를 채워줘." },
+        { role: "system", content: SYSTEM },
+        {
+          role: "user",
+          content: [
+            { type: "input_text", text: "이 굿즈를 등록하려고 해. 등록 정보를 채워줘." },
+            { type: "input_image", image_url: `data:${mediaType};base64,${image}`, detail: "auto" },
+          ],
+        },
       ],
-      response_format: {
-        type: "text",
-        mime_type: "application/json",
-        schema: GOODS_SCHEMA,
-      },
+      text: { format: zodTextFormat(Goods, "goods") },
     });
   } catch (e) {
-    if (e && e.status === 429) {
-      return res.status(429).json({ error: "오늘 무료 사용량이 다 찼거나 요청이 많아요. 잠시 후 다시 시도해주세요" });
+    if (e instanceof OpenAI.RateLimitError) {
+      // 429는 요청이 몰렸거나 충전 잔액이 바닥났을 때 온다
+      return res.status(429).json({ error: "요청이 많거나 API 잔액이 부족해요. 잠시 후 다시 시도해주세요" });
     }
-    return res.status(502).json({ error: "AI 분석 중 오류가 났어요", status: e && e.status });
+    if (e instanceof OpenAI.APIError) {
+      return res.status(502).json({ error: "AI 분석 중 오류가 났어요", status: e.status });
+    }
+    return res.status(500).json({ error: "서버 오류", detail: e.message });
   }
 
-  let goods;
-  try {
-    goods = JSON.parse(interaction.output_text);
-  } catch {
-    return res.status(502).json({ error: "분석 결과를 읽지 못했어요" });
+  const goods = response.output_parsed;
+  if (!goods) {
+    return res.status(422).json({ error: "이 사진은 분석할 수 없어요. 직접 선택해주세요" });
   }
   if (!goods.recognized) {
     return res.status(422).json({ error: "굿즈를 인식하지 못했어요. 직접 선택해주세요" });
   }
-  // 빠진 배열이 있어도 화면이 깨지지 않게
-  goods.tips = Array.isArray(goods.tips) ? goods.tips : [];
-  goods.wanted_suggestions = Array.isArray(goods.wanted_suggestions) ? goods.wanted_suggestions : [];
   return res.status(200).json(goods);
 }
