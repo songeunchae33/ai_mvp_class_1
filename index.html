@@ -338,6 +338,13 @@
   .ai-price .conf{font-size:11.5px;font-weight:600;color:var(--dim);margin-left:6px;}
   .ai-tips{margin:0;padding-left:18px;font-size:13px;line-height:1.55;}
   .ai-wanted{font-size:12.5px;color:var(--dim);}
+
+  /* ---- 페이지 맨 아래 수정 날짜 ---- */
+  .last-updated{text-align:center;font-size:11px;color:var(--faint);padding:8px 0;}
+  @media (min-width:431px){
+    /* 넓은 화면에서는 앱 카드 아래 빈 공간에 띄워서 기존 배치를 건드리지 않는다 */
+    .last-updated{position:fixed;left:0;right:0;bottom:4px;padding:0;}
+  }
 </style>
 </head>
 <body>
@@ -1045,6 +1052,8 @@
 
   renderHome();
 </script>
+
+<div class="last-updated">마지막으로 고친 날 2026-10-08</div>
 
 </body>
 </html>
