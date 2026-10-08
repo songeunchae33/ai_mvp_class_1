@@ -340,10 +340,11 @@
   .ai-wanted{font-size:12.5px;color:var(--dim);}
 
   /* ---- 페이지 맨 아래 수정 날짜 ---- */
-  .last-updated{text-align:center;font-size:11px;color:var(--faint);padding:8px 0;}
-  @media (min-width:431px){
-    /* 넓은 화면에서는 앱 카드 아래 빈 공간에 띄워서 기존 배치를 건드리지 않는다 */
-    .last-updated{position:fixed;left:0;right:0;bottom:4px;padding:0;}
+  /* 어떤 화면 크기에서도 스크롤 없이 화면 맨 아래에 보이게 고정. 터치는 아래 요소로 통과시킨다 */
+  .last-updated{
+    position:fixed;left:50%;transform:translateX(-50%);bottom:env(safe-area-inset-bottom,0px);z-index:50;
+    white-space:nowrap;padding:0 8px;border-radius:999px;background:rgba(255,255,255,0.85);
+    font-size:11px;line-height:14px;color:var(--dim);pointer-events:none;
   }
 </style>
 </head>
