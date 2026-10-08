@@ -236,6 +236,45 @@
   }
   .send-btn:active{background:var(--yellow-press);}
   .send-btn[disabled]{background:var(--surface2);color:var(--faint);}
+
+  /* ---- 지도 ---- */
+  .map-area-row{display:flex;gap:8px;padding:0 18px 12px;overflow-x:auto;flex-shrink:0;scrollbar-width:none;}
+  .map-area-row::-webkit-scrollbar{display:none;}
+  .map-area-row .chip{white-space:nowrap;}
+  .map-wrap{flex:1;min-height:0;position:relative;}
+  #naver-map{position:absolute;inset:0;background:var(--surface);}
+  .map-status{
+    position:absolute;left:50%;bottom:20px;transform:translateX(-50%);z-index:5;
+    background:#fff;border:1px solid var(--line);border-radius:999px;padding:8px 14px;
+    font-size:13px;color:var(--text);box-shadow:0 6px 16px rgba(0,0,0,0.1);white-space:nowrap;
+  }
+  .map-status:empty{display:none;}
+  .shop-info{padding:12px 14px;font-size:13px;line-height:1.5;max-width:230px;color:var(--text);}
+  .shop-info b{font-size:14.5px;}
+  .shop-info .dim{color:var(--dim);font-size:12px;}
+  .shop-info .soon{margin-top:6px;font-size:11.5px;color:var(--faint);}
+  .shop-info a{display:inline-block;margin-top:8px;color:#03c75a;font-weight:700;text-decoration:none;}
+
+  /* ---- 사진 인식 ---- */
+  label.capture-box{cursor:pointer;position:relative;overflow:hidden;}
+  .capture-box img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;}
+  .capture-box .cam,.capture-box .cap-msg{position:relative;z-index:1;}
+  .capture-box.has-photo .cam,.capture-box.has-photo .cap-msg{
+    background:rgba(255,255,255,0.88);padding:4px 10px;border-radius:999px;
+  }
+  .ai-card{background:var(--yellow-soft);border-radius:18px;padding:14px;display:flex;flex-direction:column;gap:10px;}
+  .ai-card[hidden]{display:none;}
+  .ai-row{display:flex;align-items:center;gap:8px;}
+  .ai-row label{font-size:12.5px;color:#7a5f00;font-weight:700;width:52px;flex-shrink:0;}
+  .ai-row input,.ai-row select{
+    flex:1;min-width:0;height:38px;border-radius:11px;border:1px solid var(--line);background:#fff;
+    padding:0 10px;font-size:14px;font-family:inherit;color:var(--text);
+  }
+  .ai-row input.emoji{flex:0 0 48px;text-align:center;font-size:18px;}
+  .ai-price{font-size:15px;font-weight:800;}
+  .ai-price .conf{font-size:11.5px;font-weight:600;color:var(--dim);margin-left:6px;}
+  .ai-tips{margin:0;padding-left:18px;font-size:13px;line-height:1.55;}
+  .ai-wanted{font-size:12.5px;color:var(--dim);}
 </style>
 </head>
 <body>
@@ -259,7 +298,7 @@
     </div>
     <div class="home-body">
       <div class="range-row" id="search-row">
-        <button class="pill-btn" type="button">📍 잠실 · 20분</button>
+        <button class="pill-btn" id="btn-open-map" type="button">📍 잠실 · 20분</button>
         <div class="search-fake">🔍 상품명으로 검색</div>
       </div>
       <div class="list" id="home-list"></div>
@@ -276,9 +315,33 @@
       <div style="width:34px;"></div>
     </div>
     <div class="reg-body">
-      <div class="capture-box">
+      <label class="capture-box" id="capture-box">
+        <input type="file" id="photo-input" accept="image/*" capture="environment" hidden>
         <div class="cam">📷</div>
-        <div>사진을 찍으면 상품을 인식해요</div>
+        <div class="cap-msg" id="capture-msg">사진을 찍으면 상품을 인식해요</div>
+      </label>
+      <div class="ai-card" id="ai-card" hidden>
+        <div class="ai-row">
+          <label for="ai-name">상품명</label>
+          <input class="emoji" id="ai-emoji" maxlength="4" aria-label="아이콘">
+          <input id="ai-name">
+        </div>
+        <div class="ai-row">
+          <label for="ai-condition">상태</label>
+          <select id="ai-condition">
+            <option>미개봉</option><option>개봉-상태좋음</option><option>사용감있음</option><option>판단불가</option>
+          </select>
+        </div>
+        <div class="ai-row">
+          <label>예상 시세</label>
+          <div class="ai-price" id="ai-price"></div>
+        </div>
+        <div class="ai-row">
+          <label for="ai-premium">웃돈</label>
+          <input id="ai-premium" type="number" step="500" inputmode="numeric">
+        </div>
+        <div class="ai-wanted" id="ai-wanted"></div>
+        <ul class="ai-tips" id="ai-tips"></ul>
       </div>
       <div class="divider">또는</div>
       <div>
@@ -299,6 +362,27 @@
       </div>
     </div>
     <button class="cta" id="btn-register-submit" type="button">등록하기</button>
+  </section>
+
+  <!-- 지도 화면 -->
+  <section class="screen" id="screen-map">
+    <div class="statusbar"></div>
+    <div class="topbar">
+      <button class="back" id="btn-map-back" type="button">←</button>
+      <div class="title-mid">가챠샵 지도</div>
+      <div style="width:34px;"></div>
+    </div>
+    <div class="map-area-row" id="map-area-group">
+      <button class="chip" type="button" data-area="잠실" data-lat="37.5133" data-lng="127.1001">잠실</button>
+      <button class="chip" type="button" data-area="홍대" data-lat="37.5563" data-lng="126.9236">홍대</button>
+      <button class="chip" type="button" data-area="용산" data-lat="37.5298" data-lng="126.9648">용산</button>
+      <button class="chip" type="button" data-area="강남" data-lat="37.4979" data-lng="127.0276">강남</button>
+      <button class="chip" type="button" data-area="명동" data-lat="37.5609" data-lng="126.9858">명동</button>
+    </div>
+    <div class="map-wrap">
+      <div id="naver-map"></div>
+      <div class="map-status" id="map-status"></div>
+    </div>
   </section>
 
   <!-- 거래 화면 -->
@@ -481,13 +565,135 @@
     });
   });
 
+  // ---- 사진 인식 ----
+  var photoInput = document.getElementById("photo-input");
+  var captureBox = document.getElementById("capture-box");
+  var captureMsg = document.getElementById("capture-msg");
+  var aiCard = document.getElementById("ai-card");
+  var aiResult = null;
+  var analyzing = false;
+
+  function escapeHtml(s){
+    return String(s).replace(/[&<>"']/g, function(c){
+      return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];
+    });
+  }
+
+  function won(n){ return Number(n).toLocaleString("ko-KR") + "원"; }
+
+  // 긴 변 1024px JPEG로 줄여서 base64만 돌려준다 (서버리스 요청 크기 제한 대비)
+  function shrinkImage(file){
+    return new Promise(function(resolve, reject){
+      var url = URL.createObjectURL(file);
+      var img = new Image();
+      img.onload = function(){
+        var scale = Math.min(1, 1024 / Math.max(img.width, img.height));
+        var canvas = document.createElement("canvas");
+        canvas.width = Math.round(img.width * scale);
+        canvas.height = Math.round(img.height * scale);
+        canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
+        URL.revokeObjectURL(url);
+        resolve(canvas.toDataURL("image/jpeg", 0.85));
+      };
+      img.onerror = function(){ URL.revokeObjectURL(url); reject(new Error("이미지를 열 수 없어요")); };
+      img.src = url;
+    });
+  }
+
+  function resetPhoto(){
+    aiResult = null;
+    photoInput.value = "";
+    aiCard.hidden = true;
+    captureBox.classList.remove("has-photo");
+    var old = captureBox.querySelector("img");
+    if (old) old.remove();
+    captureMsg.textContent = "사진을 찍으면 상품을 인식해요";
+  }
+
+  function showAiResult(g){
+    aiResult = g;
+    document.getElementById("ai-emoji").value = g.emoji || "🎁";
+    document.getElementById("ai-name").value = g.name;
+    document.getElementById("ai-condition").value = g.condition;
+    document.getElementById("ai-premium").value = g.recommended_premium;
+    var confText = {high:"확실", medium:"보통", low:"참고용"}[g.confidence] || "";
+    document.getElementById("ai-price").innerHTML =
+      escapeHtml(won(g.price_min) + " ~ " + won(g.price_max)) +
+      ' <span class="conf">' + escapeHtml("추천: " + g.recommended_mode + " · 정확도 " + confText) + '</span>';
+    document.getElementById("ai-wanted").textContent =
+      g.wanted_suggestions.length ? "교환 제안하면 좋은 굿즈: " + g.wanted_suggestions.join(", ") : "";
+    var tips = document.getElementById("ai-tips");
+    tips.innerHTML = "";
+    g.tips.forEach(function(t){
+      var li = document.createElement("li");
+      li.textContent = t;
+      tips.appendChild(li);
+    });
+    aiCard.hidden = false;
+    // 사진으로 인식했으면 칩 선택은 해제
+    chipGroup.querySelectorAll(".chip").forEach(function(c){ c.classList.remove("on"); });
+  }
+
+  photoInput.addEventListener("change", function(){
+    var file = photoInput.files && photoInput.files[0];
+    if (!file || analyzing) return;
+    analyzing = true;
+    aiResult = null;
+    aiCard.hidden = true;
+    captureMsg.textContent = "분석 중… (10~30초)";
+
+    shrinkImage(file).then(function(dataUrl){
+      var old = captureBox.querySelector("img");
+      if (old) old.remove();
+      var preview = document.createElement("img");
+      preview.src = dataUrl;
+      preview.alt = "";
+      captureBox.prepend(preview);
+      captureBox.classList.add("has-photo");
+
+      return fetch("/api/analyze-goods", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({ image: dataUrl.split(",")[1], mediaType: "image/jpeg" })
+      });
+    }).then(function(r){
+      return r.json().then(function(body){
+        if (!r.ok) throw new Error(body.error || "분석 실패");
+        return body;
+      });
+    }).then(function(goods){
+      showAiResult(goods);
+      captureMsg.textContent = "다시 찍으려면 탭하세요";
+    }).catch(function(e){
+      captureMsg.textContent = e.message + " · 아래에서 직접 선택해주세요";
+    }).then(function(){
+      analyzing = false;
+    });
+  });
+
+  chipGroup.addEventListener("click", function(e){
+    // 칩으로 직접 고르면 AI 결과 대신 칩 값을 쓴다
+    if (e.target.closest(".chip") && aiResult) {
+      aiResult = null;
+      aiCard.hidden = true;
+    }
+  });
+
   document.getElementById("btn-register-submit").addEventListener("click", function(){
+    if (analyzing) return;
     var pickedChip = chipGroup.querySelector(".chip.on");
     var holdingName = pickedChip ? pickedChip.dataset.name : "새 굿즈";
     var holdingIcon = pickedChip ? pickedChip.dataset.icon : "🎁";
+    var premium = 0;
+
+    if (aiResult) {
+      holdingName = escapeHtml(document.getElementById("ai-name").value.trim() || aiResult.name);
+      holdingIcon = escapeHtml(document.getElementById("ai-emoji").value.trim() || "🎁");
+      premium = Math.round(Number(document.getElementById("ai-premium").value) || 0);
+    }
 
     var newItem = {
-      tag:"교환", timeLabel:"방금 등록", place:"내 주변", tier:"near", premium:0,
+      tag:"교환", timeLabel:"방금 등록", place:"내 주변", tier:"near", premium:premium,
       icon1: holdingIcon, name1: holdingName, sub1:"보유중",
       icon2:"❓", name2:"원하는 굿즈 대기중", sub2:"상대 찾는 중"
     };
@@ -497,9 +703,127 @@
     chipGroup.querySelectorAll(".chip").forEach(function(c){ c.classList.remove("on"); });
     modeGroup.querySelectorAll("button").forEach(function(b){ b.classList.remove("on"); });
     modeGroup.querySelector('[data-mode="교환"]').classList.add("on");
+    resetPhoto();
 
     renderHome();
     showScreen("screen-home");
+  });
+
+  // ---- 지도 ----
+  var naverMap = null;
+  var shopMarkers = [];
+  var shopInfoWindow = null;
+  var mapStatus = document.getElementById("map-status");
+  var mapAreaGroup = document.getElementById("map-area-group");
+  var mapScriptPromise = null;
+
+  function loadNaverMaps(){
+    if (mapScriptPromise) return mapScriptPromise;
+    mapScriptPromise = fetch("/api/config").then(function(r){ return r.json(); }).then(function(cfg){
+      if (!cfg.naverMapKeyId) throw new Error("지도 키가 아직 설정되지 않았어요");
+      return new Promise(function(resolve, reject){
+        var s = document.createElement("script");
+        s.src = "https://oapi.map.naver.com/openapi/v3/maps.js?ncpKeyId=" + encodeURIComponent(cfg.naverMapKeyId);
+        s.onload = resolve;
+        s.onerror = function(){ reject(new Error("네이버 지도를 불러오지 못했어요")); };
+        document.head.appendChild(s);
+      });
+    }).catch(function(e){
+      mapScriptPromise = null;
+      throw e;
+    });
+    return mapScriptPromise;
+  }
+
+  function clearShopMarkers(){
+    shopMarkers.forEach(function(m){ m.setMap(null); });
+    shopMarkers = [];
+    if (shopInfoWindow) shopInfoWindow.close();
+  }
+
+  function shopInfoHtml(shop){
+    return '<div class="shop-info">' +
+      '<b>' + escapeHtml(shop.name) + '</b><br>' +
+      '<span class="dim">' + escapeHtml(shop.address) + '</span>' +
+      '<div class="soon">혼잡도 · 진행중 팝업: 준비중</div>' +
+      '<a href="https://map.naver.com/p/search/' + encodeURIComponent(shop.name) +
+        '" target="_blank" rel="noopener">네이버 지도에서 보기 →</a>' +
+    '</div>';
+  }
+
+  function loadShops(chip){
+    mapAreaGroup.querySelectorAll(".chip").forEach(function(c){ c.classList.remove("on"); });
+    chip.classList.add("on");
+    var area = chip.dataset.area;
+    naverMap.setCenter(new naver.maps.LatLng(Number(chip.dataset.lat), Number(chip.dataset.lng)));
+    naverMap.setZoom(15);
+    clearShopMarkers();
+    mapStatus.textContent = area + " 가챠샵 찾는 중…";
+
+    fetch("/api/shops?area=" + encodeURIComponent(area)).then(function(r){
+      return r.json().then(function(body){
+        if (!r.ok) throw new Error(body.error || "검색 실패");
+        return body;
+      });
+    }).then(function(body){
+      if (!chip.classList.contains("on")) return; // 그새 다른 지역을 눌렀으면 무시
+      var bounds = null;
+      body.shops.forEach(function(shop){
+        var pos = new naver.maps.LatLng(shop.lat, shop.lng);
+        var marker = new naver.maps.Marker({ position: pos, map: naverMap, title: shop.name });
+        naver.maps.Event.addListener(marker, "click", function(){
+          shopInfoWindow.setContent(shopInfoHtml(shop));
+          shopInfoWindow.open(naverMap, marker);
+        });
+        shopMarkers.push(marker);
+        if (!bounds) bounds = new naver.maps.LatLngBounds(pos, pos);
+        else bounds.extend(pos);
+      });
+      if (bounds && body.shops.length > 1) naverMap.fitBounds(bounds, {top:40, right:40, bottom:80, left:40});
+      mapStatus.textContent = body.shops.length
+        ? area + " 가챠샵 " + body.shops.length + "곳"
+        : area + " 근처에서 가챠샵을 찾지 못했어요";
+    }).catch(function(e){
+      mapStatus.textContent = e.message;
+    });
+  }
+
+  function openMap(){
+    showScreen("screen-map");
+    if (naverMap) return;
+    mapStatus.textContent = "지도를 불러오는 중…";
+    loadNaverMaps().then(function(){
+      var first = mapAreaGroup.querySelector(".chip");
+      naverMap = new naver.maps.Map("naver-map", {
+        center: new naver.maps.LatLng(Number(first.dataset.lat), Number(first.dataset.lng)),
+        zoom: 15
+      });
+      shopInfoWindow = new naver.maps.InfoWindow({ borderColor: "#e7e7e9", anchorSize: new naver.maps.Size(10, 10) });
+      loadShops(first);
+
+      // 위치 권한을 주면 내 위치를 중심으로 보여준다 (마커 검색은 지역 칩 기준)
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(function(p){
+          var me = new naver.maps.LatLng(p.coords.latitude, p.coords.longitude);
+          new naver.maps.Marker({
+            position: me, map: naverMap,
+            icon: { content: '<div style="width:14px;height:14px;border-radius:50%;background:#2f6fed;border:3px solid #fff;box-shadow:0 0 0 1px #2f6fed;"></div>', anchor: new naver.maps.Point(10, 10) }
+          });
+        }, function(){}, { timeout: 5000 });
+      }
+    }).catch(function(e){
+      mapStatus.textContent = e.message;
+    });
+  }
+
+  document.getElementById("btn-open-map").addEventListener("click", openMap);
+  document.getElementById("btn-map-back").addEventListener("click", function(){
+    showScreen("screen-home");
+  });
+  mapAreaGroup.querySelectorAll(".chip").forEach(function(chip){
+    chip.addEventListener("click", function(){
+      if (naverMap) loadShops(chip);
+    });
   });
 
   // ---- 거래 ----
