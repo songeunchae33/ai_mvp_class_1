@@ -1,0 +1,45 @@
+{
+  "_설명": "맞춤 혜택·정책 목록. ageMin/ageMax(만 나이), incomeMax(소득 구간: 1=~3천만, 2=3~5천만, 3=5천~7,500만, 4=7,500만~), avertMax(위험기피 점수가 이보다 높으면 숨김)로 사람에 맞게 걸러요. 조건은 바뀔 수 있어서 화면에는 '공식 사이트에서 확인' 안내가 같이 나가요. (확인일: 2026-10-10)",
+  "items": [
+    {
+      "id": "youth-future-savings",
+      "title": "청년미래적금",
+      "desc": "3년간 모으면 정부가 납입액의 일부를 더 얹어줘요",
+      "tag": "저축",
+      "ageMin": 19, "ageMax": 34, "incomeMax": 3,
+      "url": "https://www.kinfa.or.kr"
+    },
+    {
+      "id": "youth-rent",
+      "title": "청년 월세 지원",
+      "desc": "무주택 청년의 월세 일부를 지원해요",
+      "tag": "주거",
+      "ageMin": 19, "ageMax": 34,
+      "url": "https://www.bokjiro.go.kr"
+    },
+    {
+      "id": "k-pass",
+      "title": "K-패스 대중교통비 환급",
+      "desc": "대중교통비 일부를 매달 돌려받아요 (청년 환급률 우대)",
+      "tag": "생활",
+      "ageMin": 19,
+      "url": "https://korea-pass.kr"
+    },
+    {
+      "id": "isa",
+      "title": "ISA 계좌",
+      "desc": "예금·ETF 등을 한 계좌에서 굴리며 세금 혜택을 받아요",
+      "tag": "투자",
+      "ageMin": 19, "avertMax": 8,
+      "url": "https://search.naver.com/search.naver?query=ISA+%EA%B3%84%EC%A2%8C+%EC%A1%B0%EA%B1%B4"
+    },
+    {
+      "id": "youth-center",
+      "title": "온통청년 맞춤 정책 찾기",
+      "desc": "나이·지역으로 받을 수 있는 청년 정책을 한 번에 찾아봐요",
+      "tag": "정책",
+      "ageMin": 19, "ageMax": 39,
+      "url": "https://www.youthcenter.go.kr"
+    }
+  ]
+}

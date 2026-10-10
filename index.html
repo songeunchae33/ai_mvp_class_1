@@ -1,1062 +1,1022 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="ko">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>캐치캐치</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#E9F2EB">
+<title>나만의 경제</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Gowun+Dodum&family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
 <style>
-  :root{
-    --bg:#f6f6f7;
-    --app-bg:#ffffff;
-    --surface:#f6f6f7;
-    --surface2:#efeff1;
-    --line:#e7e7e9;
-    --text:#191919;
-    --dim:#8e8f93;
-    --faint:#b7b8bc;
-    --yellow:#ffe100;
-    --yellow-soft:#fff6c4;
-    --yellow-press:#f3d400;
-    --tier-near:#2f6fed;
-    --tier-mid:#1fa463;
-    --tier-far:#e8a900;
-    --tier-veryfar:#e4453c;
+  :root {
+    --bg: #E9F2EB; --outer: #DCE7DF; --card: #FFFFFF; --ink: #13261C; --sub: #4A5A50; --line: #D6E3DA;
+    --soft: #F4F8F5; --green: #1C7C54; --green-ink: #FFFFFF; --mint: #D5EEE1; --yellow: #FFD84D;
+    --up: #C22B2B; --up-bg: #FDECEC; --down: #1C5FB8; --down-bg: #EAF1FC; --flat-bg: #EEF2EF;
+    --radius: 20px;
   }
-  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
-  html,body{height:100%;margin:0;}
-  body{
-    background:var(--bg);
-    font-family:-apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo','Malgun Gothic',sans-serif;
-    color:var(--text);
-  }
-  button{font-family:inherit;}
-  .title-font{font-weight:800;}
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body { background: var(--outer); color: var(--ink); font-family: 'Noto Sans KR', system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+  button, input, select { font-family: inherit; color: inherit; }
+  a { color: inherit; text-decoration: none; }
+  .num { font-variant-numeric: tabular-nums; }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .hand { font-family: 'Gowun Dodum', sans-serif; }
+  .strip { display: flex; gap: 10px; overflow-x: auto; scrollbar-width: none; }
+  .strip::-webkit-scrollbar { display: none; }
 
-  #app{
-    width:100%;
-    max-width:430px;
-    margin:0 auto;
-    height:100dvh;
-    background:var(--app-bg);
-    position:relative;
-    overflow:hidden;
-  }
-  @media (min-width:431px){
-    body{display:flex;align-items:flex-start;justify-content:center;padding-top:24px;}
-    #app{
-      height:calc(100dvh - 48px);
-      border-radius:32px;
-      box-shadow:0 30px 70px rgba(0,0,0,0.18);
-      border:1px solid #ddd;
-    }
-  }
+  .phone { max-width: 440px; min-height: 100vh; min-height: 100dvh; margin: 0 auto; background: var(--bg); display: flex; flex-direction: column; position: relative; }
+  .scroll { flex: 1; padding: 4px 16px 20px; display: flex; flex-direction: column; gap: 16px; }
 
-  .screen{
-    position:absolute;inset:0;
-    display:none;flex-direction:column;
-    background:var(--app-bg);
-  }
-  .screen.active{display:flex;}
+  .top { display: flex; align-items: center; justify-content: space-between; padding: 14px 10px 4px 12px; position: sticky; top: 0; z-index: 5; background: var(--bg); }
+  .avatar { display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 8px 0 4px; border: none; background: transparent; cursor: pointer; border-radius: 14px; }
+  .avatar:hover { background: rgba(255,255,255,0.6); }
+  .brand { font-size: 18px; font-weight: 700; }
+  .icon-btn { width: 44px; height: 44px; border: none; background: transparent; display: flex; align-items: center; justify-content: center; cursor: pointer; border-radius: 14px; }
+  .icon-btn:hover { background: rgba(255,255,255,0.6); }
+  .asof { font-size: 12px; color: var(--sub); }
 
-  .statusbar{height:env(safe-area-inset-top,14px);flex-shrink:0;}
+  .hero { display: flex; align-items: flex-end; gap: 10px; padding-top: 4px; }
+  .bubble { flex: 1; background: var(--card); border-radius: 20px 20px 20px 6px; padding: 14px 12px 6px 16px; display: flex; flex-direction: column; gap: 4px; }
+  .bubble p { margin: 0; font-size: 16px; line-height: 1.6; min-height: 51px; }
+  .bubble-foot { display: flex; justify-content: space-between; align-items: center; }
+  .dots { display: flex; gap: 4px; }
+  .dot { width: 6px; height: 6px; border-radius: 3px; background: var(--line); }
+  .dot.on { background: var(--green); width: 14px; }
+  .link-btn { min-height: 40px; padding: 0 6px 0 10px; border: none; background: transparent; color: var(--green); font-size: 13px; font-weight: 700; cursor: pointer; }
 
-  /* ---- 공통 헤더 ---- */
-  .topbar{
-    flex-shrink:0;
-    padding:10px 18px 14px;
-    display:flex;align-items:center;justify-content:space-between;
-  }
-  .topbar .back{
-    width:34px;height:34px;border-radius:999px;background:var(--surface);
-    border:none;display:flex;align-items:center;justify-content:center;
-    font-size:16px;color:var(--text);
-  }
-  .topbar .back:active{background:var(--surface2);}
-  .topbar.home{padding-top:26px;}
-  .wordmark{
-    display:flex;align-items:center;gap:8px;
-    font-weight:800;
-    font-size:26px;color:var(--text);
-  }
-  .wordmark .mark{width:30px;height:30px;flex-shrink:0;}
-  .title-mid{font-size:18.5px;font-weight:800;}
-  .ghost-icon{
-    width:34px;height:34px;border-radius:999px;background:var(--surface);
-    display:flex;align-items:center;justify-content:center;font-size:14px;color:var(--dim);border:none;
-  }
+  .card { background: var(--card); border-radius: var(--radius); padding: 14px 16px; }
+  .sec-title { display: flex; justify-content: space-between; align-items: baseline; margin: 0 0 8px; }
+  .sec-title h2 { margin: 0; font-size: 16px; font-weight: 700; }
+  .sec-title span, .hint { font-size: 12px; color: var(--sub); }
+  .badge { display: inline-block; font-size: 11px; font-weight: 700; border-radius: 6px; padding: 3px 7px; }
+  .b-up { color: var(--up); background: var(--up-bg); }
+  .b-down { color: var(--down); background: var(--down-bg); }
+  .b-flat { color: var(--sub); background: var(--flat-bg); }
+  .b-green { color: var(--green); background: #E1F2E8; }
+  .b-sample { color: #8A5A00; background: #FFF1C9; }
+  .up { color: var(--up); } .down { color: var(--down); } .flat { color: var(--sub); }
 
-  /* ---- 홈 ---- */
-  .home-body{flex:1;min-height:0;position:relative;display:flex;flex-direction:column;overflow:hidden;}
-  .range-row{
-    position:absolute;top:0;left:0;right:0;z-index:2;
-    display:flex;gap:8px;padding:2px 18px 14px;
-    background:var(--app-bg);
-    transform:translateY(0);opacity:1;
-    transition:transform .25s ease, opacity .2s ease;
-  }
-  .range-row.hide{transform:translateY(-115%);opacity:0;pointer-events:none;}
-  .pill-btn{
-    height:50px;font-size:16.5px;font-weight:700;padding:0 18px;border-radius:999px;
-    background:var(--yellow-soft);border:none;color:#7a5f00;display:flex;align-items:center;gap:7px;
-    white-space:nowrap;
-  }
-  .pill-btn:active{background:var(--yellow);}
-  .search-fake{
-    flex:1;height:50px;border-radius:999px;background:var(--surface);
-    display:flex;align-items:center;padding:0 18px;font-size:16.5px;color:var(--dim);gap:8px;
-  }
+  .mkt { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+  .mkt div { background: var(--card); border-radius: 16px; padding: 12px 8px; display: flex; flex-direction: column; align-items: center; gap: 2px; }
+  .mkt .k { font-size: 12px; color: var(--sub); }
+  .mkt .v { font-size: 17px; font-weight: 700; letter-spacing: -0.3px; }
+  .mkt .c { font-size: 12px; font-weight: 700; }
+  .rows { display: flex; flex-direction: column; }
+  .row { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 48px; border-top: 1px solid #EEF2EF; }
+  .row:first-child { border-top: none; }
+  .row .name { font-size: 15px; font-weight: 700; }
+  .row .sub { font-size: 12px; color: var(--sub); }
 
-  .list{
-    flex:1;min-height:0;
-    overflow-y:auto;padding:82px 14px 110px;display:flex;flex-direction:column;gap:12px;
-    -webkit-overflow-scrolling:touch;
-  }
-  .trade-card{
-    border:1px solid var(--line);border-radius:20px;padding:12px;
-    text-align:left;width:100%;transition:filter .15s, transform .15s;
-  }
-  .trade-card:active{filter:brightness(0.96);transform:scale(0.98);}
-  .tier-bg-near{background:rgba(47,111,237,0.7);border-color:rgba(47,111,237,0.8);}
-  .tier-bg-mid{background:rgba(31,164,99,0.7);border-color:rgba(31,164,99,0.8);}
-  .tier-bg-far{background:rgba(255,203,51,0.7);border-color:rgba(255,189,20,0.85);}
-  .tier-bg-veryfar{background:rgba(228,69,60,0.7);border-color:rgba(228,69,60,0.8);}
-  .trade-card[class*="tier-bg-"] .g-name{color:var(--text);}
-  .trade-card[class*="tier-bg-"] .g-sub{color:var(--text);}
-  .trade-card[class*="tier-bg-"] .tc-place{color:var(--text);}
-  .trade-card[class*="tier-bg-"] .tc-time{color:var(--text);}
-  .trade-card.just-added{animation:pop-in .5s ease;}
-  @keyframes pop-in{
-    0%{background:var(--yellow-soft);transform:scale(0.96);}
-    100%{background:var(--surface);transform:scale(1);}
-  }
-  .tc-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;}
-  .tc-tag{font-size:15.5px;font-weight:800;padding:5px 12px;border-radius:999px;background:#fff;color:var(--text);}
-  .tc-dist{font-size:12.5px;}
-  .tc-time{font-weight:700;}
-  .tc-place{color:var(--dim);}
-  .tier-near{color:var(--tier-near);}
-  .tier-mid{color:var(--tier-mid);}
-  .tier-far{color:var(--tier-far);}
-  .tier-veryfar{color:var(--tier-veryfar);}
-  .goods-row{display:flex;align-items:center;gap:8px;}
-  .thumb{
-    width:38px;height:38px;border-radius:11px;background:#fff;border:1px solid var(--line);
-    display:flex;align-items:center;justify-content:center;font-size:17px;flex-shrink:0;
-  }
-  .g-block{min-width:0;}
-  .g-name{
-    font-size:17px;color:var(--text);white-space:nowrap;
-    overflow-x:auto;text-overflow:clip;-webkit-overflow-scrolling:touch;
-    scrollbar-width:none;
-  }
-  .g-name::-webkit-scrollbar{display:none;}
-  .g-sub{
-    font-size:12.5px;color:var(--dim);margin-top:3px;white-space:nowrap;
-    overflow-x:auto;text-overflow:clip;-webkit-overflow-scrolling:touch;
-    scrollbar-width:none;
-  }
-  .g-sub::-webkit-scrollbar{display:none;}
-  .swap-icon{
-    width:20px;height:20px;border-radius:999px;background:var(--yellow-soft);color:#7a5f00;
-    display:flex;align-items:center;justify-content:center;font-size:10px;flex-shrink:0;
-  }
+  .impact { flex-shrink: 0; width: 232px; background: var(--card); border-radius: 18px; padding: 14px; display: flex; flex-direction: column; gap: 8px; text-align: left; border: none; font-size: inherit; }
+  .impact p { margin: 0; font-size: 14px; line-height: 1.55; }
+  .bleed { margin: 0 -16px; padding: 0 16px; }
 
-  .fab{
-    position:absolute;right:20px;bottom:26px;
-    width:56px;height:56px;border-radius:999px;background:var(--yellow);
-    border:none;display:flex;align-items:center;justify-content:center;
-    font-size:24px;color:var(--text);box-shadow:0 10px 24px rgba(255,225,0,0.5);
-  }
-  .fab:active{background:var(--yellow-press);transform:scale(0.95);}
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .chip { min-height: 36px; padding: 0 14px; border-radius: 999px; border: 1px solid #BFD3C6; background: var(--card); font-size: 13px; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; }
+  .chip.on { background: var(--ink); color: #fff; border-color: var(--ink); }
+  .chip.small { min-height: 32px; font-size: 12px; font-weight: 500; padding: 0 12px; }
 
-  /* ---- 굿즈등록 ---- */
-  .reg-body{flex:1;overflow-y:auto;padding:4px 18px 20px;display:flex;flex-direction:column;gap:22px;}
-  .capture-box{
-    height:150px;border-radius:20px;background:var(--surface);
-    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;
-    color:var(--dim);font-size:14px;
-  }
-  .capture-box .cam{font-size:28px;}
-  .divider{display:flex;align-items:center;gap:10px;color:var(--faint);font-size:12.5px;}
-  .divider::before,.divider::after{content:'';flex:1;height:1px;background:var(--line);}
+  .news a { display: flex; gap: 10px; align-items: flex-start; padding: 12px 0; border-top: 1px solid #EEF2EF; }
+  .news a:first-child { border-top: none; padding-top: 4px; }
+  .news .no { font-family: 'Gowun Dodum', sans-serif; font-size: 18px; font-weight: 700; color: var(--green); width: 16px; flex-shrink: 0; line-height: 1.4; }
+  .news .t { font-size: 15px; font-weight: 500; line-height: 1.45; }
+  .news .m { font-size: 12px; color: var(--sub); margin-top: 3px; display: flex; gap: 6px; align-items: center; }
+  .news a:hover .t { color: var(--green); }
 
-  .field-label{font-size:14.5px;font-weight:700;margin-bottom:10px;}
-  .chip-row{display:flex;flex-wrap:wrap;gap:8px;}
-  .chip{
-    font-size:14px;font-weight:600;padding:9px 15px;border-radius:999px;
-    background:var(--surface);border:none;color:var(--dim);
-  }
-  .chip.on{background:var(--yellow);color:var(--text);}
+  .cal { display: flex; align-items: center; gap: 12px; min-height: 52px; border-top: 1px solid #EEF2EF; }
+  .cal:first-child { border-top: none; }
+  .dday { width: 52px; flex-shrink: 0; text-align: center; font-size: 12px; font-weight: 700; border-radius: 10px; padding: 6px 0; background: var(--soft); color: var(--sub); }
+  .dday.soon { background: var(--green); color: #fff; }
+  .cal .t { font-size: 14px; font-weight: 700; }
+  .cal .d { font-size: 12px; color: var(--sub); }
+  .cal.mine .t { color: var(--green); }
 
-  .segmented{display:flex;background:var(--surface);border-radius:14px;padding:4px;gap:4px;}
-  .segmented button{
-    flex:1;padding:11px;border-radius:11px;border:none;background:transparent;
-    font-size:14px;font-weight:600;color:var(--dim);
-  }
-  .segmented button.on{background:#fff;color:var(--text);box-shadow:0 2px 6px rgba(0,0,0,0.08);}
+  .benefit { display: flex; justify-content: space-between; align-items: center; gap: 10px; min-height: 56px; border-top: 1px solid #EEF2EF; padding: 8px 0; }
+  .benefit:first-child { border-top: none; }
+  .benefit .t { font-size: 14px; font-weight: 700; }
+  .benefit .d { font-size: 12px; color: var(--sub); margin-top: 2px; line-height: 1.45; }
 
-  .cta{
-    flex-shrink:0;margin:0 18px 20px;padding:16px;border-radius:16px;
-    background:var(--yellow);border:none;font-size:16.5px;font-weight:800;color:var(--text);
-  }
-  .cta:active{background:var(--yellow-press);}
-  .cta[disabled]{background:var(--surface2);color:var(--faint);}
+  .quiz { background: var(--green); color: var(--green-ink); border-radius: var(--radius); padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+  .quiz .q { font-size: 15px; font-weight: 500; line-height: 1.55; margin: 0; }
+  .ox { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .ox button { min-height: 50px; border-radius: 14px; border: none; font-size: 20px; font-weight: 700; cursor: pointer; background: rgba(255,255,255,0.16); color: #fff; }
+  .ox button.right { background: #fff; color: var(--green); }
+  .ox button.dim { background: rgba(255,255,255,0.08); color: #9CCBB2; }
+  .ox button.wrong { background: rgba(255,255,255,0.08); color: #FFC9C9; text-decoration: line-through; }
+  .quiz .ex { margin: 0; font-size: 13px; line-height: 1.65; color: #E6F5EC; }
 
-  /* ---- 거래 ---- */
-  .deal-head{display:flex;align-items:center;gap:10px;padding:10px 18px 14px;flex-shrink:0;}
-  .avatar{width:32px;height:32px;border-radius:999px;background:var(--surface);flex-shrink:0;}
-  .who{font-size:15.5px;font-weight:700;}
-  .who-sub{font-size:12px;color:var(--dim);}
+  .more { background: var(--card); border: 2px dashed #BFD3C6; border-radius: var(--radius); padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
+  .more .q { font-size: 15px; font-weight: 700; margin: 0; }
+  .inline { display: flex; gap: 8px; }
+  .field { min-height: 44px; border: 1px solid var(--line); border-radius: 12px; padding: 0 12px; font-size: 15px; background: var(--card); width: 100%; min-width: 0; }
+  .field:focus { outline: 2px solid var(--green); outline-offset: -1px; }
+  .btn { min-height: 44px; padding: 0 16px; border-radius: 12px; border: none; background: var(--green); color: #fff; font-size: 14px; font-weight: 700; cursor: pointer; white-space: nowrap; }
+  .btn.ghost { background: var(--soft); color: var(--ink); border: 1px solid var(--line); }
+  .btn.block { width: 100%; min-height: 52px; font-size: 16px; border-radius: 16px; }
+  .btn.danger { background: #FDECEC; color: #A61B1B; }
+  .btn:disabled { opacity: 0.45; cursor: default; }
 
-  .deal-summary{
-    margin:0 18px 10px;background:var(--surface);border-radius:18px;padding:13px;flex-shrink:0;
-  }
-  .deal-summary .goods-row{justify-content:space-between;}
-  .deal-note{font-size:11.5px;color:var(--faint);text-align:center;margin-top:10px;}
+  .foot { font-size: 11px; color: var(--sub); line-height: 1.6; text-align: center; padding: 4px 8px 8px; }
 
-  .chat-body{flex:1;overflow-y:auto;padding:12px 18px;display:flex;flex-direction:column;gap:9px;}
-  .bubble{max-width:75%;padding:10px 14px;border-radius:18px;font-size:14.5px;line-height:1.5;}
-  .bubble.them{background:var(--surface);align-self:flex-start;border-bottom-left-radius:5px;}
-  .bubble.me{background:var(--yellow);color:var(--text);align-self:flex-end;border-bottom-right-radius:5px;font-weight:600;}
-  .sys-note{
-    align-self:center;font-size:12px;color:var(--dim);background:var(--surface);
-    padding:6px 13px;border-radius:999px;
-  }
+  .askbar { position: sticky; bottom: 0; z-index: 6; padding: 8px 16px calc(14px + env(safe-area-inset-bottom)); background: var(--bg); border-top: 1px solid var(--line); display: flex; flex-direction: column; gap: 8px; }
+  .askform { display: flex; align-items: center; gap: 8px; background: var(--card); border-radius: 18px; padding: 6px 6px 6px 16px; }
+  .askform input { flex: 1; min-width: 0; border: none; outline: none; font-size: 15px; background: transparent; }
+  .askform input::placeholder { color: #5E6E64; }
+  .send { width: 44px; height: 44px; border-radius: 13px; border: none; background: var(--green); color: #fff; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; }
 
-  .chat-input{
-    flex-shrink:0;display:flex;align-items:center;gap:10px;
-    padding:10px 16px calc(16px + env(safe-area-inset-bottom,0px));
-    border-top:1px solid var(--line);
-  }
-  .box-fake{flex:1;height:40px;border-radius:999px;background:var(--surface);display:flex;
-    align-items:center;padding:0 16px;font-size:14px;color:var(--dim);}
-  .send-btn{
-    width:40px;height:40px;border-radius:999px;background:var(--yellow);border:none;
-    display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;color:var(--text);
-  }
-  .send-btn:active{background:var(--yellow-press);}
-  .send-btn[disabled]{background:var(--surface2);color:var(--faint);}
+  .sheet-back { position: fixed; inset: 0; background: rgba(19, 38, 28, 0.35); z-index: 20; display: flex; align-items: flex-end; justify-content: center; }
+  .sheet { width: 100%; max-width: 440px; max-height: 80vh; overflow-y: auto; background: var(--bg); border-radius: 24px 24px 0 0; padding: 18px 16px calc(20px + env(safe-area-inset-bottom)); display: flex; flex-direction: column; gap: 12px; }
+  .sheet .qline { align-self: flex-end; background: var(--ink); color: #fff; border-radius: 18px 18px 6px 18px; padding: 10px 14px; font-size: 14px; max-width: 85%; }
+  .sheet .ans { display: flex; gap: 10px; align-items: flex-start; }
+  .sheet .ans p { margin: 0; background: var(--card); border-radius: 6px 18px 18px 18px; padding: 12px 14px; font-size: 15px; line-height: 1.7; white-space: pre-wrap; flex: 1; }
 
-  /* ---- 지도 ---- */
-  /* 네이버 지도는 바닥 타일로만 쓰고, 위에 올라가는 UI는 전부 캐치캐치 스타일로 그린다 */
-  #screen-map{background:var(--surface);}
-  /* 네이버 지도 라이브러리가 position을 inline으로 덮어쓰므로, flex로도 화면을 꽉 채우게 해둔다 */
-  #naver-map{position:absolute;inset:0;flex:1;width:100%;min-height:0;background:var(--surface);}
-  .map-top{
-    position:absolute;top:0;left:0;right:0;z-index:5;pointer-events:none;
-    padding:calc(env(safe-area-inset-top,0px) + 14px) 14px 0;display:flex;flex-direction:column;gap:10px;
-  }
-  .map-top > *{pointer-events:auto;}
-  .map-head{display:flex;align-items:center;gap:8px;}
-  .map-head .back{
-    width:44px;height:44px;border-radius:999px;background:#fff;border:none;flex-shrink:0;
-    font-size:17px;color:var(--text);box-shadow:0 4px 14px rgba(0,0,0,0.12);
-  }
-  .map-filter{
-    flex:1;display:flex;background:#fff;border-radius:999px;padding:4px;gap:4px;
-    box-shadow:0 4px 14px rgba(0,0,0,0.12);
-  }
-  .map-filter button{
-    flex:1;height:36px;border-radius:999px;border:none;background:transparent;
-    font-size:14px;font-weight:700;color:var(--dim);font-family:inherit;
-  }
-  .map-filter button.on{background:var(--yellow);color:var(--text);}
-  .map-area-row{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;padding-bottom:4px;}
-  .map-area-row::-webkit-scrollbar{display:none;}
-  .map-area-row .chip{
-    white-space:nowrap;background:#fff;color:var(--text);padding:8px 14px;
-    box-shadow:0 3px 10px rgba(0,0,0,0.1);
-  }
-  .map-area-row .chip.on{background:var(--text);color:#fff;}
-  .map-status{
-    align-self:center;background:rgba(25,25,25,0.85);color:#fff;border-radius:999px;
-    padding:7px 14px;font-size:12.5px;font-weight:600;max-width:100%;text-align:center;
-    word-break:keep-all;
-  }
-  .map-status:empty{display:none;}
+  .toast { position: fixed; left: 50%; bottom: 120px; transform: translateX(-50%); background: var(--ink); color: #fff; font-size: 13px; padding: 10px 16px; border-radius: 999px; z-index: 30; max-width: 90vw; }
 
-  /* 지도 위 핀 (0x0 래퍼 기준으로 말풍선 꼬리가 좌표를 가리키게) */
-  .pin-anchor{position:relative;width:0;height:0;}
-  .pin{
-    position:absolute;left:0;bottom:0;transform:translate(-50%,-8px);
-    display:flex;align-items:center;gap:5px;padding:6px 11px 6px 7px;border-radius:999px;
-    background:#fff;border:2px solid var(--text);white-space:nowrap;
-    font-size:12.5px;font-weight:800;color:var(--text);box-shadow:0 4px 10px rgba(0,0,0,0.18);
-    transition:transform .15s;
-  }
-  .pin::after{
-    content:'';position:absolute;left:50%;bottom:-8px;transform:translateX(-50%);
-    border:6px solid transparent;border-top:8px solid var(--text);border-bottom:0;
-  }
-  .pin .pin-emoji{
-    width:22px;height:22px;border-radius:999px;display:flex;align-items:center;justify-content:center;font-size:13px;
-  }
-  .pin-gacha .pin-emoji{background:var(--yellow-soft);}
-  .pin-popup .pin-emoji{background:#ffe1ea;}
-  .pin.selected{background:var(--yellow);transform:translate(-50%,-8px) scale(1.12);}
+  /* 마이페이지 / 첫 설문 */
+  .page-head { display: flex; align-items: center; gap: 4px; padding: 14px 12px 6px 4px; position: sticky; top: 0; z-index: 5; background: var(--bg); }
+  .page-head h1 { margin: 0; font-size: 18px; font-weight: 700; }
+  .form { display: flex; flex-direction: column; gap: 12px; }
+  .form label.lb { font-size: 13px; font-weight: 700; color: var(--sub); display: block; margin-bottom: 6px; }
+  .grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .range { width: 100%; accent-color: var(--green); height: 32px; }
+  .range-ends { display: flex; justify-content: space-between; font-size: 12px; color: var(--sub); }
+  .type-pill { font-size: 13px; font-weight: 700; color: var(--green); }
+  .money { position: relative; }
+  .money .field { padding-right: 44px; text-align: right; }
+  .money .unit { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); font-size: 13px; color: var(--sub); pointer-events: none; }
+  .debt { background: var(--soft); border-radius: 14px; padding: 10px; display: flex; flex-direction: column; gap: 8px; }
+  .bar { height: 10px; border-radius: 5px; background: var(--flat-bg); display: flex; overflow: hidden; }
+  .diag { display: flex; flex-direction: column; gap: 10px; }
+  .diag-line { display: flex; gap: 10px; align-items: flex-start; font-size: 14px; line-height: 1.55; }
+  .diag-line .badge { flex-shrink: 0; margin-top: 2px; }
+  .legend { display: flex; gap: 12px; flex-wrap: wrap; font-size: 12px; color: var(--sub); }
+  .legend i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 4px; }
 
-  /* 하단 카드 캐러셀 */
-  .place-cards{
-    position:absolute;left:0;right:0;bottom:calc(18px + env(safe-area-inset-bottom,0px));z-index:5;
-    display:flex;gap:10px;overflow-x:auto;scroll-snap-type:x mandatory;padding:0 14px;scrollbar-width:none;
-  }
-  .place-cards::-webkit-scrollbar{display:none;}
-  .place-cards:empty{display:none;}
-  .place-card{
-    flex:0 0 calc(100% - 36px);scroll-snap-align:center;background:#fff;border-radius:20px;
-    padding:14px;display:flex;gap:12px;align-items:center;border:2px solid transparent;
-    box-shadow:0 8px 22px rgba(0,0,0,0.14);
-  }
-  .place-card.selected{border-color:var(--yellow);}
-  .place-card .pc-thumb{
-    width:52px;height:52px;border-radius:16px;flex-shrink:0;font-size:26px;
-    display:flex;align-items:center;justify-content:center;background:var(--yellow-soft);
-  }
-  .place-card.popup .pc-thumb{background:#ffe1ea;}
-  .pc-body{flex:1;min-width:0;}
-  .pc-tag{font-size:11px;font-weight:800;color:#7a5f00;}
-  .place-card.popup .pc-tag{color:#c2335b;}
-  .pc-name{font-size:16px;font-weight:800;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-  .pc-addr{font-size:12.5px;color:var(--dim);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-  .pc-soon{font-size:11.5px;color:var(--faint);margin-top:5px;}
-
-  /* ---- 사진 인식 ---- */
-  label.capture-box{cursor:pointer;position:relative;overflow:hidden;}
-  .capture-box img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;}
-  .capture-box .cam,.capture-box .cap-msg{position:relative;z-index:1;}
-  .capture-box.has-photo .cam,.capture-box.has-photo .cap-msg{
-    background:rgba(255,255,255,0.88);padding:4px 10px;border-radius:999px;
-  }
-  .ai-card{background:var(--yellow-soft);border-radius:18px;padding:14px;display:flex;flex-direction:column;gap:10px;}
-  .ai-card[hidden]{display:none;}
-  .ai-row{display:flex;align-items:center;gap:8px;}
-  .ai-row label{font-size:12.5px;color:#7a5f00;font-weight:700;width:52px;flex-shrink:0;}
-  .ai-row input,.ai-row select{
-    flex:1;min-width:0;height:38px;border-radius:11px;border:1px solid var(--line);background:#fff;
-    padding:0 10px;font-size:14px;font-family:inherit;color:var(--text);
-  }
-  .ai-row input.emoji{flex:0 0 48px;text-align:center;font-size:18px;}
-  .ai-price{font-size:15px;font-weight:800;}
-  .ai-price .conf{font-size:11.5px;font-weight:600;color:var(--dim);margin-left:6px;}
-  .ai-tips{margin:0;padding-left:18px;font-size:13px;line-height:1.55;}
-  .ai-wanted{font-size:12.5px;color:var(--dim);}
-
-  /* ---- 페이지 맨 아래 수정 날짜 ---- */
-  /* 어떤 화면 크기에서도 스크롤 없이 화면 맨 아래에 보이게 고정. 터치는 아래 요소로 통과시킨다 */
-  .last-updated{
-    position:fixed;left:50%;transform:translateX(-50%);bottom:env(safe-area-inset-bottom,0px);z-index:50;
-    white-space:nowrap;padding:0 8px;border-radius:999px;background:rgba(255,255,255,0.85);
-    font-size:11px;line-height:14px;color:var(--dim);pointer-events:none;
-  }
+  .onb { padding: 24px 20px 28px; display: flex; flex-direction: column; gap: 18px; flex: 1; }
+  .onb h1 { margin: 0; font-size: 24px; line-height: 1.4; font-weight: 700; }
+  .steps { display: flex; gap: 6px; }
+  .steps i { flex: 1; height: 4px; border-radius: 2px; background: var(--line); }
+  .steps i.on { background: var(--green); }
+  .results { display: flex; flex-direction: column; background: var(--card); border-radius: 12px; overflow: hidden; }
+  .results button { min-height: 44px; border: none; border-top: 1px solid #EEF2EF; background: transparent; text-align: left; padding: 0 14px; font-size: 14px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; }
+  .results button:first-child { border-top: none; }
+  .results button:hover { background: var(--soft); }
 </style>
 </head>
 <body>
-
-<div id="app">
-
-  <!-- 홈 화면 -->
-  <section class="screen active" id="screen-home">
-    <div class="statusbar"></div>
-    <div class="topbar home">
-      <div class="wordmark">
-        <svg class="mark" viewBox="0 0 34 34" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-          <circle cx="17" cy="17" r="15" fill="#ffffff" stroke="#191919" stroke-width="2"/>
-          <path d="M2.4,17 A14.6,14.6 0 0 1 31.6,17 Z" fill="#ffe100" stroke="#191919" stroke-width="2"/>
-          <rect x="2" y="15.4" width="30" height="3.2" fill="#191919"/>
-          <circle cx="17" cy="17" r="4.6" fill="#ffffff" stroke="#191919" stroke-width="2.2"/>
-        </svg>
-        캐치캐치
-      </div>
-      <button class="ghost-icon" type="button">☰</button>
-    </div>
-    <div class="home-body">
-      <div class="range-row" id="search-row">
-        <button class="pill-btn" id="btn-open-map" type="button">📍 잠실 · 20분</button>
-        <div class="search-fake">🔍 상품명으로 검색</div>
-      </div>
-      <div class="list" id="home-list"></div>
-    </div>
-    <button class="fab" id="btn-open-register" type="button">＋</button>
-  </section>
-
-  <!-- 굿즈등록 화면 -->
-  <section class="screen" id="screen-register">
-    <div class="statusbar"></div>
-    <div class="topbar">
-      <button class="back" id="btn-register-back" type="button">←</button>
-      <div class="title-mid">굿즈 등록</div>
-      <div style="width:34px;"></div>
-    </div>
-    <div class="reg-body">
-      <label class="capture-box" id="capture-box">
-        <input type="file" id="photo-input" accept="image/*" capture="environment" hidden>
-        <div class="cam">📷</div>
-        <div class="cap-msg" id="capture-msg">사진을 찍으면 상품을 인식해요</div>
-      </label>
-      <div class="ai-card" id="ai-card" hidden>
-        <div class="ai-row">
-          <label for="ai-name">상품명</label>
-          <input class="emoji" id="ai-emoji" maxlength="4" aria-label="아이콘">
-          <input id="ai-name">
-        </div>
-        <div class="ai-row">
-          <label for="ai-condition">상태</label>
-          <select id="ai-condition">
-            <option>미개봉</option><option>개봉-상태좋음</option><option>사용감있음</option><option>판단불가</option>
-          </select>
-        </div>
-        <div class="ai-row">
-          <label>예상 시세</label>
-          <div class="ai-price" id="ai-price"></div>
-        </div>
-        <div class="ai-row">
-          <label for="ai-premium">웃돈</label>
-          <input id="ai-premium" type="number" step="500" inputmode="numeric">
-        </div>
-        <div class="ai-wanted" id="ai-wanted"></div>
-        <ul class="ai-tips" id="ai-tips"></ul>
-      </div>
-      <div class="divider">또는</div>
-      <div>
-        <div class="field-label">유명 상품에서 선택</div>
-        <div class="chip-row" id="chip-group">
-          <button class="chip" type="button" data-name="토끼 캐릭터 피규어" data-icon="🐰">토끼 캐릭터</button>
-          <button class="chip" type="button" data-name="곰돌이 인형" data-icon="🐻">곰돌이 인형</button>
-          <button class="chip" type="button" data-name="펭귄 키링" data-icon="🐧">펭귄 키링</button>
-          <button class="chip" type="button" data-name="고양이 미니어처" data-icon="🐱">고양이 미니어처</button>
-        </div>
-      </div>
-      <div>
-        <div class="field-label">거래 방식</div>
-        <div class="segmented" id="mode-group">
-          <button class="on" type="button" data-mode="교환">교환</button>
-          <button type="button" data-mode="즉시교환">바로 교환</button>
-        </div>
-      </div>
-    </div>
-    <button class="cta" id="btn-register-submit" type="button">등록하기</button>
-  </section>
-
-  <!-- 지도 화면 -->
-  <section class="screen" id="screen-map">
-    <div id="naver-map"></div>
-    <div class="map-top">
-      <div class="map-head">
-        <button class="back" id="btn-map-back" type="button" aria-label="뒤로">←</button>
-        <div class="map-filter" id="map-filter">
-          <button class="on" type="button" data-filter="all">전체</button>
-          <button type="button" data-filter="gacha">🎰 가챠샵</button>
-          <button type="button" data-filter="popup">🎪 팝업</button>
-        </div>
-      </div>
-      <div class="map-area-row" id="map-area-group">
-        <button class="chip" type="button" data-area="잠실" data-lat="37.5133" data-lng="127.1001">잠실</button>
-        <button class="chip" type="button" data-area="홍대" data-lat="37.5563" data-lng="126.9236">홍대</button>
-        <button class="chip" type="button" data-area="용산" data-lat="37.5298" data-lng="126.9648">용산</button>
-        <button class="chip" type="button" data-area="강남" data-lat="37.4979" data-lng="127.0276">강남</button>
-        <button class="chip" type="button" data-area="명동" data-lat="37.5609" data-lng="126.9858">명동</button>
-      </div>
-      <div class="map-status" id="map-status"></div>
-    </div>
-    <div class="place-cards" id="place-cards"></div>
-  </section>
-
-  <!-- 거래 화면 -->
-  <section class="screen" id="screen-deal">
-    <div class="statusbar"></div>
-    <div class="deal-head">
-      <button class="back" id="btn-deal-back" type="button">←</button>
-      <div class="avatar"></div>
-      <div>
-        <div class="who" id="deal-who">수집가_1234</div>
-        <div class="who-sub">접속중</div>
-      </div>
-    </div>
-    <div class="deal-summary">
-      <div class="goods-row" id="deal-goods-row"></div>
-      <div class="deal-note">"거래합시다" 전송 시 게시물이 자동으로 내려가요</div>
-    </div>
-    <div class="chat-body" id="chat-body">
-      <div class="bubble them">상태 좋아요! 교환 괜찮으세요?</div>
-      <div class="bubble me">네 좋습니다. 역 앞에서 뵐까요?</div>
-      <div class="bubble them">네 20분 뒤에 뵈요</div>
-    </div>
-    <div class="chat-input">
-      <div class="box-fake">메시지 입력</div>
-      <button class="send-btn" id="btn-send" type="button">↑</button>
-    </div>
-  </section>
-
-</div>
+<div class="phone" id="app"></div>
 
 <script>
-  // ---- 상태 ----
-  var tradeItems = [
-    {tag:"교환", timeLabel:"도보 6분", place:"잠실", tier:"near", premium:-3000,
-      icon1:"🐹", name1:"치이카와 모몽가", sub1:"보유중",
-      icon2:"🐺", name2:"치이카와 하치와레", sub2:"상대방 보유"},
-    {tag:"교환", timeLabel:"도보 12분", place:"잠실", tier:"mid", premium:1000,
-      icon1:"🐧", name1:"펭귄 키링", sub1:"보유중",
-      icon2:"🐱", name2:"고양이 미니어처", sub2:"상대방 보유"},
-    {tag:"교환", timeLabel:"지하철 3정거장", place:"홍대", tier:"far", premium:0,
-      icon1:"🦊", name1:"여우 인형", sub1:"보유중",
-      icon2:"🐥", name2:"병아리 키링", sub2:"상대방 보유"},
-    {tag:"교환", timeLabel:"도보 9분", place:"홍대", tier:"mid", premium:-500,
-      icon1:"🐰", name1:"토끼 캐릭터 피규어", sub1:"보유중",
-      icon2:"🐻", name2:"곰돌이 인형", sub2:"상대방 보유"},
-    {tag:"교환", timeLabel:"도보 4분", place:"용산", tier:"near", premium:0,
-      icon1:"🐼", name1:"판다 미니어처", sub1:"보유중",
-      icon2:"🤷", name2:"상관없음", sub2:"무엇이든 OK"},
-    {tag:"교환", timeLabel:"지하철 2정거장", place:"용산", tier:"far", premium:2000,
-      icon1:"🐣", name1:"병아리 인형", sub1:"보유중",
-      icon2:"🐹", name2:"햄스터 피규어", sub2:"상대방 보유"},
-    {tag:"교환", timeLabel:"도보 15분", place:"잠실", tier:"veryfar", premium:0,
-      icon1:"🦝", name1:"너구리 키링", sub1:"보유중",
-      icon2:"🤷", name2:"상관없음", sub2:"무엇이든 OK"},
-    {tag:"교환", timeLabel:"도보 7분", place:"홍대", tier:"near", premium:-1500,
-      icon1:"🐢", name1:"거북이 미니어처", sub1:"보유중",
-      icon2:"🐙", name2:"문어 키링", sub2:"상대방 보유"}
-  ];
-  var currentDealItem = null;
-  var justAddedItem = null;
+// ───────────────────────── 저장 (이 기기에만) ─────────────────────────
+const STORE_KEY = "myeco.profile.v1";
+const UI_KEY = "myeco.ui.v1";
 
-  function tagText(item){
-    // item.premium은 게시자(보유자) 기준 금액. 뱃지는 조회자(나) 기준으로 보여주므로 부호를 뒤집는다.
-    var amt = -item.premium;
-    if (amt === 0) return "교환";
-    var sign = amt > 0 ? "+" : "-";
-    var abs = Math.abs(amt).toLocaleString("ko-KR");
-    return sign + abs + "원";
-  }
+function loadProfile() {
+  try { return JSON.parse(localStorage.getItem(STORE_KEY)); } catch { return null; }
+}
+function saveProfile() {
+  try { localStorage.setItem(STORE_KEY, JSON.stringify(profile)); } catch {}
+}
+function loadUi() {
+  try { return JSON.parse(localStorage.getItem(UI_KEY)) || {}; } catch { return {}; }
+}
+function saveUi() {
+  try { localStorage.setItem(UI_KEY, JSON.stringify({ hideMoney: ui.hideMoney, quiz: ui.quiz })); } catch {}
+}
 
-  function distHtml(item){
-    return '<span class="tc-time tier-' + item.tier + '">' + item.timeLabel + '</span>' +
-      ' <span class="tc-place title-font">· ' + item.place + '</span>';
-  }
+let profile = loadProfile();
+const data = { market: null, news: null, rates: null, calendar: [], benefits: [], loading: false };
+const ui = {
+  bubble: 0, kw: null, kwNews: null, draft: "", sheet: null,
+  hideMoney: false, quiz: null, // quiz: { day, pick }
+  onb: { step: 0, draft: null }, search: { q: "", results: [], sample: false },
+  ...loadUi(),
+};
 
-  function renderHome(){
-    var list = document.getElementById("home-list");
-    list.innerHTML = "";
-    // 같은 교환 제시 기준, 프리미엄을 적게 주고받는(0에 가까운) 거래가 위로 오도록 정렬
-    var sorted = tradeItems.slice().sort(function(a, b){
-      return Math.abs(a.premium) - Math.abs(b.premium);
-    });
-    sorted.forEach(function(item){
-      var card = document.createElement("button");
-      card.type = "button";
-      card.className = "trade-card tier-bg-" + item.tier + (item === justAddedItem ? " just-added" : "");
-      card.innerHTML =
-        '<div class="tc-top">' +
-          '<span class="tc-tag title-font">' + tagText(item) + '</span>' +
-          '<span class="tc-dist">' + distHtml(item) + '</span>' +
-        '</div>' +
-        '<div class="goods-row">' +
-          '<div class="thumb">' + item.icon1 + '</div>' +
-          '<div class="g-block" style="flex:0.8;">' +
-            '<div class="g-name title-font">' + item.name1 + '</div>' +
-            '<div class="g-sub title-font">' + item.sub1 + '</div>' +
-          '</div>' +
-          '<div class="swap-icon">⇄</div>' +
-          '<div class="thumb">' + item.icon2 + '</div>' +
-          '<div class="g-block" style="flex:1.3;">' +
-            '<div class="g-name title-font">' + item.name2 + '</div>' +
-            '<div class="g-sub title-font">' + item.sub2 + '</div>' +
-          '</div>' +
-        '</div>';
-      card.addEventListener("click", function(){ openDeal(item); });
-      list.appendChild(card);
-    });
-    justAddedItem = null;
-  }
+// ───────────────────────── 상수 ─────────────────────────
+const PREFS = ["쇼핑", "여행", "음식", "자기계발", "저축", "부동산", "취미"];
+const POPULAR = ["삼성전자", "SK하이닉스", "LG에너지솔루션", "현대차", "NAVER", "카카오", "셀트리온", "KB금융"];
+const LETTERS = [
+  { id: "uppity", name: "머니레터", by: "어피티", url: "https://uppity.co.kr" },
+  { id: "newneek", name: "뉴닉", by: "NEWNEEK", url: "https://newneek.co" },
+];
+const INCOME = ["", "~3천만원", "3천~5천만원", "5천~7,500만원", "7,500만원~"];
+const INCOME_MONTHLY = [0, 210, 330, 520, 750]; // 구간별 대략 월 소득(만원), 비상금 진단용
+// 위험기피 점수(1=위험 괜찮음 … 10=절대 싫음) → 금융투자협회 5단계 투자성향 이름
+function riskType(a) {
+  if (a >= 9) return "안정형";
+  if (a >= 7) return "안정추구형";
+  if (a >= 5) return "위험중립형";
+  if (a >= 3) return "적극투자형";
+  return "공격투자형";
+}
+// 성향별로 흔히 쓰는 투자자산 비중 참고치 (일반 기준, 투자 권유 아님)
+function investGuide(a) {
+  if (a >= 9) return [0, 10];
+  if (a >= 7) return [10, 30];
+  if (a >= 5) return [30, 50];
+  if (a >= 3) return [50, 70];
+  return [60, 90];
+}
 
-  function showScreen(id){
-    document.querySelectorAll(".screen").forEach(function(s){ s.classList.remove("active"); });
-    document.getElementById(id).classList.add("active");
-  }
+const QUIZ = [
+  { q: "환율이 오르면(원화 약세) 수출 기업에는 보통 유리하다?", a: "O", ex: "같은 1달러어치를 팔아도 원화로 바꾸면 더 많이 받으니까요. 대신 수입 물가는 올라가요." },
+  { q: "기준금리가 오르면, 이미 발행된 채권의 가격은 보통 오른다?", a: "X", ex: "새로 나오는 채권 이자가 더 높아지니, 낮은 이자를 주는 기존 채권은 인기가 떨어져 가격이 내려가요." },
+  { q: "인플레이션이 생기면 같은 돈으로 살 수 있는 물건이 줄어든다?", a: "O", ex: "물가가 오르면 돈의 가치(구매력)가 떨어져요. 그래서 예금 이자가 물가상승률보다 낮으면 실제로는 손해일 수 있어요." },
+  { q: "ETF는 주식처럼 거래소에서 실시간으로 사고팔 수 없다?", a: "X", ex: "ETF는 여러 종목을 묶은 펀드지만 거래소에 상장돼 있어서 주식처럼 장중에 사고팔 수 있어요." },
+  { q: "예금자보호는 1인당, 금융회사별로 원금과 이자를 합쳐 1억원까지 보호된다?", a: "O", ex: "2025년 9월부터 보호 한도가 5천만원에서 1억원으로 올랐어요. 한 금융회사 안에서 합친 금액 기준이에요." },
+  { q: "변동금리 대출은 기준금리가 올라도 이자가 그대로다?", a: "X", ex: "변동금리는 기준이 되는 금리를 따라 주기적으로 바뀌어요. 금리가 오르면 이자도 늘어요." },
+  { q: "PER이 낮을수록 이익에 비해 주가가 싸다고 볼 수 있다?", a: "O", ex: "PER은 주가를 주당순이익으로 나눈 값이에요. 낮으면 벌어들이는 돈에 비해 주가가 낮다는 뜻이지만, 낮은 데는 이유가 있을 수도 있어요." },
+  { q: "분산투자를 하면 투자 위험이 완전히 사라진다?", a: "X", ex: "분산투자는 한 곳이 무너져도 전체가 크게 흔들리지 않게 위험을 줄여줄 뿐, 시장 전체가 빠지는 위험까지 없애진 못해요." },
+  { q: "스태그플레이션은 경기 호황과 물가 하락이 함께 오는 현상이다?", a: "X", ex: "반대예요. 경기는 침체(stagnation)되는데 물가는 오르는(inflation) 현상이에요. 월급은 그대로인데 장바구니 물가만 오르는 상황이죠." },
+  { q: "복리는 이자에 다시 이자가 붙는 방식이다?", a: "O", ex: "원금에만 이자가 붙는 단리와 달리, 복리는 쌓인 이자에도 이자가 붙어서 기간이 길수록 차이가 커져요." },
+  { q: "코스피에는 코스닥보다 규모가 큰 기업이 주로 상장돼 있다?", a: "O", ex: "코스피는 대형·우량 기업 중심, 코스닥은 기술·성장 기업 중심의 시장이에요." },
+  { q: "배당락일 이후에 주식을 사도 이번 배당을 받을 수 있다?", a: "X", ex: "배당을 받으려면 배당락일 전까지 주식을 사서 기준일에 갖고 있어야 해요. 배당락일에는 그만큼 주가가 조정되기도 해요." },
+];
 
-  function openDeal(item){
-    currentDealItem = item;
-    var row = document.getElementById("deal-goods-row");
-    row.innerHTML =
-      '<div class="thumb">' + item.icon2 + '</div>' +
-      '<div class="g-block" style="flex:1.3;">' +
-        '<div class="g-name title-font">' + item.name2 + '</div>' +
-        '<div class="g-sub title-font">' + item.sub2 + '</div>' +
-      '</div>' +
-      '<div class="swap-icon">⇄</div>' +
-      '<div class="thumb">' + item.icon1 + '</div>' +
-      '<div class="g-block" style="flex:0.8; text-align:right;">' +
-        '<div class="g-name title-font">' + item.name1 + '</div>' +
-        '<div class="g-sub title-font">내 보유</div>' +
-      '</div>';
+// ───────────────────────── 도우미 ─────────────────────────
+function esc(s) {
+  return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+function fmt(n, dec = 0) {
+  if (n === null || n === undefined || Number.isNaN(n)) return "-";
+  return Number(n).toLocaleString("ko-KR", { minimumFractionDigits: dec, maximumFractionDigits: dec });
+}
+function won(n) { // 원 단위 금액을 읽기 쉽게
+  const a = Math.abs(n);
+  if (a >= 1e8) return `${fmt(a / 1e8, a % 1e8 ? 1 : 0)}억원`;
+  if (a >= 1e4) return `${fmt(a / 1e4, a < 1e5 ? 1 : 0)}만원`;
+  return `${fmt(Math.round(a))}원`;
+}
+function man(m) { // 만원 단위 숫자 → "1억 2,000만원"
+  if (m === null || m === undefined || m === "") return "-";
+  const n = Math.round(Number(m));
+  const eok = Math.floor(Math.abs(n) / 10000), rest = Math.abs(n) % 10000;
+  const s = (eok ? `${eok}억` : "") + (rest ? `${eok ? " " : ""}${fmt(rest)}만` : "") + "원";
+  return (n < 0 ? "-" : "") + (n === 0 ? "0원" : s);
+}
+function tone(v) { return v > 0 ? "up" : v < 0 ? "down" : "flat"; }
+function arrow(v) { return v > 0 ? "▲" : v < 0 ? "▼" : "-"; }
+function pct(v) { return v === null || v === undefined ? "-" : `${arrow(v)} ${fmt(Math.abs(v), 2)}%`; }
+function ymdLabel(s) { return s ? `${Number(s.slice(4, 6))}월 ${Number(s.slice(6, 8))}일` : ""; }
+function josa(word, a, b) { // 받침 있으면 a, 없으면 b
+  const c = String(word).charCodeAt(String(word).length - 1);
+  if (c < 0xac00 || c > 0xd7a3) return b;
+  return (c - 0xac00) % 28 ? a : b;
+}
+function today0() { const d = new Date(); d.setHours(0, 0, 0, 0); return d; }
+function dayDiff(date) { return Math.round((date - today0()) / 86400e3); }
+function greet() {
+  const h = new Date().getHours();
+  return h < 11 ? "좋은 아침이에요" : h < 18 ? "좋은 오후예요" : "좋은 저녁이에요";
+}
+function toast(msg) {
+  document.querySelector(".toast")?.remove();
+  const t = document.createElement("div");
+  t.className = "toast"; t.setAttribute("role", "status"); t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 2200);
+}
+function mascot(size = 40) {
+  return `<svg width="${size}" height="${size}" viewBox="0 0 48 48" aria-hidden="true" style="flex-shrink:0"><path d="M21 7 C19 2 25 0 26 4" fill="none" stroke="#13261C" stroke-width="2.2" stroke-linecap="round"/><rect x="5" y="7" width="38" height="36" rx="12" fill="#FFD84D" stroke="#13261C" stroke-width="2.2"/><circle cx="17" cy="23" r="6" fill="#fff" stroke="#13261C" stroke-width="2.2"/><circle cx="31" cy="23" r="6" fill="#fff" stroke="#13261C" stroke-width="2.2"/><line x1="23" y1="23" x2="25" y2="23" stroke="#13261C" stroke-width="2.2"/><circle cx="18" cy="23.5" r="2.2" fill="#13261C"/><circle cx="32" cy="23.5" r="2.2" fill="#13261C"/><circle cx="11" cy="31" r="2.2" fill="#FFB199"/><circle cx="37" cy="31" r="2.2" fill="#FFB199"/><path d="M21 33 Q24 36.5 27 33" fill="none" stroke="#13261C" stroke-width="2.2" stroke-linecap="round"/></svg>`;
+}
+const ICON = {
+  refresh: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>`,
+  send: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5"/><path d="M5 12l7-7 7 7"/></svg>`,
+  back: `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>`,
+  out: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17L17 7"/><path d="M8 7h9v9"/></svg>`,
+  close: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>`,
+  x: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>`,
+};
 
-    var chat = document.getElementById("chat-body");
-    chat.innerHTML =
-      '<div class="bubble them">상태 좋아요! 교환 괜찮으세요?</div>' +
-      '<div class="bubble me">네 좋습니다. 역 앞에서 뵐까요?</div>' +
-      '<div class="bubble them">네 20분 뒤에 뵈요</div>';
-
-    var sendBtn = document.getElementById("btn-send");
-    sendBtn.disabled = false;
-
-    showScreen("screen-deal");
-  }
-
-  // ---- 홈 ----
-  document.getElementById("btn-open-register").addEventListener("click", function(){
-    showScreen("screen-register");
-  });
-
-  var homeList = document.getElementById("home-list");
-  var searchRow = document.getElementById("search-row");
-  var lastScroll = 0;
-  homeList.addEventListener("scroll", function(){
-    var cur = homeList.scrollTop;
-    if (cur > lastScroll && cur > 24){
-      searchRow.classList.add("hide");
-    } else {
-      searchRow.classList.remove("hide");
-    }
-    lastScroll = cur;
-  });
-
-  // ---- 굿즈등록 ----
-  document.getElementById("btn-register-back").addEventListener("click", function(){
-    showScreen("screen-home");
-  });
-
-  var chipGroup = document.getElementById("chip-group");
-  chipGroup.querySelectorAll(".chip").forEach(function(chip){
-    chip.addEventListener("click", function(){
-      chipGroup.querySelectorAll(".chip").forEach(function(c){ c.classList.remove("on"); });
-      chip.classList.add("on");
-    });
-  });
-
-  var modeGroup = document.getElementById("mode-group");
-  modeGroup.querySelectorAll("button").forEach(function(btn){
-    btn.addEventListener("click", function(){
-      modeGroup.querySelectorAll("button").forEach(function(b){ b.classList.remove("on"); });
-      btn.classList.add("on");
-    });
-  });
-
-  // ---- 사진 인식 ----
-  var photoInput = document.getElementById("photo-input");
-  var captureBox = document.getElementById("capture-box");
-  var captureMsg = document.getElementById("capture-msg");
-  var aiCard = document.getElementById("ai-card");
-  var aiResult = null;
-  var analyzing = false;
-
-  function escapeHtml(s){
-    return String(s).replace(/[&<>"']/g, function(c){
-      return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];
-    });
-  }
-
-  function won(n){ return Number(n).toLocaleString("ko-KR") + "원"; }
-
-  // 긴 변 1024px JPEG로 줄여서 base64만 돌려준다 (서버리스 요청 크기 제한 대비)
-  function shrinkImage(file){
-    return new Promise(function(resolve, reject){
-      var url = URL.createObjectURL(file);
-      var img = new Image();
-      img.onload = function(){
-        var scale = Math.min(1, 1024 / Math.max(img.width, img.height));
-        var canvas = document.createElement("canvas");
-        canvas.width = Math.round(img.width * scale);
-        canvas.height = Math.round(img.height * scale);
-        canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
-        URL.revokeObjectURL(url);
-        resolve(canvas.toDataURL("image/jpeg", 0.85));
-      };
-      img.onerror = function(){ URL.revokeObjectURL(url); reject(new Error("이미지를 열 수 없어요")); };
-      img.src = url;
-    });
-  }
-
-  function resetPhoto(){
-    aiResult = null;
-    photoInput.value = "";
-    aiCard.hidden = true;
-    captureBox.classList.remove("has-photo");
-    var old = captureBox.querySelector("img");
-    if (old) old.remove();
-    captureMsg.textContent = "사진을 찍으면 상품을 인식해요";
-  }
-
-  function showAiResult(g){
-    aiResult = g;
-    document.getElementById("ai-emoji").value = g.emoji || "🎁";
-    document.getElementById("ai-name").value = g.name;
-    document.getElementById("ai-condition").value = g.condition;
-    document.getElementById("ai-premium").value = g.recommended_premium;
-    var confText = {high:"확실", medium:"보통", low:"참고용"}[g.confidence] || "";
-    document.getElementById("ai-price").innerHTML =
-      escapeHtml(won(g.price_min) + " ~ " + won(g.price_max)) +
-      ' <span class="conf">' + escapeHtml("추천: " + g.recommended_mode + " · 정확도 " + confText) + '</span>';
-    document.getElementById("ai-wanted").textContent =
-      g.wanted_suggestions.length ? "교환 제안하면 좋은 굿즈: " + g.wanted_suggestions.join(", ") : "";
-    var tips = document.getElementById("ai-tips");
-    tips.innerHTML = "";
-    g.tips.forEach(function(t){
-      var li = document.createElement("li");
-      li.textContent = t;
-      tips.appendChild(li);
-    });
-    aiCard.hidden = false;
-    // 사진으로 인식했으면 칩 선택은 해제
-    chipGroup.querySelectorAll(".chip").forEach(function(c){ c.classList.remove("on"); });
-  }
-
-  photoInput.addEventListener("change", function(){
-    var file = photoInput.files && photoInput.files[0];
-    if (!file || analyzing) return;
-    analyzing = true;
-    aiResult = null;
-    aiCard.hidden = true;
-    captureMsg.textContent = "분석 중… (10~30초)";
-
-    shrinkImage(file).then(function(dataUrl){
-      var old = captureBox.querySelector("img");
-      if (old) old.remove();
-      var preview = document.createElement("img");
-      preview.src = dataUrl;
-      preview.alt = "";
-      captureBox.prepend(preview);
-      captureBox.classList.add("has-photo");
-
-      return fetch("/api/analyze-goods", {
-        method: "POST",
-        headers: {"Content-Type": "application/json"},
-        body: JSON.stringify({ image: dataUrl.split(",")[1], mediaType: "image/jpeg" })
-      });
-    }).then(function(r){
-      return r.json().then(function(body){
-        if (!r.ok) throw new Error(body.error || "분석 실패");
-        return body;
-      });
-    }).then(function(goods){
-      showAiResult(goods);
-      captureMsg.textContent = "다시 찍으려면 탭하세요";
-    }).catch(function(e){
-      captureMsg.textContent = e.message + " · 아래에서 직접 선택해주세요";
-    }).then(function(){
-      analyzing = false;
-    });
-  });
-
-  chipGroup.addEventListener("click", function(e){
-    // 칩으로 직접 고르면 AI 결과 대신 칩 값을 쓴다
-    if (e.target.closest(".chip") && aiResult) {
-      aiResult = null;
-      aiCard.hidden = true;
-    }
-  });
-
-  document.getElementById("btn-register-submit").addEventListener("click", function(){
-    if (analyzing) return;
-    var pickedChip = chipGroup.querySelector(".chip.on");
-    var holdingName = pickedChip ? pickedChip.dataset.name : "새 굿즈";
-    var holdingIcon = pickedChip ? pickedChip.dataset.icon : "🎁";
-    var premium = 0;
-
-    if (aiResult) {
-      holdingName = escapeHtml(document.getElementById("ai-name").value.trim() || aiResult.name);
-      holdingIcon = escapeHtml(document.getElementById("ai-emoji").value.trim() || "🎁");
-      premium = Math.round(Number(document.getElementById("ai-premium").value) || 0);
-    }
-
-    var newItem = {
-      tag:"교환", timeLabel:"방금 등록", place:"내 주변", tier:"near", premium:premium,
-      icon1: holdingIcon, name1: holdingName, sub1:"보유중",
-      icon2:"❓", name2:"원하는 굿즈 대기중", sub2:"상대 찾는 중"
-    };
-    tradeItems.unshift(newItem);
-    justAddedItem = newItem;
-
-    chipGroup.querySelectorAll(".chip").forEach(function(c){ c.classList.remove("on"); });
-    modeGroup.querySelectorAll("button").forEach(function(b){ b.classList.remove("on"); });
-    modeGroup.querySelector('[data-mode="교환"]').classList.add("on");
-    resetPhoto();
-
-    renderHome();
-    showScreen("screen-home");
-  });
-
-  // ---- 지도 ----
-  // 네이버 지도는 바닥 타일로만 쓰고, 핀·카드·필터는 우리가 그린다.
-  // 장소 데이터: 가챠샵은 /api/shops(네이버 검색), 팝업은 우리가 관리하는 /data/popups.json
-  var naverMap = null;
-  var mapScriptPromise = null;
-  var mapStatus = document.getElementById("map-status");
-  var mapAreaGroup = document.getElementById("map-area-group");
-  var mapFilter = document.getElementById("map-filter");
-  var placeCards = document.getElementById("place-cards");
-  var gachaPlaces = [];
-  var popupPlaces = [];
-  var visiblePlaces = [];
-  var placeMarkers = [];
-  var selectedIdx = -1;
-  var currentFilter = "all";
-  var currentArea = "";
-
-  var PLACE_TYPES = {
-    gacha: { tag: "가챠샵", emoji: "🎰" },
-    popup: { tag: "진행중 팝업", emoji: "🎪" }
+function newProfile() {
+  return {
+    nickname: "", age: null, gender: "", income: null, avert: 6, prefs: [],
+    watch: [], letters: ["uppity", "newneek"], customLetters: [],
+    assets: { cash: null, invest: null, other: null }, debts: null, payday: null,
+    skipped: {}, createdAt: new Date().toISOString(),
   };
+}
 
-  function loadNaverMaps(){
-    if (mapScriptPromise) return mapScriptPromise;
-    mapScriptPromise = fetch("/api/config").then(function(r){ return r.json(); }).then(function(cfg){
-      if (!cfg.naverMapKeyId) throw new Error("지도 키가 아직 설정되지 않았어요");
-      return new Promise(function(resolve, reject){
-        var s = document.createElement("script");
-        // 커스텀 스타일(Style Editor)을 쓰려면 GL 서브모듈이 필요하다
-        s.src = "https://oapi.map.naver.com/openapi/v3/maps.js?ncpKeyId=" +
-          encodeURIComponent(cfg.naverMapKeyId) + (cfg.naverMapStyleId ? "&submodules=gl" : "");
-        s.onload = function(){ resolve(cfg); };
-        s.onerror = function(){ reject(new Error("네이버 지도를 불러오지 못했어요")); };
-        document.head.appendChild(s);
-      });
-    }).catch(function(e){
-      mapScriptPromise = null;
-      throw e;
-    });
-    return mapScriptPromise;
-  }
+// ───────────────────────── 데이터 불러오기 ─────────────────────────
+async function getJson(url, opt) {
+  const r = await fetch(url, opt);
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw Object.assign(new Error(j.error || r.status), { body: j });
+  return j;
+}
 
-  function pinHtml(place, selected){
-    return '<div class="pin-anchor"><div class="pin pin-' + place.type + (selected ? ' selected' : '') + '">' +
-      '<span class="pin-emoji">' + escapeHtml(place.emoji || PLACE_TYPES[place.type].emoji) + '</span>' +
-      escapeHtml(place.name) +
-    '</div></div>';
-  }
+async function loadAll(manual = false) {
+  if (!profile) return;
+  data.loading = true;
+  const names = profile.watch.map((w) => w.name).join(",");
+  const interests = [...profile.watch.map((w) => w.name).slice(0, 3), ...profile.prefs.slice(0, 3)].join(",");
+  const jobs = [
+    getJson(`/api/market?stocks=${encodeURIComponent(names)}`).then((j) => (data.market = j)).catch(() => {}),
+    getJson(`/api/news?interests=${encodeURIComponent(interests)}`).then((j) => (data.news = j)).catch(() => {}),
+  ];
+  if (!data.calendar.length) jobs.push(getJson("/data/calendar.json").then((j) => (data.calendar = j.events || [])).catch(() => {}));
+  if (!data.benefits.length) jobs.push(getJson("/data/benefits.json").then((j) => (data.benefits = j.items || [])).catch(() => {}));
+  if (!data.rates) jobs.push(getJson("/api/rates").then((j) => (data.rates = j)).catch(() => {}));
+  await Promise.all(jobs);
+  data.loading = false;
+  if (route() === "home") render();
+  if (manual) toast(data.market ? `업데이트했어요 · ${ymdLabel(data.market.kospi?.date)} 종가 기준` : "불러오지 못했어요. 잠시 후 다시 시도해 주세요");
+}
 
-  function cardHtml(place){
-    var t = PLACE_TYPES[place.type];
-    var extra = place.type === "popup" && place.period
-      ? escapeHtml(place.period)
-      : "혼잡도 · 실시간 정보 준비중";
-    return '<div class="pc-thumb">' + escapeHtml(place.emoji || t.emoji) + '</div>' +
-      '<div class="pc-body">' +
-        '<div class="pc-tag">' + t.tag + '</div>' +
-        '<div class="pc-name">' + escapeHtml(place.name) + '</div>' +
-        '<div class="pc-addr">' + escapeHtml(place.address || "") + '</div>' +
-        '<div class="pc-soon">' + extra + '</div>' +
-      '</div>';
-  }
+// ───────────────────────── 개인화 계산 ─────────────────────────
+function marketMood() {
+  const p = data.market?.kospi?.pct;
+  if (p === undefined || p === null) return "확인 중";
+  return p >= 0.7 ? "상승" : p <= -0.7 ? "하락" : "관망";
+}
+function biggestMover() {
+  const list = (data.market?.stocks || []).filter((s) => !s.missing && s.pct !== null);
+  return list.sort((a, b) => Math.abs(b.pct) - Math.abs(a.pct))[0];
+}
+function qtyOf(name) { return Number(profile.watch.find((w) => w.name === name)?.qty) || 0; }
 
-  function setPinSelected(i, selected){
-    var m = placeMarkers[i];
-    if (!m) return;
-    m.setIcon({ content: pinHtml(visiblePlaces[i], selected), anchor: new naver.maps.Point(0, 0) });
-    m.setZIndex(selected ? 1000 : 100);
-  }
+function upcoming(limit = 4) {
+  const now = today0();
+  const list = data.calendar
+    .map((e) => ({ ...e, d: new Date(e.date + "T00:00:00") }))
+    .filter((e) => e.d >= now && dayDiff(e.d) <= 60);
+  // 내 일정: 월급날, 대출 이자일 (다음 한 번)
+  const next = (day) => {
+    const d = new Date(now.getFullYear(), now.getMonth(), Math.min(day, 28));
+    if (d < now) d.setMonth(d.getMonth() + 1);
+    return d;
+  };
+  if (profile.payday) list.push({ d: next(profile.payday), title: "월급날", type: "내 일정", mine: true });
+  (profile.debts || []).forEach((dbt) => {
+    if (dbt.day) list.push({ d: next(dbt.day), title: `${dbt.name || "대출"} 이자 납부일`, type: "내 일정", mine: true, note: dbt.amount && dbt.rate ? `약 ${won((dbt.amount * 1e4 * dbt.rate) / 100 / 12)}` : "" });
+  });
+  return list.sort((a, b) => a.d - b.d).slice(0, limit);
+}
 
-  function selectPlace(i, opts){
-    opts = opts || {};
-    if (i === selectedIdx) return;
-    if (selectedIdx !== -1) {
-      setPinSelected(selectedIdx, false);
-      var prev = placeCards.children[selectedIdx];
-      if (prev) prev.classList.remove("selected");
+function matchedBenefits() {
+  return data.benefits.filter((b) => {
+    if (profile.age) {
+      if (b.ageMin && profile.age < b.ageMin) return false;
+      if (b.ageMax && profile.age > b.ageMax) return false;
     }
-    selectedIdx = i;
-    setPinSelected(i, true);
-    var card = placeCards.children[i];
-    if (card) {
-      card.classList.add("selected");
-      if (opts.scrollCard) card.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
+    if (b.incomeMax && profile.income && profile.income > b.incomeMax) return false;
+    if (b.avertMax && profile.avert > b.avertMax) return false;
+    return true;
+  }).slice(0, 3);
+}
+
+function impacts() {
+  const m = data.market, p = profile, out = [];
+  if (!m) return out;
+  if (m.usd) {
+    const vs = m.usd.vs || 0, up = vs > 0;
+    let text;
+    if (!vs) text = "환율이 직전 고시와 같아요. 해외결제 비용 변화는 없어요.";
+    else if (p.prefs.includes("여행")) text = `여행을 좋아하는 당신, 1,000달러를 환전하면 직전 고시보다 약 ${won(Math.abs(vs * 1000))} ${up ? "더 들어요" : "덜 들어요"}.`;
+    else if (p.prefs.includes("쇼핑")) text = `쇼핑을 좋아하는 당신, 해외직구 100달러 결제 시 약 ${won(Math.abs(vs * 100))} ${up ? "더 내요" : "덜 내요"}.`;
+    else text = up ? "수입품 가격과 해외결제 비용이 조금 오를 수 있어요." : "해외결제·수입품 비용 부담이 조금 줄어요.";
+    out.push({ tag: `환율 ${arrow(vs)} ${fmt(m.usd.v, 1)}원`, tone: tone(vs), text });
+  }
+  const rateEvent = upcoming(10).find((e) => e.type === "금리" && !e.mine);
+  const when = rateEvent ? `${rateEvent.d.getMonth() + 1}/${rateEvent.d.getDate()} ${rateEvent.title.includes("한국은행") ? "금통위" : "FOMC"}` : "다음 금리 결정";
+  if (p.debts === null) {
+    out.push({ tag: "금리", tone: "flat", text: "대출이 있다면 알려주세요. 금리가 바뀔 때 내 이자가 얼마나 달라지는지 계산해드려요.", act: "go-my" });
+  } else {
+    const variable = p.debts.filter((d) => d.kind === "변동").reduce((s, d) => s + (Number(d.amount) || 0), 0);
+    let text;
+    if (variable > 0) text = `${when}에서 금리가 0.25%p 오르면, 변동금리 대출 ${man(variable)}의 이자가 월 약 ${won((variable * 1e4 * 0.0025) / 12)} 늘어요.`;
+    else if (p.debts.length) text = "대출이 고정금리라 금리가 바뀌어도 당장 이자는 그대로예요.";
+    else if (p.assets.cash) text = `${when}에서 금리가 0.25%p 바뀌면, 예금 ${man(p.assets.cash)}의 1년 이자가 약 ${won(p.assets.cash * 1e4 * 0.0025)} 달라질 수 있어요.`;
+    else text = "대출이 없으니 금리 변화는 예금·적금 이자 쪽으로 영향을 줘요.";
+    out.push({ tag: rateEvent ? `금리 · ${when}` : "금리", tone: "flat", text });
+  }
+  const stocks = (m.stocks || []).filter((s) => !s.missing && s.vs !== null);
+  const held = stocks.filter((s) => qtyOf(s.name) > 0);
+  if (held.length) {
+    const sum = held.reduce((t, s) => t + qtyOf(s.name) * s.vs, 0);
+    out.push({ tag: `내 종목 ${sum >= 0 ? "▲" : "▼"}`, tone: tone(sum), text: `보유 종목 평가액이 전일보다 약 ${won(sum)} ${sum >= 0 ? "늘었어요" : "줄었어요"}.` });
+  } else {
+    const top = biggestMover();
+    if (top) out.push({ tag: `${top.name} ${pct(top.pct)}`, tone: tone(top.pct), text: `관심 종목 중 ${top.name}${josa(top.name, "이", "가")} 가장 크게 움직였어요. 보유 수량을 넣으면 내 손익으로 보여드려요.`, act: "go-my" });
+  }
+  return out;
+}
+
+function bubbleLines() {
+  const L = [];
+  const name = profile.nickname || "오늘";
+  const m = data.market;
+  L.push({ text: `${esc(name)}님, ${greet()}! ${m ? `오늘 시장은 ‘${marketMood()}’ 분위기예요.` : "오늘 경제 소식을 모으고 있어요."}` });
+  const top = biggestMover();
+  if (top) L.push({ text: `관심 종목 ${esc(top.name)}${josa(top.name, "이", "가")} 전일보다 ${fmt(Math.abs(top.pct), 2)}% ${top.pct >= 0 ? "올랐어요" : "내렸어요"}.` });
+  const fx = impacts()[0];
+  if (fx && m?.usd) L.push({ text: `원/달러 환율은 ${fmt(m.usd.v, 1)}원이에요. ${fx.text}` });
+  const ev = upcoming(5).find((e) => dayDiff(e.d) <= 14);
+  if (ev) {
+    const dd = dayDiff(ev.d);
+    L.push({ text: `${dd === 0 ? "오늘" : `${dd}일 뒤`} ‘${esc(ev.title)}’ 일정이 있어요.${ev.type === "금리" ? " 발표 전후로 시장이 출렁일 수 있어요." : ""}` });
+  }
+  const b = matchedBenefits()[0];
+  if (b) L.push({ text: `‘${esc(b.title)}’, ${esc(name)}님 조건에 맞을 수도 있어요. 아래 혜택 칸에서 확인해 보세요.` });
+  L.push({ text: "궁금한 건 아래 질문창에 편하게 물어보세요!", act: "focus-ask" });
+  return L;
+}
+
+function nextQuestion() {
+  const p = profile, s = p.skipped || {};
+  if (p.debts === null && !s.debts) return "debts";
+  if (!p.income && !s.income) return "income";
+  if (p.assets.cash === null && !s.cash) return "cash";
+  if (!p.payday && !s.payday) return "payday";
+  if (!p.gender && !s.gender) return "gender";
+  return null;
+}
+
+function summaryForAi() {
+  const p = profile;
+  const debts = p.debts || [];
+  return {
+    profile: {
+      ageGroup: p.age ? `${Math.floor(p.age / 10) * 10}대` : undefined,
+      riskType: riskType(p.avert), riskAversion: `${p.avert}/10`,
+      values: p.prefs, income: INCOME[p.income || 0] || undefined,
+      cashMan: p.assets.cash ?? undefined, investMan: p.assets.invest ?? undefined,
+      debtMan: debts.reduce((s, d) => s + (Number(d.amount) || 0), 0),
+      variableDebtMan: debts.filter((d) => d.kind === "변동").reduce((s, d) => s + (Number(d.amount) || 0), 0),
+      watchlist: p.watch.map((w) => w.name),
+    },
+    market: data.market ? {
+      kospi: data.market.kospi, usdkrw: data.market.usd,
+      stocks: (data.market.stocks || []).filter((s) => !s.missing).map((s) => ({ name: s.name, close: s.v, pct: s.pct })),
+    } : {},
+  };
+}
+
+// ───────────────────────── 화면: 홈 ─────────────────────────
+function viewHome() {
+  const m = data.market;
+  const lines = bubbleLines();
+  if (ui.bubble >= lines.length) ui.bubble = 0;
+  const line = lines[ui.bubble];
+  const asof = m ? `${ymdLabel(m.kospi?.date)} 종가 기준` : "불러오는 중";
+
+  const marketCells = m ? [
+    ["코스피", m.kospi?.v, m.kospi?.pct, 2],
+    ["코스닥", m.kosdaq?.v, m.kosdaq?.pct, 2],
+    ["원/달러", m.usd?.v, m.usd?.pct, 1],
+  ].map(([k, v, c, d]) => `<div><span class="k">${k}</span><span class="v num">${fmt(v, d)}</span><span class="c num ${tone(c)}">${pct(c)}</span></div>`).join("")
+    : `<div><span class="k">코스피</span><span class="v">…</span></div><div><span class="k">코스닥</span><span class="v">…</span></div><div><span class="k">원/달러</span><span class="v">…</span></div>`;
+
+  const stocks = m?.stocks || [];
+  const stockRows = profile.watch.length
+    ? stocks.map((s) => {
+        const q = qtyOf(s.name);
+        const sub = s.missing ? "시세를 찾지 못했어요" : q ? `${fmt(q)}주 · 평가 ${won(q * s.v)}` : s.market || "";
+        return `<div class="row"><div><div class="name">${esc(s.name)}</div><div class="sub">${esc(sub)}</div></div>
+          <div style="text-align:right"><div class="name num">${s.missing ? "-" : fmt(s.v) + "원"}</div><div class="num ${tone(s.pct)}" style="font-size:12px;font-weight:700">${s.missing ? "" : pct(s.pct)}</div></div></div>`;
+      }).join("") || `<div class="row"><span class="sub">불러오는 중…</span></div>`
+    : `<div class="row"><span class="sub">관심 종목이 아직 없어요</span><button class="btn ghost" data-act="go-my">추가하기</button></div>`;
+
+  const imp = impacts().map((c) => `<${c.act ? `button data-act="${c.act}" style="cursor:pointer"` : "div"} class="impact">
+      <span class="badge b-${c.tone}" style="align-self:flex-start">${esc(c.tag)}</span><p>${esc(c.text)}</p></${c.act ? "button" : "div"}>`).join("");
+
+  const n = data.news;
+  const letters = [...LETTERS.filter((l) => profile.letters.includes(l.id)), ...profile.customLetters];
+  const newsList = (items, numbered) => (items || []).map((it, i) => `<a href="${esc(it.url)}" target="_blank" rel="noopener">
+      ${numbered ? `<span class="no">${i + 1}</span>` : ""}
+      <div style="flex:1"><div class="t">${esc(it.title)}</div><div class="m">${it.tag ? `<span class="badge b-green">${esc(it.tag)}</span>` : ""}<span>${esc(it.source || "")}</span>${it.at ? `<span>· ${ago(it.at)}</span>` : ""}</div></div></a>`).join("");
+
+  const kws = n?.keywords || [];
+  const kwBlock = kws.length ? `<section class="card">
+      <div class="sec-title"><h2>오늘의 경제 키워드</h2><span>눌러서 관련 뉴스</span></div>
+      <div class="chips">${kws.map((k) => `<button class="chip ${ui.kw === k ? "on" : ""}" data-act="kw" data-k="${esc(k)}">#${esc(k)}</button>`).join("")}</div>
+      ${ui.kw ? `<div class="news" style="margin-top:10px">${ui.kwNews ? newsList(ui.kwNews) || `<p class="hint">관련 뉴스가 없어요</p>` : `<p class="hint">불러오는 중…</p>`}</div>` : ""}
+    </section>` : "";
+
+  const cal = upcoming();
+  const calBlock = `<section class="card">
+      <div class="sec-title"><h2>다가오는 경제 일정</h2><span>내 일정 포함</span></div>
+      ${cal.length ? cal.map((e) => {
+        const dd = dayDiff(e.d);
+        return `<div class="cal ${e.mine ? "mine" : ""}"><span class="dday ${dd <= 7 ? "soon" : ""}">${dd === 0 ? "오늘" : "D-" + dd}</span>
+          <div><div class="t">${esc(e.title)}</div><div class="d">${e.d.getMonth() + 1}월 ${e.d.getDate()}일 (${"일월화수목금토"[e.d.getDay()]})${e.time ? " " + e.time : ""}${e.note ? " · " + esc(e.note) : ""}</div></div></div>`;
+      }).join("") : `<p class="hint">예정된 일정이 없어요</p>`}
+      ${!profile.payday ? `<button class="link-btn" style="padding-left:0" data-act="go-my">월급날·이자일 추가하기 ›</button>` : ""}
+    </section>`;
+
+  const bens = matchedBenefits();
+  const rates = data.rates?.available ? data.rates.items : [];
+  const benBlock = `<section class="card">
+      <div class="sec-title"><h2>나에게 맞는 혜택·정책</h2><span>${profile.age ? `만 ${profile.age}세 · ${riskType(profile.avert)}` : ""}</span></div>
+      ${bens.map((b) => `<a class="benefit" href="${esc(b.url)}" target="_blank" rel="noopener"><div><div class="t">${esc(b.title)} <span class="badge b-green">${esc(b.tag)}</span></div><div class="d">${esc(b.desc)}</div></div><span aria-hidden="true">${ICON.out}</span></a>`).join("")}
+      ${rates.length ? `<div style="margin-top:8px;border-top:1px solid #EEF2EF;padding-top:10px"><div class="hint" style="margin-bottom:4px">은행 정기예금 12개월 · 기본금리 높은 순</div>
+        ${rates.map((r) => `<div class="row" style="min-height:40px"><span style="font-size:14px"><b>${esc(r.bank)}</b> ${esc(r.product)}</span><span class="num" style="font-weight:700;color:var(--green);white-space:nowrap">연 ${fmt(r.base, 2)}%</span></div>`).join("")}</div>` : ""}
+      <p class="hint" style="margin:8px 0 0">조건은 바뀔 수 있어요. 신청 전에 공식 사이트에서 꼭 확인하세요.</p>
+    </section>`;
+
+  const dayIdx = Math.floor((today0() - new Date(today0().getFullYear(), 0, 0)) / 86400e3);
+  const quiz = QUIZ[dayIdx % QUIZ.length];
+  const pick = ui.quiz?.day === dayIdx ? ui.quiz.pick : null;
+  const oxCls = (o) => (pick === null ? "" : o === quiz.a ? "right" : o === pick ? "wrong" : "dim");
+  const quizBlock = `<section class="quiz">
+      <span class="hand" style="font-size:13px;color:#D5EEE1">오늘의 OX 퀴즈</span>
+      <p class="q">${esc(quiz.q)}</p>
+      <div class="ox">${["O", "X"].map((o) => `<button class="${oxCls(o)}" data-act="quiz" data-o="${o}" data-day="${dayIdx}" ${pick !== null ? "disabled" : ""} aria-label="${o === "O" ? "맞다" : "아니다"}">${o}</button>`).join("")}</div>
+      ${pick !== null ? `<p class="ex"><b style="color:#fff">${pick === quiz.a ? "정답이에요!" : `정답은 ${quiz.a}예요.`}</b> ${esc(quiz.ex)}</p>` : ""}
+    </section>`;
+
+  const nq = nextQuestion();
+  const moreBlock = nq ? `<section class="more">${moreQuestion(nq)}</section>` : "";
+
+  return `
+  <header class="top">
+    <button class="avatar" data-act="go-my" aria-label="마이페이지 열기">${mascot(36)}<span class="brand hand">나만의 경제</span></button>
+    <div style="display:flex;align-items:center">
+      <span class="asof num">${asof}</span>
+      <button class="icon-btn" data-act="refresh" aria-label="새로고침">${ICON.refresh}</button>
+    </div>
+  </header>
+  <main class="scroll">
+    <section class="hero">
+      ${mascot(76)}
+      <div class="bubble">
+        <p class="hand" aria-live="polite">${line.text}</p>
+        <div class="bubble-foot">
+          <div class="dots" aria-hidden="true">${lines.map((_, i) => `<span class="dot ${i === ui.bubble ? "on" : ""}"></span>`).join("")}</div>
+          ${line.act ? `<button class="link-btn" data-act="${line.act}">질문하기 ›</button>` : `<button class="link-btn" data-act="next-line">다음 ›</button>`}
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="mkt">${marketCells}</div>
+      <div class="hint" style="margin:6px 4px 0;display:flex;gap:6px;align-items:center">
+        ${m ? `주가 ${ymdLabel(m.kospi?.date)} 종가 · 환율 ${ymdLabel(m.usd?.date)} 수출입은행 고시` : ""}
+        ${m?.sample ? `<span class="badge b-sample">예시 데이터</span>` : ""}
+      </div>
+    </section>
+
+    <section class="card" style="padding-top:8px;padding-bottom:4px">
+      <div class="sec-title" style="margin:6px 0 2px"><h2>내 종목</h2><button class="link-btn" data-act="go-my">편집</button></div>
+      <div class="rows">${stockRows}</div>
+    </section>
+
+    ${imp ? `<section><div class="sec-title"><h2>오늘, 나에게 미치는 영향</h2></div><div class="strip bleed">${imp}</div></section>` : ""}
+
+    <section class="card">
+      <div class="sec-title"><h2>뉴스</h2>${n?.sample ? `<span class="badge b-sample">예시 데이터</span>` : ""}</div>
+      ${letters.length ? `<div class="chips" style="margin-bottom:12px"><span class="hint">구독 중</span>${letters.map((l) => `<a class="chip" href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.name)} ${ICON.out}</a>`).join("")}</div>` : ""}
+      <div class="hint" style="font-weight:700;margin-bottom:2px">오늘의 이슈</div>
+      <div class="news">${n ? newsList(n.issues, true) : `<p class="hint">불러오는 중…</p>`}</div>
+      <div class="hint" style="font-weight:700;margin:12px 0 2px">${esc(profile.nickname || "나")}님이 관심 있을 만한 뉴스</div>
+      <div class="news">${n ? newsList(n.forYou) || `<p class="hint">관심 종목이나 선호를 추가하면 맞춤 뉴스가 떠요</p>` : `<p class="hint">불러오는 중…</p>`}</div>
+    </section>
+
+    ${kwBlock}
+    ${calBlock}
+    ${benBlock}
+    ${quizBlock}
+    ${moreBlock}
+
+    <p class="foot">주가는 전일 종가(공공데이터포털), 환율은 한국수출입은행 고시, 뉴스는 네이버 검색 기준이에요.<br>이 앱의 정보는 투자 권유가 아닌 참고용이에요.</p>
+  </main>
+  <div class="askbar">
+    <div class="strip">${["내 대출, 금리 오르면 이자 얼마?", "지금 환전해도 될까?", "FOMC가 뭐야?", "내 성향에 맞는 저축 방법은?"].map((q) => `<button class="chip small" style="flex-shrink:0" data-act="suggest" data-q="${esc(q)}">${esc(q)}</button>`).join("")}</div>
+    <form class="askform" id="askform">
+      <label for="ask" class="sr">캐릭터에게 경제 질문하기</label>
+      <input id="ask" name="q" type="text" maxlength="300" autocomplete="off" placeholder="금리가 지금처럼 오르면 어떤 영향이 있을까?" value="${esc(ui.draft)}">
+      <button class="send" type="submit" aria-label="질문 보내기">${ICON.send}</button>
+    </form>
+  </div>
+  ${ui.sheet ? viewSheet() : ""}`;
+}
+
+function ago(iso) {
+  const min = Math.round((Date.now() - new Date(iso)) / 60000);
+  if (min < 60) return `${Math.max(min, 1)}분 전`;
+  if (min < 1440) return `${Math.round(min / 60)}시간 전`;
+  return `${Math.round(min / 1440)}일 전`;
+}
+
+function moreQuestion(k) {
+  const skip = `<button class="link-btn" style="padding-left:0;color:var(--sub)" data-act="skip" data-k="${k}">나중에 할게요</button>`;
+  const head = `<span class="hint">알려주면 더 맞춰드려요 · 이 기기에만 저장돼요</span>`;
+  if (k === "debts") return `${head}<p class="q">혹시 대출이 있나요?</p>
+    <div class="inline"><button class="btn ghost" data-act="no-debt" style="flex:1">없어요</button><button class="btn" data-act="go-my" data-focus="debts" style="flex:1">있어요, 입력할게요</button></div>${skip}`;
+  if (k === "income") return `${head}<p class="q">연 소득은 어느 구간인가요? (혜택 추천에 써요)</p>
+    <div class="chips">${INCOME.slice(1).map((t, i) => `<button class="chip" data-act="set-income" data-v="${i + 1}">${t}</button>`).join("")}</div>${skip}`;
+  if (k === "cash") return `${head}<p class="q">예금·현금은 대략 얼마나 있나요?</p>
+    <div class="inline"><div class="money" style="flex:1"><label for="q-cash" class="sr">예금·현금 (만원)</label><input class="field num" id="q-cash" inputmode="numeric" placeholder="예: 3000"><span class="unit">만원</span></div><button class="btn" data-act="set-cash">저장</button></div>${skip}`;
+  if (k === "payday") return `${head}<p class="q">월급날이 있다면 며칠인가요? 캘린더에 넣어드려요</p>
+    <div class="inline"><div class="money" style="flex:1"><label for="q-pay" class="sr">월급날 (일)</label><input class="field num" id="q-pay" inputmode="numeric" placeholder="예: 25"><span class="unit">일</span></div><button class="btn" data-act="set-payday">저장</button></div>${skip}`;
+  if (k === "gender") return `${head}<p class="q">성별을 알려주실래요? (선택)</p>
+    <div class="chips">${["여성", "남성", "밝히지 않음"].map((g) => `<button class="chip" data-act="set-gender" data-v="${g}">${g}</button>`).join("")}</div>`;
+  return "";
+}
+
+function viewSheet() {
+  const s = ui.sheet;
+  return `<div class="sheet-back" data-act="close-sheet">
+    <div class="sheet" role="dialog" aria-modal="true" aria-label="질문 답변" data-stop="1">
+      <div style="display:flex;justify-content:space-between;align-items:center"><b class="hand" style="font-size:16px">물어봐요</b><button class="icon-btn" data-act="close-sheet" aria-label="닫기">${ICON.close}</button></div>
+      <div class="qline">${esc(s.q)}</div>
+      <div class="ans">${mascot(40)}<p class="${s.loading ? "hand" : ""}">${s.loading ? "음… 생각하는 중이에요" : esc(s.a)}</p></div>
+      ${!s.loading ? `<p class="hint" style="margin:0">참고용 설명이에요. 투자 결정은 직접 판단해 주세요.</p>` : ""}
+    </div></div>`;
+}
+
+// ───────────────────────── 화면: 마이페이지 ─────────────────────────
+function viewMy() {
+  const p = profile;
+  const hide = ui.hideMoney;
+  const a = p.assets;
+  const debts = p.debts || [];
+  const total = (Number(a.cash) || 0) + (Number(a.invest) || 0) + (Number(a.other) || 0);
+  const debtSum = debts.reduce((s, d) => s + (Number(d.amount) || 0), 0);
+  const net = total - debtSum;
+  const hasAssets = a.cash !== null || a.invest !== null || a.other !== null;
+  const money = (v) => (hide ? "••••" : man(v));
+
+  // 자산 진단 (입력한 값만으로 계산, 일반적인 기준)
+  const diag = [];
+  if (hasAssets) {
+    const dr = total ? (debtSum / total) * 100 : debtSum ? 100 : 0;
+    diag.push(dr < 20 ? ["b-green", "부채", `자산 대비 부채가 ${fmt(dr)}%로 건전한 편이에요.`]
+      : dr < 50 ? ["b-flat", "부채", `자산 대비 부채가 ${fmt(dr)}%예요. 금리가 오를 때 이자 부담을 같이 봐두세요.`]
+      : ["b-up", "부채", `자산 대비 부채가 ${fmt(dr)}%로 높은 편이에요. 금리가 높은 대출부터 줄이는 걸 고민해 보세요.`]);
+    if (p.income) {
+      const need = INCOME_MONTHLY[p.income] * 3;
+      diag.push((Number(a.cash) || 0) >= need ? ["b-green", "비상금", `예금·현금이 월 소득 3개월치(약 ${man(need)}) 이상이라 비상금은 충분해요.`]
+        : ["b-up", "비상금", `비상금은 보통 월 소득 3~6개월치를 권해요. 약 ${man(need)}을 목표로 잡아보세요.`]);
+    } else diag.push(["b-flat", "비상금", "소득 구간을 넣으면 비상금이 충분한지 알려드려요."]);
+    if (total) {
+      const ir = ((Number(a.invest) || 0) / total) * 100;
+      const [lo, hi] = investGuide(p.avert);
+      diag.push(ir < lo ? ["b-down", "성향", `투자자산 비중이 ${fmt(ir)}%예요. ${riskType(p.avert)}에 흔한 비중(${lo}~${hi}%)보다 보수적으로 운용 중이에요.`]
+        : ir > hi ? ["b-up", "성향", `투자자산 비중이 ${fmt(ir)}%예요. ${riskType(p.avert)}에 흔한 비중(${lo}~${hi}%)보다 공격적이에요.`]
+        : ["b-green", "성향", `투자자산 비중 ${fmt(ir)}%로 ${riskType(p.avert)}에 맞게 운용 중이에요.`]);
     }
-    if (opts.pan) naverMap.panTo(placeMarkers[i].getPosition());
+    const variable = debts.filter((d) => d.kind === "변동").reduce((s, d) => s + (Number(d.amount) || 0), 0);
+    if (variable) diag.push(["b-flat", "금리", `변동금리 대출 ${man(variable)}은 금리가 0.25%p 오르면 월 이자가 약 ${won((variable * 1e4 * 0.0025) / 12)} 늘어요.`]);
   }
+  const seg = (v, c) => (total && v ? `<div style="width:${(v / total) * 100}%;background:${c}"></div>` : "");
 
-  function renderPlaces(fit){
-    placeMarkers.forEach(function(m){ m.setMap(null); });
-    placeMarkers = [];
-    placeCards.innerHTML = "";
-    selectedIdx = -1;
+  const watchRows = p.watch.map((w, i) => `<div class="row">
+      <span class="name" style="flex:1">${esc(w.name)}</span>
+      <div class="money" style="width:110px"><label for="qty-${i}" class="sr">${esc(w.name)} 보유 수량</label><input class="field num" id="qty-${i}" inputmode="numeric" placeholder="보유 수량" data-field="qty" data-i="${i}" value="${w.qty ?? ""}"><span class="unit">주</span></div>
+      <button class="icon-btn" data-act="rm-watch" data-i="${i}" aria-label="${esc(w.name)} 삭제">${ICON.x}</button></div>`).join("");
 
-    var all = gachaPlaces.concat(popupPlaces);
-    visiblePlaces = all.filter(function(p){ return currentFilter === "all" || p.type === currentFilter; });
+  const debtRows = debts.map((d, i) => `<div class="debt">
+      <div class="inline"><label for="dn-${i}" class="sr">대출 이름</label><input class="field" id="dn-${i}" placeholder="대출 이름 (예: 신용대출)" data-field="debt-name" data-i="${i}" value="${esc(d.name || "")}">
+        <button class="icon-btn" data-act="rm-debt" data-i="${i}" aria-label="대출 삭제">${ICON.x}</button></div>
+      <div class="grid2">
+        <div class="money"><label for="da-${i}" class="sr">대출 잔액 (만원)</label><input class="field num" id="da-${i}" inputmode="numeric" placeholder="잔액" data-field="debt-amount" data-i="${i}" value="${d.amount ?? ""}"><span class="unit">만원</span></div>
+        <div class="money"><label for="dr-${i}" class="sr">금리 (%)</label><input class="field num" id="dr-${i}" inputmode="decimal" placeholder="금리" data-field="debt-rate" data-i="${i}" value="${d.rate ?? ""}"><span class="unit">%</span></div>
+        <div><label for="dk-${i}" class="sr">금리 종류</label><select class="field" id="dk-${i}" data-field="debt-kind" data-i="${i}">${["변동", "고정"].map((k) => `<option ${d.kind === k ? "selected" : ""}>${k}</option>`).join("")}</select></div>
+        <div class="money"><label for="dd-${i}" class="sr">이자 납부일</label><input class="field num" id="dd-${i}" inputmode="numeric" placeholder="이자일" data-field="debt-day" data-i="${i}" value="${d.day ?? ""}"><span class="unit">일</span></div>
+      </div></div>`).join("");
 
-    var bounds = null;
-    visiblePlaces.forEach(function(place, i){
-      var pos = new naver.maps.LatLng(place.lat, place.lng);
-      var marker = new naver.maps.Marker({
-        position: pos, map: naverMap, zIndex: 100,
-        icon: { content: pinHtml(place, false), anchor: new naver.maps.Point(0, 0) }
-      });
-      naver.maps.Event.addListener(marker, "click", function(){ selectPlace(i, { scrollCard: true }); });
-      placeMarkers.push(marker);
+  return `
+  <header class="page-head">
+    <button class="icon-btn" data-act="go-home" aria-label="홈으로">${ICON.back}</button>
+    <h1>마이페이지</h1>
+  </header>
+  <main class="scroll">
+    <section class="card" style="display:flex;align-items:center;gap:14px">
+      ${mascot(56)}
+      <div style="flex:1"><div style="font-size:18px;font-weight:700">${esc(p.nickname || "이름 없음")}님</div>
+      <div class="hint">${p.age ? `만 ${p.age}세 · ` : ""}${riskType(p.avert)} · ${p.prefs.map(esc).join(", ") || "선호 미입력"}</div></div>
+    </section>
 
-      var card = document.createElement("div");
-      card.className = "place-card " + place.type;
-      card.innerHTML = cardHtml(place);
-      card.addEventListener("click", function(){ selectPlace(i, { pan: true }); });
-      placeCards.appendChild(card);
+    <section class="card">
+      <div class="sec-title"><h2>내 자산 진단</h2><button class="link-btn" data-act="toggle-hide">${hide ? "금액 보이기" : "금액 숨기기"}</button></div>
+      ${hasAssets ? `
+        <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px"><span class="hint">순자산</span><span class="num" style="font-size:24px;font-weight:700">${money(net)}</span></div>
+        <div class="bar" aria-hidden="true">${seg(Number(a.cash) || 0, "#1C7C54")}${seg(Number(a.invest) || 0, "#FFB020")}${seg(Number(a.other) || 0, "#8FB3A0")}</div>
+        <div class="legend" style="margin:8px 0 12px"><span><i style="background:#1C7C54"></i>예금·현금 ${money(a.cash || 0)}</span><span><i style="background:#FFB020"></i>투자 ${money(a.invest || 0)}</span><span><i style="background:#8FB3A0"></i>기타 ${money(a.other || 0)}</span><span>부채 ${money(debtSum)}</span></div>
+        <div class="diag">${diag.map(([c, t, s]) => `<div class="diag-line"><span class="badge ${c}">${t}</span><span>${esc(s)}</span></div>`).join("")}</div>
+        <p class="hint" style="margin:12px 0 0">입력한 값으로 계산한 일반적인 참고 기준이에요. 투자 권유가 아니에요.</p>`
+      : `<p class="hint" style="margin:0">아래에 자산을 입력하면 진단해드려요.</p>`}
+    </section>
 
-      if (!bounds) bounds = new naver.maps.LatLngBounds(pos, pos);
-      else bounds.extend(pos);
-    });
+    <section class="card form">
+      <div class="sec-title"><h2>기본 정보</h2></div>
+      <div class="grid2">
+        <div><label class="lb" for="f-nick">닉네임</label><input class="field" id="f-nick" data-field="nickname" value="${esc(p.nickname)}" maxlength="12"></div>
+        <div><label class="lb" for="f-age">만 나이</label><input class="field num" id="f-age" inputmode="numeric" data-field="age" value="${p.age ?? ""}"></div>
+        <div><label class="lb" for="f-gender">성별</label><select class="field" id="f-gender" data-field="gender">${["", "여성", "남성", "밝히지 않음"].map((g) => `<option value="${g}" ${p.gender === g ? "selected" : ""}>${g || "선택 안 함"}</option>`).join("")}</select></div>
+        <div><label class="lb" for="f-income">연 소득</label><select class="field" id="f-income" data-field="income">${INCOME.map((t, i) => `<option value="${i}" ${(p.income || 0) === i ? "selected" : ""}>${t || "선택 안 함"}</option>`).join("")}</select></div>
+      </div>
+    </section>
 
-    if (fit && bounds && visiblePlaces.length > 1) {
-      naverMap.fitBounds(bounds, { top: 150, right: 40, bottom: 150, left: 40 });
+    <section class="card form">
+      <div class="sec-title"><h2>투자 성향</h2><span class="type-pill" id="avert-type">${riskType(p.avert)}</span></div>
+      <label class="lb" for="f-avert">위험을 얼마나 피하고 싶나요? <b class="num" id="avert-val" style="color:var(--ink)">${p.avert}/10</b></label>
+      <input class="range" id="f-avert" type="range" min="1" max="10" step="1" value="${p.avert}" data-field="avert">
+      <div class="range-ends"><span>1 · 위험 괜찮아요</span><span>10 · 손실은 싫어요</span></div>
+      <div><span class="lb">무엇에 가치를 두나요? (여러 개)</span><div class="chips">${PREFS.map((x) => `<button class="chip ${p.prefs.includes(x) ? "on" : ""}" data-act="pref" data-v="${x}" aria-pressed="${p.prefs.includes(x)}">${x}</button>`).join("")}</div></div>
+    </section>
+
+    <section class="card form">
+      <div class="sec-title"><h2>관심 종목</h2><span>보유 수량을 넣으면 손익을 보여줘요</span></div>
+      <div class="rows">${watchRows || `<p class="hint" style="margin:0">아직 없어요</p>`}</div>
+      ${stockSearch()}
+    </section>
+
+    <section class="card form" id="sec-assets">
+      <div class="sec-title"><h2>내 자산</h2><span>대략적인 금액도 괜찮아요</span></div>
+      <div class="grid2">
+        <div><label class="lb" for="f-cash">예금·현금</label><div class="money"><input class="field num" id="f-cash" inputmode="numeric" data-field="cash" value="${a.cash ?? ""}"><span class="unit">만원</span></div></div>
+        <div><label class="lb" for="f-invest">주식·펀드 등 투자</label><div class="money"><input class="field num" id="f-invest" inputmode="numeric" data-field="invest" value="${a.invest ?? ""}"><span class="unit">만원</span></div></div>
+        <div><label class="lb" for="f-other">기타 (보증금 등)</label><div class="money"><input class="field num" id="f-other" inputmode="numeric" data-field="other" value="${a.other ?? ""}"><span class="unit">만원</span></div></div>
+        <div><label class="lb" for="f-payday">월급날</label><div class="money"><input class="field num" id="f-payday" inputmode="numeric" data-field="payday" value="${p.payday ?? ""}"><span class="unit">일</span></div></div>
+      </div>
+    </section>
+
+    <section class="card form" id="sec-debts">
+      <div class="sec-title"><h2>부채</h2>${p.debts === null ? `<button class="link-btn" data-act="no-debt">대출 없어요</button>` : ""}</div>
+      ${debtRows || (p.debts ? `<p class="hint" style="margin:0">대출 없음</p>` : "")}
+      <button class="btn ghost" data-act="add-debt">+ 대출 추가</button>
+    </section>
+
+    <section class="card form">
+      <div class="sec-title"><h2>구독 중인 뉴스레터</h2><span>홈에서 바로 열 수 있어요</span></div>
+      <div class="chips">${LETTERS.map((l) => `<button class="chip ${p.letters.includes(l.id) ? "on" : ""}" data-act="letter" data-v="${l.id}" aria-pressed="${p.letters.includes(l.id)}">${l.name} · ${l.by}</button>`).join("")}
+        ${p.customLetters.map((l, i) => `<span class="chip on">${esc(l.name)}<button class="icon-btn" style="width:28px;height:28px;color:#fff" data-act="rm-letter" data-i="${i}" aria-label="${esc(l.name)} 삭제">${ICON.x}</button></span>`).join("")}</div>
+      <div class="inline">
+        <label for="f-ln" class="sr">뉴스레터 이름</label><input class="field" id="f-ln" placeholder="이름" style="flex:1">
+        <label for="f-lu" class="sr">뉴스레터 주소</label><input class="field" id="f-lu" placeholder="https://" style="flex:1.4">
+        <button class="btn ghost" data-act="add-letter">추가</button>
+      </div>
+    </section>
+
+    <section class="card form">
+      <div class="sec-title"><h2>개인정보 관리</h2></div>
+      <p style="margin:0;font-size:14px;line-height:1.6">입력한 정보는 서버에 저장하지 않고 <b>이 기기(브라우저)에만</b> 저장돼요. 질문창을 쓸 때만 나이대·성향·금액 요약이 답변을 만드는 데 쓰여요 (닉네임은 보내지 않아요).</p>
+      <button class="btn danger" data-act="wipe">내 정보 전부 지우기</button>
+    </section>
+    <p class="foot">나만의 경제 · 투자 권유가 아닌 참고용 정보예요.</p>
+  </main>`;
+}
+
+function stockSearch() {
+  const s = ui.search;
+  const have = new Set(profile ? profile.watch.map((w) => w.name) : (ui.onb.draft?.watch || []).map((w) => w.name));
+  const pop = POPULAR.filter((n) => !have.has(n));
+  return `<div>
+      <label class="lb" for="stock-q">종목 검색</label>
+      <input class="field" id="stock-q" placeholder="종목 이름 (예: 삼성)" autocomplete="off" value="${esc(s.q)}" data-search="1">
+      ${s.results.length ? `<div class="results" style="margin-top:6px">${s.results.map((r) => `<button data-act="add-watch" data-v="${esc(r.name)}"${have.has(r.name) ? " disabled" : ""}><span>${esc(r.name)}</span><span class="hint">${esc(r.market || "")} ${have.has(r.name) ? "추가됨" : "+ 추가"}</span></button>`).join("")}</div>`
+        : s.q && s.sample ? `<p class="hint">시세 키를 연결하면 검색돼요. 아래 인기 종목에서 골라보세요.</p>` : ""}
+      ${pop.length ? `<div class="chips" style="margin-top:10px"><span class="hint">인기</span>${pop.map((n) => `<button class="chip small" data-act="add-watch" data-v="${esc(n)}">+ ${esc(n)}</button>`).join("")}</div>` : ""}
+    </div>`;
+}
+
+// ───────────────────────── 화면: 첫 설문 (3단계) ─────────────────────────
+function viewOnboard() {
+  const st = ui.onb.step;
+  const d = ui.onb.draft || (ui.onb.draft = newProfile());
+  const steps = `<div class="steps" aria-label="${st + 1}/3 단계">${[0, 1, 2].map((i) => `<i class="${i <= st ? "on" : ""}"></i>`).join("")}</div>`;
+  let body = "";
+  if (st === 0) body = `
+    <div style="display:flex;align-items:center;gap:12px">${mascot(64)}<p class="hand" style="margin:0;font-size:17px;line-height:1.6">안녕하세요! 오늘부터 경제 소식을<br>당신 상황에 맞춰 알려드릴게요.</p></div>
+    <h1>먼저, 뭐라고 불러드릴까요?</h1>
+    <div class="form">
+      <div><label class="lb" for="o-nick">닉네임</label><input class="field" id="o-nick" maxlength="12" data-o="nickname" value="${esc(d.nickname)}" placeholder="예: 은채"></div>
+      <div><label class="lb" for="o-age">만 나이</label><input class="field num" id="o-age" inputmode="numeric" data-o="age" value="${d.age ?? ""}" placeholder="예: 24"></div>
+    </div>`;
+  if (st === 1) body = `
+    <h1>관심 있는 종목을<br>골라주세요</h1>
+    <p class="hint" style="margin:-8px 0 0">홈에서 가격과 등락을 바로 보여드려요. 나중에 바꿀 수 있어요.</p>
+    <div class="chips">${d.watch.map((w, i) => `<span class="chip on">${esc(w.name)}<button class="icon-btn" style="width:28px;height:28px;color:#fff" data-act="rm-watch" data-i="${i}" aria-label="${esc(w.name)} 빼기">${ICON.x}</button></span>`).join("") || `<span class="hint">아직 고른 종목이 없어요</span>`}</div>
+    ${stockSearch()}`;
+  if (st === 2) body = `
+    <h1>마지막으로,<br>당신의 성향을 알려주세요</h1>
+    <div class="card form">
+      <label class="lb" for="o-avert">위험을 얼마나 피하고 싶나요? <b class="num" id="avert-val" style="color:var(--ink)">${d.avert}/10</b> · <span class="type-pill" id="avert-type">${riskType(d.avert)}</span></label>
+      <input class="range" id="o-avert" type="range" min="1" max="10" step="1" value="${d.avert}" data-o="avert">
+      <div class="range-ends"><span>1 · 위험 괜찮아요</span><span>10 · 손실은 싫어요</span></div>
+    </div>
+    <div class="card form">
+      <span class="lb">무엇에 가치를 두나요? (여러 개)</span>
+      <div class="chips">${PREFS.map((x) => `<button class="chip ${d.prefs.includes(x) ? "on" : ""}" data-act="pref" data-v="${x}" aria-pressed="${d.prefs.includes(x)}">${x}</button>`).join("")}</div>
+    </div>
+    <div class="card form">
+      <span class="lb">구독 중인 뉴스레터가 있나요?</span>
+      <div class="chips">${LETTERS.map((l) => `<button class="chip ${d.letters.includes(l.id) ? "on" : ""}" data-act="letter" data-v="${l.id}" aria-pressed="${d.letters.includes(l.id)}">${l.name} · ${l.by}</button>`).join("")}</div>
+    </div>
+    <p class="hint" style="margin:0">자산·대출·소득은 홈에서 하나씩 천천히 여쭤볼게요.</p>`;
+  const canNext = st === 0 ? d.nickname.trim() && d.age > 0 : true;
+  return `<main class="onb">${steps}${body}
+    <div style="margin-top:auto;display:flex;gap:8px">
+      ${st > 0 ? `<button class="btn ghost block" style="flex:0 0 96px" data-act="onb-back">이전</button>` : ""}
+      <button class="btn block" data-act="onb-next" ${canNext ? "" : "disabled"}>${st === 2 ? "시작하기" : "다음"}</button>
+    </div></main>`;
+}
+
+// ───────────────────────── 라우팅 / 그리기 ─────────────────────────
+function route() {
+  if (!profile) return "onboard";
+  return location.hash === "#my" ? "my" : "home";
+}
+function render() {
+  const r = route();
+  const app = document.getElementById("app");
+  const y = window.scrollY;
+  const focusId = document.activeElement?.id;
+  app.innerHTML = r === "onboard" ? viewOnboard() : r === "my" ? viewMy() : viewHome();
+  window.scrollTo(0, y);
+  if (focusId) document.getElementById(focusId)?.focus();
+}
+function go(hash) {
+  if (location.hash === hash || (!location.hash && hash === "#home")) { render(); window.scrollTo(0, 0); }
+  else location.hash = hash;
+}
+window.addEventListener("hashchange", () => { ui.search = { q: "", results: [], sample: false }; render(); window.scrollTo(0, 0); });
+
+// 지금 편집 중인 프로필 (첫 설문 중이면 초안)
+function target() { return profile || ui.onb.draft; }
+function commit() { if (profile) saveProfile(); render(); }
+
+// ───────────────────────── 이벤트 ─────────────────────────
+document.addEventListener("click", async (e) => {
+  const el = e.target.closest("[data-act]");
+  if (!el) return;
+  if (el.classList.contains("sheet-back") && e.target.closest("[data-stop]")) return; // 시트 안쪽 클릭은 닫지 않음
+  const act = el.dataset.act;
+  const t = target();
+
+  switch (act) {
+    case "go-my":
+      go("#my");
+      if (el.dataset.focus) setTimeout(() => document.getElementById("sec-" + el.dataset.focus)?.scrollIntoView({ behavior: "smooth" }), 50);
+      break;
+    case "go-home": go("#home"); break;
+    case "refresh": loadAll(true); break;
+    case "next-line": ui.bubble++; render(); break;
+    case "focus-ask": document.getElementById("ask")?.focus(); break;
+    case "suggest": ui.draft = el.dataset.q; render(); document.getElementById("ask")?.focus(); break;
+    case "kw": {
+      const k = el.dataset.k;
+      if (ui.kw === k) { ui.kw = null; render(); break; }
+      ui.kw = k; ui.kwNews = null; render();
+      try { ui.kwNews = (await getJson(`/api/news?q=${encodeURIComponent(k)}`)).items; } catch { ui.kwNews = []; }
+      if (ui.kw === k) render();
+      break;
     }
-
-    var label = currentFilter === "all" ? "장소" : PLACE_TYPES[currentFilter].tag;
-    mapStatus.textContent = visiblePlaces.length
-      ? currentArea + " " + label + " " + visiblePlaces.length + "곳"
-      : currentArea + " 근처에 표시할 " + label + "이(가) 없어요";
-  }
-
-  // 카드를 옆으로 넘기면 가운데 카드의 핀으로 지도를 옮긴다
-  var cardScrollTimer = null;
-  placeCards.addEventListener("scroll", function(){
-    clearTimeout(cardScrollTimer);
-    cardScrollTimer = setTimeout(function(){
-      var mid = placeCards.scrollLeft + placeCards.clientWidth / 2;
-      var best = -1, bestDist = Infinity;
-      Array.prototype.forEach.call(placeCards.children, function(card, i){
-        var d = Math.abs(card.offsetLeft + card.offsetWidth / 2 - mid);
-        if (d < bestDist) { bestDist = d; best = i; }
-      });
-      if (best !== -1) selectPlace(best, { pan: true });
-    }, 120);
-  });
-
-  function loadPopups(){
-    return fetch("/data/popups.json").then(function(r){ return r.ok ? r.json() : { popups: [] }; })
-      .then(function(body){
-        popupPlaces = (body.popups || []).filter(function(p){ return p.lat && p.lng; })
-          .map(function(p){
-            return { type: "popup", name: p.name, address: p.address, lat: p.lat, lng: p.lng,
-              emoji: p.emoji, period: p.start && p.end ? p.start + " ~ " + p.end : "" };
-          });
-      }).catch(function(){ popupPlaces = []; });
-  }
-
-  function loadArea(chip){
-    mapAreaGroup.querySelectorAll(".chip").forEach(function(c){ c.classList.remove("on"); });
-    chip.classList.add("on");
-    currentArea = chip.dataset.area;
-    naverMap.setCenter(new naver.maps.LatLng(Number(chip.dataset.lat), Number(chip.dataset.lng)));
-    naverMap.setZoom(15);
-    gachaPlaces = [];
-    renderPlaces(false);
-    mapStatus.textContent = currentArea + " 둘러보는 중…";
-
-    fetch("/api/shops?area=" + encodeURIComponent(currentArea)).then(function(r){
-      return r.json().then(function(body){
-        if (!r.ok) throw new Error(body.error || "검색 실패");
-        return body;
-      });
-    }).then(function(body){
-      if (body.area !== currentArea) return; // 그새 다른 지역을 눌렀으면 무시
-      gachaPlaces = body.shops.map(function(s){
-        return { type: "gacha", name: s.name, address: s.address, lat: s.lat, lng: s.lng };
-      });
-      renderPlaces(true);
-    }).catch(function(e){
-      renderPlaces(false);
-      mapStatus.textContent = e.message;
-    });
-  }
-
-  function openMap(){
-    showScreen("screen-map");
-    if (naverMap) return;
-    mapStatus.textContent = "지도를 불러오는 중…";
-    Promise.all([loadNaverMaps(), loadPopups()]).then(function(results){
-      var cfg = results[0];
-      var first = mapAreaGroup.querySelector(".chip");
-      var options = {
-        center: new naver.maps.LatLng(Number(first.dataset.lat), Number(first.dataset.lng)),
-        zoom: 15,
-        // 네이버 기본 UI는 끄고 우리 UI만 보이게 (네이버 로고는 약관상 유지)
-        zoomControl: false,
-        mapTypeControl: false,
-        scaleControl: false,
-        mapDataControl: false,
-        logoControlOptions: { position: naver.maps.Position.BOTTOM_LEFT }
-      };
-      if (cfg.naverMapStyleId) {
-        options.gl = true;
-        options.customStyleId = cfg.naverMapStyleId;
+    case "quiz": ui.quiz = { day: Number(el.dataset.day), pick: el.dataset.o }; saveUi(); render(); break;
+    case "close-sheet": ui.sheet = null; render(); break;
+    case "skip": t.skipped = { ...(t.skipped || {}), [el.dataset.k]: true }; commit(); break;
+    case "no-debt": t.debts = []; commit(); toast("대출 없음으로 저장했어요"); break;
+    case "set-income": t.income = Number(el.dataset.v); commit(); break;
+    case "set-gender": t.gender = el.dataset.v; commit(); break;
+    case "set-cash": {
+      const v = parseInt(document.getElementById("q-cash").value.replace(/[^0-9]/g, ""), 10);
+      if (Number.isFinite(v)) { t.assets.cash = v; commit(); toast("마이페이지에서 자산 진단을 볼 수 있어요"); }
+      break;
+    }
+    case "set-payday": {
+      const v = parseInt(document.getElementById("q-pay").value, 10);
+      if (v >= 1 && v <= 31) { t.payday = v; commit(); }
+      break;
+    }
+    case "toggle-hide": ui.hideMoney = !ui.hideMoney; saveUi(); render(); break;
+    case "pref": {
+      const v = el.dataset.v;
+      t.prefs = t.prefs.includes(v) ? t.prefs.filter((x) => x !== v) : [...t.prefs, v];
+      commit();
+      if (profile) data.news = null, loadAll();
+      break;
+    }
+    case "letter": {
+      const v = el.dataset.v;
+      t.letters = t.letters.includes(v) ? t.letters.filter((x) => x !== v) : [...t.letters, v];
+      commit(); break;
+    }
+    case "add-letter": {
+      const name = document.getElementById("f-ln").value.trim();
+      let url = document.getElementById("f-lu").value.trim();
+      if (!name || !url) { toast("이름과 주소를 모두 적어주세요"); break; }
+      if (!/^https?:\/\//.test(url)) url = "https://" + url;
+      t.customLetters.push({ name: name.slice(0, 20), url }); commit(); break;
+    }
+    case "rm-letter": t.customLetters.splice(Number(el.dataset.i), 1); commit(); break;
+    case "add-watch": {
+      const v = el.dataset.v;
+      if (!t.watch.some((w) => w.name === v)) {
+        if (t.watch.length >= 10) { toast("관심 종목은 10개까지예요"); break; }
+        t.watch.push({ name: v, qty: null });
       }
-      naverMap = new naver.maps.Map("naver-map", options);
-      loadArea(first);
-
-      if (navigator.geolocation) {
-        navigator.geolocation.getCurrentPosition(function(p){
-          new naver.maps.Marker({
-            position: new naver.maps.LatLng(p.coords.latitude, p.coords.longitude), map: naverMap, zIndex: 50,
-            icon: { content: '<div style="width:16px;height:16px;border-radius:50%;background:#2f6fed;border:3px solid #fff;box-shadow:0 0 0 6px rgba(47,111,237,0.2);"></div>', anchor: new naver.maps.Point(8, 8) }
-          });
-        }, function(){}, { timeout: 5000 });
+      ui.search = { q: "", results: [], sample: false };
+      commit();
+      if (profile) loadAll();
+      break;
+    }
+    case "rm-watch": t.watch.splice(Number(el.dataset.i), 1); commit(); if (profile) loadAll(); break;
+    case "add-debt": t.debts = [...(t.debts || []), { name: "", amount: null, rate: null, kind: "변동", day: null }]; commit(); break;
+    case "rm-debt": t.debts.splice(Number(el.dataset.i), 1); commit(); break;
+    case "wipe":
+      if (confirm("이 기기에 저장된 내 정보를 모두 지울까요? 되돌릴 수 없어요.")) {
+        try { localStorage.removeItem(STORE_KEY); localStorage.removeItem(UI_KEY); } catch {}
+        profile = null; ui.onb = { step: 0, draft: null }; location.hash = ""; render();
       }
-    }).catch(function(e){
-      mapStatus.textContent = e.message;
-    });
+      break;
+    case "onb-back": ui.onb.step--; ui.search = { q: "", results: [], sample: false }; render(); break;
+    case "onb-next":
+      if (ui.onb.step < 2) { ui.onb.step++; ui.search = { q: "", results: [], sample: false }; render(); window.scrollTo(0, 0); }
+      else { profile = ui.onb.draft; saveProfile(); ui.onb = { step: 0, draft: null }; location.hash = ""; render(); loadAll(); }
+      break;
   }
+});
 
-  document.getElementById("btn-open-map").addEventListener("click", openMap);
-  document.getElementById("btn-map-back").addEventListener("click", function(){
-    showScreen("screen-home");
-  });
-  mapAreaGroup.querySelectorAll(".chip").forEach(function(chip){
-    chip.addEventListener("click", function(){
-      if (naverMap) loadArea(chip);
-    });
-  });
-  mapFilter.querySelectorAll("button").forEach(function(btn){
-    btn.addEventListener("click", function(){
-      mapFilter.querySelectorAll("button").forEach(function(b){ b.classList.remove("on"); });
-      btn.classList.add("on");
-      currentFilter = btn.dataset.filter;
-      if (naverMap) renderPlaces(true);
-    });
-  });
+// 값 입력 (바꾼 뒤 칸을 벗어날 때 저장)
+document.addEventListener("change", (e) => {
+  const el = e.target;
+  const f = el.dataset.field;
+  if (!f || !profile) return;
+  const p = profile;
+  const int = (v) => { const n = parseInt(String(v).replace(/[^0-9-]/g, ""), 10); return Number.isFinite(n) ? n : null; };
+  const i = Number(el.dataset.i);
+  if (f === "nickname") p.nickname = el.value.trim().slice(0, 12);
+  else if (f === "age") p.age = int(el.value);
+  else if (f === "gender") p.gender = el.value;
+  else if (f === "income") p.income = Number(el.value) || null;
+  else if (f === "avert") p.avert = Number(el.value);
+  else if (["cash", "invest", "other"].includes(f)) p.assets[f] = int(el.value);
+  else if (f === "payday") { const d = int(el.value); p.payday = d >= 1 && d <= 31 ? d : null; }
+  else if (f === "qty") p.watch[i].qty = int(el.value);
+  else if (f === "debt-name") p.debts[i].name = el.value.trim().slice(0, 20);
+  else if (f === "debt-amount") p.debts[i].amount = int(el.value);
+  else if (f === "debt-rate") { const r = parseFloat(el.value); p.debts[i].rate = Number.isFinite(r) ? r : null; }
+  else if (f === "debt-kind") p.debts[i].kind = el.value;
+  else if (f === "debt-day") { const d = int(el.value); p.debts[i].day = d >= 1 && d <= 31 ? d : null; }
+  saveProfile();
+  render();
+});
 
-  // ---- 거래 ----
-  document.getElementById("btn-deal-back").addEventListener("click", function(){
-    showScreen("screen-home");
-  });
+// 슬라이더를 끄는 동안엔 화면을 다시 그리지 않고 숫자만 바꾼다 (다시 그리면 드래그가 끊김)
+function showAvert(v) {
+  const a = document.getElementById("avert-val"), b = document.getElementById("avert-type");
+  if (a) a.textContent = `${v}/10`;
+  if (b) b.textContent = riskType(v);
+}
 
-  document.getElementById("btn-send").addEventListener("click", function(){
-    var btn = this;
-    if (btn.disabled) return;
+let searchTimer;
+document.addEventListener("input", (e) => {
+  const el = e.target;
+  if (el.id === "ask") { ui.draft = el.value; return; }
+  if (el.dataset.o) { // 첫 설문 입력
+    const d = ui.onb.draft;
+    if (el.dataset.o === "nickname") d.nickname = el.value.slice(0, 12);
+    if (el.dataset.o === "age") d.age = parseInt(el.value, 10) || null;
+    if (el.dataset.o === "avert") { d.avert = Number(el.value); showAvert(d.avert); return; }
+    const btn = document.querySelector('[data-act="onb-next"]');
+    if (btn) btn.disabled = !(d.nickname.trim() && d.age > 0);
+    return;
+  }
+  if (el.dataset.field === "avert") { showAvert(Number(el.value)); return; } // 저장은 손을 뗄 때(change)
+  if (el.dataset.search) {
+    ui.search.q = el.value;
+    clearTimeout(searchTimer);
+    const q = el.value.trim();
+    if (!q) { ui.search.results = []; render(); return; }
+    searchTimer = setTimeout(async () => {
+      try {
+        const j = await getJson(`/api/market?search=${encodeURIComponent(q)}`);
+        if (ui.search.q.trim() !== q) return;
+        ui.search.results = j.results || []; ui.search.sample = !!j.sample;
+      } catch { ui.search.results = []; }
+      render();
+    }, 300);
+  }
+});
 
-    var chat = document.getElementById("chat-body");
-    var bubble = document.createElement("div");
-    bubble.className = "bubble me";
-    bubble.textContent = "거래합시다";
-    chat.appendChild(bubble);
-    chat.scrollTop = chat.scrollHeight;
+document.addEventListener("submit", async (e) => {
+  if (e.target.id !== "askform") return;
+  e.preventDefault();
+  const q = ui.draft.trim();
+  if (!q) { document.getElementById("ask")?.focus(); return; }
+  ui.sheet = { q, loading: true };
+  ui.draft = "";
+  render();
+  try {
+    const j = await getJson("/api/ask", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ question: q, ...summaryForAi() }) });
+    ui.sheet = { q, a: j.answer || "답을 만들지 못했어요." };
+  } catch (err) {
+    ui.sheet = { q, a: err.body?.error || "지금은 답할 수 없어요. 잠시 후 다시 시도해 주세요." };
+  }
+  if (ui.sheet) render();
+});
 
-    btn.disabled = true;
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && ui.sheet) { ui.sheet = null; render(); }
+});
 
-    setTimeout(function(){
-      var note = document.createElement("div");
-      note.className = "sys-note";
-      note.textContent = "게시물이 자동으로 내려갔어요";
-      chat.appendChild(note);
-      chat.scrollTop = chat.scrollHeight;
-
-      if (currentDealItem !== null){
-        var pos = tradeItems.indexOf(currentDealItem);
-        if (pos !== -1) tradeItems.splice(pos, 1);
-        currentDealItem = null;
-      }
-    }, 500);
-  });
-
-  renderHome();
+render();
+loadAll();
 </script>
-
-<div class="last-updated">마지막으로 고친 날 2026-10-08</div>
-
 </body>
 </html>

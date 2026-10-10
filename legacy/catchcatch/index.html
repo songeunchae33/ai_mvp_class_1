@@ -1,0 +1,1062 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>캐치캐치</title>
+<style>
+  :root{
+    --bg:#f6f6f7;
+    --app-bg:#ffffff;
+    --surface:#f6f6f7;
+    --surface2:#efeff1;
+    --line:#e7e7e9;
+    --text:#191919;
+    --dim:#8e8f93;
+    --faint:#b7b8bc;
+    --yellow:#ffe100;
+    --yellow-soft:#fff6c4;
+    --yellow-press:#f3d400;
+    --tier-near:#2f6fed;
+    --tier-mid:#1fa463;
+    --tier-far:#e8a900;
+    --tier-veryfar:#e4453c;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{height:100%;margin:0;}
+  body{
+    background:var(--bg);
+    font-family:-apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo','Malgun Gothic',sans-serif;
+    color:var(--text);
+  }
+  button{font-family:inherit;}
+  .title-font{font-weight:800;}
+
+  #app{
+    width:100%;
+    max-width:430px;
+    margin:0 auto;
+    height:100dvh;
+    background:var(--app-bg);
+    position:relative;
+    overflow:hidden;
+  }
+  @media (min-width:431px){
+    body{display:flex;align-items:flex-start;justify-content:center;padding-top:24px;}
+    #app{
+      height:calc(100dvh - 48px);
+      border-radius:32px;
+      box-shadow:0 30px 70px rgba(0,0,0,0.18);
+      border:1px solid #ddd;
+    }
+  }
+
+  .screen{
+    position:absolute;inset:0;
+    display:none;flex-direction:column;
+    background:var(--app-bg);
+  }
+  .screen.active{display:flex;}
+
+  .statusbar{height:env(safe-area-inset-top,14px);flex-shrink:0;}
+
+  /* ---- 공통 헤더 ---- */
+  .topbar{
+    flex-shrink:0;
+    padding:10px 18px 14px;
+    display:flex;align-items:center;justify-content:space-between;
+  }
+  .topbar .back{
+    width:34px;height:34px;border-radius:999px;background:var(--surface);
+    border:none;display:flex;align-items:center;justify-content:center;
+    font-size:16px;color:var(--text);
+  }
+  .topbar .back:active{background:var(--surface2);}
+  .topbar.home{padding-top:26px;}
+  .wordmark{
+    display:flex;align-items:center;gap:8px;
+    font-weight:800;
+    font-size:26px;color:var(--text);
+  }
+  .wordmark .mark{width:30px;height:30px;flex-shrink:0;}
+  .title-mid{font-size:18.5px;font-weight:800;}
+  .ghost-icon{
+    width:34px;height:34px;border-radius:999px;background:var(--surface);
+    display:flex;align-items:center;justify-content:center;font-size:14px;color:var(--dim);border:none;
+  }
+
+  /* ---- 홈 ---- */
+  .home-body{flex:1;min-height:0;position:relative;display:flex;flex-direction:column;overflow:hidden;}
+  .range-row{
+    position:absolute;top:0;left:0;right:0;z-index:2;
+    display:flex;gap:8px;padding:2px 18px 14px;
+    background:var(--app-bg);
+    transform:translateY(0);opacity:1;
+    transition:transform .25s ease, opacity .2s ease;
+  }
+  .range-row.hide{transform:translateY(-115%);opacity:0;pointer-events:none;}
+  .pill-btn{
+    height:50px;font-size:16.5px;font-weight:700;padding:0 18px;border-radius:999px;
+    background:var(--yellow-soft);border:none;color:#7a5f00;display:flex;align-items:center;gap:7px;
+    white-space:nowrap;
+  }
+  .pill-btn:active{background:var(--yellow);}
+  .search-fake{
+    flex:1;height:50px;border-radius:999px;background:var(--surface);
+    display:flex;align-items:center;padding:0 18px;font-size:16.5px;color:var(--dim);gap:8px;
+  }
+
+  .list{
+    flex:1;min-height:0;
+    overflow-y:auto;padding:82px 14px 110px;display:flex;flex-direction:column;gap:12px;
+    -webkit-overflow-scrolling:touch;
+  }
+  .trade-card{
+    border:1px solid var(--line);border-radius:20px;padding:12px;
+    text-align:left;width:100%;transition:filter .15s, transform .15s;
+  }
+  .trade-card:active{filter:brightness(0.96);transform:scale(0.98);}
+  .tier-bg-near{background:rgba(47,111,237,0.7);border-color:rgba(47,111,237,0.8);}
+  .tier-bg-mid{background:rgba(31,164,99,0.7);border-color:rgba(31,164,99,0.8);}
+  .tier-bg-far{background:rgba(255,203,51,0.7);border-color:rgba(255,189,20,0.85);}
+  .tier-bg-veryfar{background:rgba(228,69,60,0.7);border-color:rgba(228,69,60,0.8);}
+  .trade-card[class*="tier-bg-"] .g-name{color:var(--text);}
+  .trade-card[class*="tier-bg-"] .g-sub{color:var(--text);}
+  .trade-card[class*="tier-bg-"] .tc-place{color:var(--text);}
+  .trade-card[class*="tier-bg-"] .tc-time{color:var(--text);}
+  .trade-card.just-added{animation:pop-in .5s ease;}
+  @keyframes pop-in{
+    0%{background:var(--yellow-soft);transform:scale(0.96);}
+    100%{background:var(--surface);transform:scale(1);}
+  }
+  .tc-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;}
+  .tc-tag{font-size:15.5px;font-weight:800;padding:5px 12px;border-radius:999px;background:#fff;color:var(--text);}
+  .tc-dist{font-size:12.5px;}
+  .tc-time{font-weight:700;}
+  .tc-place{color:var(--dim);}
+  .tier-near{color:var(--tier-near);}
+  .tier-mid{color:var(--tier-mid);}
+  .tier-far{color:var(--tier-far);}
+  .tier-veryfar{color:var(--tier-veryfar);}
+  .goods-row{display:flex;align-items:center;gap:8px;}
+  .thumb{
+    width:38px;height:38px;border-radius:11px;background:#fff;border:1px solid var(--line);
+    display:flex;align-items:center;justify-content:center;font-size:17px;flex-shrink:0;
+  }
+  .g-block{min-width:0;}
+  .g-name{
+    font-size:17px;color:var(--text);white-space:nowrap;
+    overflow-x:auto;text-overflow:clip;-webkit-overflow-scrolling:touch;
+    scrollbar-width:none;
+  }
+  .g-name::-webkit-scrollbar{display:none;}
+  .g-sub{
+    font-size:12.5px;color:var(--dim);margin-top:3px;white-space:nowrap;
+    overflow-x:auto;text-overflow:clip;-webkit-overflow-scrolling:touch;
+    scrollbar-width:none;
+  }
+  .g-sub::-webkit-scrollbar{display:none;}
+  .swap-icon{
+    width:20px;height:20px;border-radius:999px;background:var(--yellow-soft);color:#7a5f00;
+    display:flex;align-items:center;justify-content:center;font-size:10px;flex-shrink:0;
+  }
+
+  .fab{
+    position:absolute;right:20px;bottom:26px;
+    width:56px;height:56px;border-radius:999px;background:var(--yellow);
+    border:none;display:flex;align-items:center;justify-content:center;
+    font-size:24px;color:var(--text);box-shadow:0 10px 24px rgba(255,225,0,0.5);
+  }
+  .fab:active{background:var(--yellow-press);transform:scale(0.95);}
+
+  /* ---- 굿즈등록 ---- */
+  .reg-body{flex:1;overflow-y:auto;padding:4px 18px 20px;display:flex;flex-direction:column;gap:22px;}
+  .capture-box{
+    height:150px;border-radius:20px;background:var(--surface);
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;
+    color:var(--dim);font-size:14px;
+  }
+  .capture-box .cam{font-size:28px;}
+  .divider{display:flex;align-items:center;gap:10px;color:var(--faint);font-size:12.5px;}
+  .divider::before,.divider::after{content:'';flex:1;height:1px;background:var(--line);}
+
+  .field-label{font-size:14.5px;font-weight:700;margin-bottom:10px;}
+  .chip-row{display:flex;flex-wrap:wrap;gap:8px;}
+  .chip{
+    font-size:14px;font-weight:600;padding:9px 15px;border-radius:999px;
+    background:var(--surface);border:none;color:var(--dim);
+  }
+  .chip.on{background:var(--yellow);color:var(--text);}
+
+  .segmented{display:flex;background:var(--surface);border-radius:14px;padding:4px;gap:4px;}
+  .segmented button{
+    flex:1;padding:11px;border-radius:11px;border:none;background:transparent;
+    font-size:14px;font-weight:600;color:var(--dim);
+  }
+  .segmented button.on{background:#fff;color:var(--text);box-shadow:0 2px 6px rgba(0,0,0,0.08);}
+
+  .cta{
+    flex-shrink:0;margin:0 18px 20px;padding:16px;border-radius:16px;
+    background:var(--yellow);border:none;font-size:16.5px;font-weight:800;color:var(--text);
+  }
+  .cta:active{background:var(--yellow-press);}
+  .cta[disabled]{background:var(--surface2);color:var(--faint);}
+
+  /* ---- 거래 ---- */
+  .deal-head{display:flex;align-items:center;gap:10px;padding:10px 18px 14px;flex-shrink:0;}
+  .avatar{width:32px;height:32px;border-radius:999px;background:var(--surface);flex-shrink:0;}
+  .who{font-size:15.5px;font-weight:700;}
+  .who-sub{font-size:12px;color:var(--dim);}
+
+  .deal-summary{
+    margin:0 18px 10px;background:var(--surface);border-radius:18px;padding:13px;flex-shrink:0;
+  }
+  .deal-summary .goods-row{justify-content:space-between;}
+  .deal-note{font-size:11.5px;color:var(--faint);text-align:center;margin-top:10px;}
+
+  .chat-body{flex:1;overflow-y:auto;padding:12px 18px;display:flex;flex-direction:column;gap:9px;}
+  .bubble{max-width:75%;padding:10px 14px;border-radius:18px;font-size:14.5px;line-height:1.5;}
+  .bubble.them{background:var(--surface);align-self:flex-start;border-bottom-left-radius:5px;}
+  .bubble.me{background:var(--yellow);color:var(--text);align-self:flex-end;border-bottom-right-radius:5px;font-weight:600;}
+  .sys-note{
+    align-self:center;font-size:12px;color:var(--dim);background:var(--surface);
+    padding:6px 13px;border-radius:999px;
+  }
+
+  .chat-input{
+    flex-shrink:0;display:flex;align-items:center;gap:10px;
+    padding:10px 16px calc(16px + env(safe-area-inset-bottom,0px));
+    border-top:1px solid var(--line);
+  }
+  .box-fake{flex:1;height:40px;border-radius:999px;background:var(--surface);display:flex;
+    align-items:center;padding:0 16px;font-size:14px;color:var(--dim);}
+  .send-btn{
+    width:40px;height:40px;border-radius:999px;background:var(--yellow);border:none;
+    display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;color:var(--text);
+  }
+  .send-btn:active{background:var(--yellow-press);}
+  .send-btn[disabled]{background:var(--surface2);color:var(--faint);}
+
+  /* ---- 지도 ---- */
+  /* 네이버 지도는 바닥 타일로만 쓰고, 위에 올라가는 UI는 전부 캐치캐치 스타일로 그린다 */
+  #screen-map{background:var(--surface);}
+  /* 네이버 지도 라이브러리가 position을 inline으로 덮어쓰므로, flex로도 화면을 꽉 채우게 해둔다 */
+  #naver-map{position:absolute;inset:0;flex:1;width:100%;min-height:0;background:var(--surface);}
+  .map-top{
+    position:absolute;top:0;left:0;right:0;z-index:5;pointer-events:none;
+    padding:calc(env(safe-area-inset-top,0px) + 14px) 14px 0;display:flex;flex-direction:column;gap:10px;
+  }
+  .map-top > *{pointer-events:auto;}
+  .map-head{display:flex;align-items:center;gap:8px;}
+  .map-head .back{
+    width:44px;height:44px;border-radius:999px;background:#fff;border:none;flex-shrink:0;
+    font-size:17px;color:var(--text);box-shadow:0 4px 14px rgba(0,0,0,0.12);
+  }
+  .map-filter{
+    flex:1;display:flex;background:#fff;border-radius:999px;padding:4px;gap:4px;
+    box-shadow:0 4px 14px rgba(0,0,0,0.12);
+  }
+  .map-filter button{
+    flex:1;height:36px;border-radius:999px;border:none;background:transparent;
+    font-size:14px;font-weight:700;color:var(--dim);font-family:inherit;
+  }
+  .map-filter button.on{background:var(--yellow);color:var(--text);}
+  .map-area-row{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;padding-bottom:4px;}
+  .map-area-row::-webkit-scrollbar{display:none;}
+  .map-area-row .chip{
+    white-space:nowrap;background:#fff;color:var(--text);padding:8px 14px;
+    box-shadow:0 3px 10px rgba(0,0,0,0.1);
+  }
+  .map-area-row .chip.on{background:var(--text);color:#fff;}
+  .map-status{
+    align-self:center;background:rgba(25,25,25,0.85);color:#fff;border-radius:999px;
+    padding:7px 14px;font-size:12.5px;font-weight:600;max-width:100%;text-align:center;
+    word-break:keep-all;
+  }
+  .map-status:empty{display:none;}
+
+  /* 지도 위 핀 (0x0 래퍼 기준으로 말풍선 꼬리가 좌표를 가리키게) */
+  .pin-anchor{position:relative;width:0;height:0;}
+  .pin{
+    position:absolute;left:0;bottom:0;transform:translate(-50%,-8px);
+    display:flex;align-items:center;gap:5px;padding:6px 11px 6px 7px;border-radius:999px;
+    background:#fff;border:2px solid var(--text);white-space:nowrap;
+    font-size:12.5px;font-weight:800;color:var(--text);box-shadow:0 4px 10px rgba(0,0,0,0.18);
+    transition:transform .15s;
+  }
+  .pin::after{
+    content:'';position:absolute;left:50%;bottom:-8px;transform:translateX(-50%);
+    border:6px solid transparent;border-top:8px solid var(--text);border-bottom:0;
+  }
+  .pin .pin-emoji{
+    width:22px;height:22px;border-radius:999px;display:flex;align-items:center;justify-content:center;font-size:13px;
+  }
+  .pin-gacha .pin-emoji{background:var(--yellow-soft);}
+  .pin-popup .pin-emoji{background:#ffe1ea;}
+  .pin.selected{background:var(--yellow);transform:translate(-50%,-8px) scale(1.12);}
+
+  /* 하단 카드 캐러셀 */
+  .place-cards{
+    position:absolute;left:0;right:0;bottom:calc(18px + env(safe-area-inset-bottom,0px));z-index:5;
+    display:flex;gap:10px;overflow-x:auto;scroll-snap-type:x mandatory;padding:0 14px;scrollbar-width:none;
+  }
+  .place-cards::-webkit-scrollbar{display:none;}
+  .place-cards:empty{display:none;}
+  .place-card{
+    flex:0 0 calc(100% - 36px);scroll-snap-align:center;background:#fff;border-radius:20px;
+    padding:14px;display:flex;gap:12px;align-items:center;border:2px solid transparent;
+    box-shadow:0 8px 22px rgba(0,0,0,0.14);
+  }
+  .place-card.selected{border-color:var(--yellow);}
+  .place-card .pc-thumb{
+    width:52px;height:52px;border-radius:16px;flex-shrink:0;font-size:26px;
+    display:flex;align-items:center;justify-content:center;background:var(--yellow-soft);
+  }
+  .place-card.popup .pc-thumb{background:#ffe1ea;}
+  .pc-body{flex:1;min-width:0;}
+  .pc-tag{font-size:11px;font-weight:800;color:#7a5f00;}
+  .place-card.popup .pc-tag{color:#c2335b;}
+  .pc-name{font-size:16px;font-weight:800;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .pc-addr{font-size:12.5px;color:var(--dim);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .pc-soon{font-size:11.5px;color:var(--faint);margin-top:5px;}
+
+  /* ---- 사진 인식 ---- */
+  label.capture-box{cursor:pointer;position:relative;overflow:hidden;}
+  .capture-box img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;}
+  .capture-box .cam,.capture-box .cap-msg{position:relative;z-index:1;}
+  .capture-box.has-photo .cam,.capture-box.has-photo .cap-msg{
+    background:rgba(255,255,255,0.88);padding:4px 10px;border-radius:999px;
+  }
+  .ai-card{background:var(--yellow-soft);border-radius:18px;padding:14px;display:flex;flex-direction:column;gap:10px;}
+  .ai-card[hidden]{display:none;}
+  .ai-row{display:flex;align-items:center;gap:8px;}
+  .ai-row label{font-size:12.5px;color:#7a5f00;font-weight:700;width:52px;flex-shrink:0;}
+  .ai-row input,.ai-row select{
+    flex:1;min-width:0;height:38px;border-radius:11px;border:1px solid var(--line);background:#fff;
+    padding:0 10px;font-size:14px;font-family:inherit;color:var(--text);
+  }
+  .ai-row input.emoji{flex:0 0 48px;text-align:center;font-size:18px;}
+  .ai-price{font-size:15px;font-weight:800;}
+  .ai-price .conf{font-size:11.5px;font-weight:600;color:var(--dim);margin-left:6px;}
+  .ai-tips{margin:0;padding-left:18px;font-size:13px;line-height:1.55;}
+  .ai-wanted{font-size:12.5px;color:var(--dim);}
+
+  /* ---- 페이지 맨 아래 수정 날짜 ---- */
+  /* 어떤 화면 크기에서도 스크롤 없이 화면 맨 아래에 보이게 고정. 터치는 아래 요소로 통과시킨다 */
+  .last-updated{
+    position:fixed;left:50%;transform:translateX(-50%);bottom:env(safe-area-inset-bottom,0px);z-index:50;
+    white-space:nowrap;padding:0 8px;border-radius:999px;background:rgba(255,255,255,0.85);
+    font-size:11px;line-height:14px;color:var(--dim);pointer-events:none;
+  }
+</style>
+</head>
+<body>
+
+<div id="app">
+
+  <!-- 홈 화면 -->
+  <section class="screen active" id="screen-home">
+    <div class="statusbar"></div>
+    <div class="topbar home">
+      <div class="wordmark">
+        <svg class="mark" viewBox="0 0 34 34" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+          <circle cx="17" cy="17" r="15" fill="#ffffff" stroke="#191919" stroke-width="2"/>
+          <path d="M2.4,17 A14.6,14.6 0 0 1 31.6,17 Z" fill="#ffe100" stroke="#191919" stroke-width="2"/>
+          <rect x="2" y="15.4" width="30" height="3.2" fill="#191919"/>
+          <circle cx="17" cy="17" r="4.6" fill="#ffffff" stroke="#191919" stroke-width="2.2"/>
+        </svg>
+        캐치캐치
+      </div>
+      <button class="ghost-icon" type="button">☰</button>
+    </div>
+    <div class="home-body">
+      <div class="range-row" id="search-row">
+        <button class="pill-btn" id="btn-open-map" type="button">📍 잠실 · 20분</button>
+        <div class="search-fake">🔍 상품명으로 검색</div>
+      </div>
+      <div class="list" id="home-list"></div>
+    </div>
+    <button class="fab" id="btn-open-register" type="button">＋</button>
+  </section>
+
+  <!-- 굿즈등록 화면 -->
+  <section class="screen" id="screen-register">
+    <div class="statusbar"></div>
+    <div class="topbar">
+      <button class="back" id="btn-register-back" type="button">←</button>
+      <div class="title-mid">굿즈 등록</div>
+      <div style="width:34px;"></div>
+    </div>
+    <div class="reg-body">
+      <label class="capture-box" id="capture-box">
+        <input type="file" id="photo-input" accept="image/*" capture="environment" hidden>
+        <div class="cam">📷</div>
+        <div class="cap-msg" id="capture-msg">사진을 찍으면 상품을 인식해요</div>
+      </label>
+      <div class="ai-card" id="ai-card" hidden>
+        <div class="ai-row">
+          <label for="ai-name">상품명</label>
+          <input class="emoji" id="ai-emoji" maxlength="4" aria-label="아이콘">
+          <input id="ai-name">
+        </div>
+        <div class="ai-row">
+          <label for="ai-condition">상태</label>
+          <select id="ai-condition">
+            <option>미개봉</option><option>개봉-상태좋음</option><option>사용감있음</option><option>판단불가</option>
+          </select>
+        </div>
+        <div class="ai-row">
+          <label>예상 시세</label>
+          <div class="ai-price" id="ai-price"></div>
+        </div>
+        <div class="ai-row">
+          <label for="ai-premium">웃돈</label>
+          <input id="ai-premium" type="number" step="500" inputmode="numeric">
+        </div>
+        <div class="ai-wanted" id="ai-wanted"></div>
+        <ul class="ai-tips" id="ai-tips"></ul>
+      </div>
+      <div class="divider">또는</div>
+      <div>
+        <div class="field-label">유명 상품에서 선택</div>
+        <div class="chip-row" id="chip-group">
+          <button class="chip" type="button" data-name="토끼 캐릭터 피규어" data-icon="🐰">토끼 캐릭터</button>
+          <button class="chip" type="button" data-name="곰돌이 인형" data-icon="🐻">곰돌이 인형</button>
+          <button class="chip" type="button" data-name="펭귄 키링" data-icon="🐧">펭귄 키링</button>
+          <button class="chip" type="button" data-name="고양이 미니어처" data-icon="🐱">고양이 미니어처</button>
+        </div>
+      </div>
+      <div>
+        <div class="field-label">거래 방식</div>
+        <div class="segmented" id="mode-group">
+          <button class="on" type="button" data-mode="교환">교환</button>
+          <button type="button" data-mode="즉시교환">바로 교환</button>
+        </div>
+      </div>
+    </div>
+    <button class="cta" id="btn-register-submit" type="button">등록하기</button>
+  </section>
+
+  <!-- 지도 화면 -->
+  <section class="screen" id="screen-map">
+    <div id="naver-map"></div>
+    <div class="map-top">
+      <div class="map-head">
+        <button class="back" id="btn-map-back" type="button" aria-label="뒤로">←</button>
+        <div class="map-filter" id="map-filter">
+          <button class="on" type="button" data-filter="all">전체</button>
+          <button type="button" data-filter="gacha">🎰 가챠샵</button>
+          <button type="button" data-filter="popup">🎪 팝업</button>
+        </div>
+      </div>
+      <div class="map-area-row" id="map-area-group">
+        <button class="chip" type="button" data-area="잠실" data-lat="37.5133" data-lng="127.1001">잠실</button>
+        <button class="chip" type="button" data-area="홍대" data-lat="37.5563" data-lng="126.9236">홍대</button>
+        <button class="chip" type="button" data-area="용산" data-lat="37.5298" data-lng="126.9648">용산</button>
+        <button class="chip" type="button" data-area="강남" data-lat="37.4979" data-lng="127.0276">강남</button>
+        <button class="chip" type="button" data-area="명동" data-lat="37.5609" data-lng="126.9858">명동</button>
+      </div>
+      <div class="map-status" id="map-status"></div>
+    </div>
+    <div class="place-cards" id="place-cards"></div>
+  </section>
+
+  <!-- 거래 화면 -->
+  <section class="screen" id="screen-deal">
+    <div class="statusbar"></div>
+    <div class="deal-head">
+      <button class="back" id="btn-deal-back" type="button">←</button>
+      <div class="avatar"></div>
+      <div>
+        <div class="who" id="deal-who">수집가_1234</div>
+        <div class="who-sub">접속중</div>
+      </div>
+    </div>
+    <div class="deal-summary">
+      <div class="goods-row" id="deal-goods-row"></div>
+      <div class="deal-note">"거래합시다" 전송 시 게시물이 자동으로 내려가요</div>
+    </div>
+    <div class="chat-body" id="chat-body">
+      <div class="bubble them">상태 좋아요! 교환 괜찮으세요?</div>
+      <div class="bubble me">네 좋습니다. 역 앞에서 뵐까요?</div>
+      <div class="bubble them">네 20분 뒤에 뵈요</div>
+    </div>
+    <div class="chat-input">
+      <div class="box-fake">메시지 입력</div>
+      <button class="send-btn" id="btn-send" type="button">↑</button>
+    </div>
+  </section>
+
+</div>
+
+<script>
+  // ---- 상태 ----
+  var tradeItems = [
+    {tag:"교환", timeLabel:"도보 6분", place:"잠실", tier:"near", premium:-3000,
+      icon1:"🐹", name1:"치이카와 모몽가", sub1:"보유중",
+      icon2:"🐺", name2:"치이카와 하치와레", sub2:"상대방 보유"},
+    {tag:"교환", timeLabel:"도보 12분", place:"잠실", tier:"mid", premium:1000,
+      icon1:"🐧", name1:"펭귄 키링", sub1:"보유중",
+      icon2:"🐱", name2:"고양이 미니어처", sub2:"상대방 보유"},
+    {tag:"교환", timeLabel:"지하철 3정거장", place:"홍대", tier:"far", premium:0,
+      icon1:"🦊", name1:"여우 인형", sub1:"보유중",
+      icon2:"🐥", name2:"병아리 키링", sub2:"상대방 보유"},
+    {tag:"교환", timeLabel:"도보 9분", place:"홍대", tier:"mid", premium:-500,
+      icon1:"🐰", name1:"토끼 캐릭터 피규어", sub1:"보유중",
+      icon2:"🐻", name2:"곰돌이 인형", sub2:"상대방 보유"},
+    {tag:"교환", timeLabel:"도보 4분", place:"용산", tier:"near", premium:0,
+      icon1:"🐼", name1:"판다 미니어처", sub1:"보유중",
+      icon2:"🤷", name2:"상관없음", sub2:"무엇이든 OK"},
+    {tag:"교환", timeLabel:"지하철 2정거장", place:"용산", tier:"far", premium:2000,
+      icon1:"🐣", name1:"병아리 인형", sub1:"보유중",
+      icon2:"🐹", name2:"햄스터 피규어", sub2:"상대방 보유"},
+    {tag:"교환", timeLabel:"도보 15분", place:"잠실", tier:"veryfar", premium:0,
+      icon1:"🦝", name1:"너구리 키링", sub1:"보유중",
+      icon2:"🤷", name2:"상관없음", sub2:"무엇이든 OK"},
+    {tag:"교환", timeLabel:"도보 7분", place:"홍대", tier:"near", premium:-1500,
+      icon1:"🐢", name1:"거북이 미니어처", sub1:"보유중",
+      icon2:"🐙", name2:"문어 키링", sub2:"상대방 보유"}
+  ];
+  var currentDealItem = null;
+  var justAddedItem = null;
+
+  function tagText(item){
+    // item.premium은 게시자(보유자) 기준 금액. 뱃지는 조회자(나) 기준으로 보여주므로 부호를 뒤집는다.
+    var amt = -item.premium;
+    if (amt === 0) return "교환";
+    var sign = amt > 0 ? "+" : "-";
+    var abs = Math.abs(amt).toLocaleString("ko-KR");
+    return sign + abs + "원";
+  }
+
+  function distHtml(item){
+    return '<span class="tc-time tier-' + item.tier + '">' + item.timeLabel + '</span>' +
+      ' <span class="tc-place title-font">· ' + item.place + '</span>';
+  }
+
+  function renderHome(){
+    var list = document.getElementById("home-list");
+    list.innerHTML = "";
+    // 같은 교환 제시 기준, 프리미엄을 적게 주고받는(0에 가까운) 거래가 위로 오도록 정렬
+    var sorted = tradeItems.slice().sort(function(a, b){
+      return Math.abs(a.premium) - Math.abs(b.premium);
+    });
+    sorted.forEach(function(item){
+      var card = document.createElement("button");
+      card.type = "button";
+      card.className = "trade-card tier-bg-" + item.tier + (item === justAddedItem ? " just-added" : "");
+      card.innerHTML =
+        '<div class="tc-top">' +
+          '<span class="tc-tag title-font">' + tagText(item) + '</span>' +
+          '<span class="tc-dist">' + distHtml(item) + '</span>' +
+        '</div>' +
+        '<div class="goods-row">' +
+          '<div class="thumb">' + item.icon1 + '</div>' +
+          '<div class="g-block" style="flex:0.8;">' +
+            '<div class="g-name title-font">' + item.name1 + '</div>' +
+            '<div class="g-sub title-font">' + item.sub1 + '</div>' +
+          '</div>' +
+          '<div class="swap-icon">⇄</div>' +
+          '<div class="thumb">' + item.icon2 + '</div>' +
+          '<div class="g-block" style="flex:1.3;">' +
+            '<div class="g-name title-font">' + item.name2 + '</div>' +
+            '<div class="g-sub title-font">' + item.sub2 + '</div>' +
+          '</div>' +
+        '</div>';
+      card.addEventListener("click", function(){ openDeal(item); });
+      list.appendChild(card);
+    });
+    justAddedItem = null;
+  }
+
+  function showScreen(id){
+    document.querySelectorAll(".screen").forEach(function(s){ s.classList.remove("active"); });
+    document.getElementById(id).classList.add("active");
+  }
+
+  function openDeal(item){
+    currentDealItem = item;
+    var row = document.getElementById("deal-goods-row");
+    row.innerHTML =
+      '<div class="thumb">' + item.icon2 + '</div>' +
+      '<div class="g-block" style="flex:1.3;">' +
+        '<div class="g-name title-font">' + item.name2 + '</div>' +
+        '<div class="g-sub title-font">' + item.sub2 + '</div>' +
+      '</div>' +
+      '<div class="swap-icon">⇄</div>' +
+      '<div class="thumb">' + item.icon1 + '</div>' +
+      '<div class="g-block" style="flex:0.8; text-align:right;">' +
+        '<div class="g-name title-font">' + item.name1 + '</div>' +
+        '<div class="g-sub title-font">내 보유</div>' +
+      '</div>';
+
+    var chat = document.getElementById("chat-body");
+    chat.innerHTML =
+      '<div class="bubble them">상태 좋아요! 교환 괜찮으세요?</div>' +
+      '<div class="bubble me">네 좋습니다. 역 앞에서 뵐까요?</div>' +
+      '<div class="bubble them">네 20분 뒤에 뵈요</div>';
+
+    var sendBtn = document.getElementById("btn-send");
+    sendBtn.disabled = false;
+
+    showScreen("screen-deal");
+  }
+
+  // ---- 홈 ----
+  document.getElementById("btn-open-register").addEventListener("click", function(){
+    showScreen("screen-register");
+  });
+
+  var homeList = document.getElementById("home-list");
+  var searchRow = document.getElementById("search-row");
+  var lastScroll = 0;
+  homeList.addEventListener("scroll", function(){
+    var cur = homeList.scrollTop;
+    if (cur > lastScroll && cur > 24){
+      searchRow.classList.add("hide");
+    } else {
+      searchRow.classList.remove("hide");
+    }
+    lastScroll = cur;
+  });
+
+  // ---- 굿즈등록 ----
+  document.getElementById("btn-register-back").addEventListener("click", function(){
+    showScreen("screen-home");
+  });
+
+  var chipGroup = document.getElementById("chip-group");
+  chipGroup.querySelectorAll(".chip").forEach(function(chip){
+    chip.addEventListener("click", function(){
+      chipGroup.querySelectorAll(".chip").forEach(function(c){ c.classList.remove("on"); });
+      chip.classList.add("on");
+    });
+  });
+
+  var modeGroup = document.getElementById("mode-group");
+  modeGroup.querySelectorAll("button").forEach(function(btn){
+    btn.addEventListener("click", function(){
+      modeGroup.querySelectorAll("button").forEach(function(b){ b.classList.remove("on"); });
+      btn.classList.add("on");
+    });
+  });
+
+  // ---- 사진 인식 ----
+  var photoInput = document.getElementById("photo-input");
+  var captureBox = document.getElementById("capture-box");
+  var captureMsg = document.getElementById("capture-msg");
+  var aiCard = document.getElementById("ai-card");
+  var aiResult = null;
+  var analyzing = false;
+
+  function escapeHtml(s){
+    return String(s).replace(/[&<>"']/g, function(c){
+      return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];
+    });
+  }
+
+  function won(n){ return Number(n).toLocaleString("ko-KR") + "원"; }
+
+  // 긴 변 1024px JPEG로 줄여서 base64만 돌려준다 (서버리스 요청 크기 제한 대비)
+  function shrinkImage(file){
+    return new Promise(function(resolve, reject){
+      var url = URL.createObjectURL(file);
+      var img = new Image();
+      img.onload = function(){
+        var scale = Math.min(1, 1024 / Math.max(img.width, img.height));
+        var canvas = document.createElement("canvas");
+        canvas.width = Math.round(img.width * scale);
+        canvas.height = Math.round(img.height * scale);
+        canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
+        URL.revokeObjectURL(url);
+        resolve(canvas.toDataURL("image/jpeg", 0.85));
+      };
+      img.onerror = function(){ URL.revokeObjectURL(url); reject(new Error("이미지를 열 수 없어요")); };
+      img.src = url;
+    });
+  }
+
+  function resetPhoto(){
+    aiResult = null;
+    photoInput.value = "";
+    aiCard.hidden = true;
+    captureBox.classList.remove("has-photo");
+    var old = captureBox.querySelector("img");
+    if (old) old.remove();
+    captureMsg.textContent = "사진을 찍으면 상품을 인식해요";
+  }
+
+  function showAiResult(g){
+    aiResult = g;
+    document.getElementById("ai-emoji").value = g.emoji || "🎁";
+    document.getElementById("ai-name").value = g.name;
+    document.getElementById("ai-condition").value = g.condition;
+    document.getElementById("ai-premium").value = g.recommended_premium;
+    var confText = {high:"확실", medium:"보통", low:"참고용"}[g.confidence] || "";
+    document.getElementById("ai-price").innerHTML =
+      escapeHtml(won(g.price_min) + " ~ " + won(g.price_max)) +
+      ' <span class="conf">' + escapeHtml("추천: " + g.recommended_mode + " · 정확도 " + confText) + '</span>';
+    document.getElementById("ai-wanted").textContent =
+      g.wanted_suggestions.length ? "교환 제안하면 좋은 굿즈: " + g.wanted_suggestions.join(", ") : "";
+    var tips = document.getElementById("ai-tips");
+    tips.innerHTML = "";
+    g.tips.forEach(function(t){
+      var li = document.createElement("li");
+      li.textContent = t;
+      tips.appendChild(li);
+    });
+    aiCard.hidden = false;
+    // 사진으로 인식했으면 칩 선택은 해제
+    chipGroup.querySelectorAll(".chip").forEach(function(c){ c.classList.remove("on"); });
+  }
+
+  photoInput.addEventListener("change", function(){
+    var file = photoInput.files && photoInput.files[0];
+    if (!file || analyzing) return;
+    analyzing = true;
+    aiResult = null;
+    aiCard.hidden = true;
+    captureMsg.textContent = "분석 중… (10~30초)";
+
+    shrinkImage(file).then(function(dataUrl){
+      var old = captureBox.querySelector("img");
+      if (old) old.remove();
+      var preview = document.createElement("img");
+      preview.src = dataUrl;
+      preview.alt = "";
+      captureBox.prepend(preview);
+      captureBox.classList.add("has-photo");
+
+      return fetch("/api/analyze-goods", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({ image: dataUrl.split(",")[1], mediaType: "image/jpeg" })
+      });
+    }).then(function(r){
+      return r.json().then(function(body){
+        if (!r.ok) throw new Error(body.error || "분석 실패");
+        return body;
+      });
+    }).then(function(goods){
+      showAiResult(goods);
+      captureMsg.textContent = "다시 찍으려면 탭하세요";
+    }).catch(function(e){
+      captureMsg.textContent = e.message + " · 아래에서 직접 선택해주세요";
+    }).then(function(){
+      analyzing = false;
+    });
+  });
+
+  chipGroup.addEventListener("click", function(e){
+    // 칩으로 직접 고르면 AI 결과 대신 칩 값을 쓴다
+    if (e.target.closest(".chip") && aiResult) {
+      aiResult = null;
+      aiCard.hidden = true;
+    }
+  });
+
+  document.getElementById("btn-register-submit").addEventListener("click", function(){
+    if (analyzing) return;
+    var pickedChip = chipGroup.querySelector(".chip.on");
+    var holdingName = pickedChip ? pickedChip.dataset.name : "새 굿즈";
+    var holdingIcon = pickedChip ? pickedChip.dataset.icon : "🎁";
+    var premium = 0;
+
+    if (aiResult) {
+      holdingName = escapeHtml(document.getElementById("ai-name").value.trim() || aiResult.name);
+      holdingIcon = escapeHtml(document.getElementById("ai-emoji").value.trim() || "🎁");
+      premium = Math.round(Number(document.getElementById("ai-premium").value) || 0);
+    }
+
+    var newItem = {
+      tag:"교환", timeLabel:"방금 등록", place:"내 주변", tier:"near", premium:premium,
+      icon1: holdingIcon, name1: holdingName, sub1:"보유중",
+      icon2:"❓", name2:"원하는 굿즈 대기중", sub2:"상대 찾는 중"
+    };
+    tradeItems.unshift(newItem);
+    justAddedItem = newItem;
+
+    chipGroup.querySelectorAll(".chip").forEach(function(c){ c.classList.remove("on"); });
+    modeGroup.querySelectorAll("button").forEach(function(b){ b.classList.remove("on"); });
+    modeGroup.querySelector('[data-mode="교환"]').classList.add("on");
+    resetPhoto();
+
+    renderHome();
+    showScreen("screen-home");
+  });
+
+  // ---- 지도 ----
+  // 네이버 지도는 바닥 타일로만 쓰고, 핀·카드·필터는 우리가 그린다.
+  // 장소 데이터: 가챠샵은 /api/shops(네이버 검색), 팝업은 우리가 관리하는 /data/popups.json
+  var naverMap = null;
+  var mapScriptPromise = null;
+  var mapStatus = document.getElementById("map-status");
+  var mapAreaGroup = document.getElementById("map-area-group");
+  var mapFilter = document.getElementById("map-filter");
+  var placeCards = document.getElementById("place-cards");
+  var gachaPlaces = [];
+  var popupPlaces = [];
+  var visiblePlaces = [];
+  var placeMarkers = [];
+  var selectedIdx = -1;
+  var currentFilter = "all";
+  var currentArea = "";
+
+  var PLACE_TYPES = {
+    gacha: { tag: "가챠샵", emoji: "🎰" },
+    popup: { tag: "진행중 팝업", emoji: "🎪" }
+  };
+
+  function loadNaverMaps(){
+    if (mapScriptPromise) return mapScriptPromise;
+    mapScriptPromise = fetch("/api/config").then(function(r){ return r.json(); }).then(function(cfg){
+      if (!cfg.naverMapKeyId) throw new Error("지도 키가 아직 설정되지 않았어요");
+      return new Promise(function(resolve, reject){
+        var s = document.createElement("script");
+        // 커스텀 스타일(Style Editor)을 쓰려면 GL 서브모듈이 필요하다
+        s.src = "https://oapi.map.naver.com/openapi/v3/maps.js?ncpKeyId=" +
+          encodeURIComponent(cfg.naverMapKeyId) + (cfg.naverMapStyleId ? "&submodules=gl" : "");
+        s.onload = function(){ resolve(cfg); };
+        s.onerror = function(){ reject(new Error("네이버 지도를 불러오지 못했어요")); };
+        document.head.appendChild(s);
+      });
+    }).catch(function(e){
+      mapScriptPromise = null;
+      throw e;
+    });
+    return mapScriptPromise;
+  }
+
+  function pinHtml(place, selected){
+    return '<div class="pin-anchor"><div class="pin pin-' + place.type + (selected ? ' selected' : '') + '">' +
+      '<span class="pin-emoji">' + escapeHtml(place.emoji || PLACE_TYPES[place.type].emoji) + '</span>' +
+      escapeHtml(place.name) +
+    '</div></div>';
+  }
+
+  function cardHtml(place){
+    var t = PLACE_TYPES[place.type];
+    var extra = place.type === "popup" && place.period
+      ? escapeHtml(place.period)
+      : "혼잡도 · 실시간 정보 준비중";
+    return '<div class="pc-thumb">' + escapeHtml(place.emoji || t.emoji) + '</div>' +
+      '<div class="pc-body">' +
+        '<div class="pc-tag">' + t.tag + '</div>' +
+        '<div class="pc-name">' + escapeHtml(place.name) + '</div>' +
+        '<div class="pc-addr">' + escapeHtml(place.address || "") + '</div>' +
+        '<div class="pc-soon">' + extra + '</div>' +
+      '</div>';
+  }
+
+  function setPinSelected(i, selected){
+    var m = placeMarkers[i];
+    if (!m) return;
+    m.setIcon({ content: pinHtml(visiblePlaces[i], selected), anchor: new naver.maps.Point(0, 0) });
+    m.setZIndex(selected ? 1000 : 100);
+  }
+
+  function selectPlace(i, opts){
+    opts = opts || {};
+    if (i === selectedIdx) return;
+    if (selectedIdx !== -1) {
+      setPinSelected(selectedIdx, false);
+      var prev = placeCards.children[selectedIdx];
+      if (prev) prev.classList.remove("selected");
+    }
+    selectedIdx = i;
+    setPinSelected(i, true);
+    var card = placeCards.children[i];
+    if (card) {
+      card.classList.add("selected");
+      if (opts.scrollCard) card.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
+    }
+    if (opts.pan) naverMap.panTo(placeMarkers[i].getPosition());
+  }
+
+  function renderPlaces(fit){
+    placeMarkers.forEach(function(m){ m.setMap(null); });
+    placeMarkers = [];
+    placeCards.innerHTML = "";
+    selectedIdx = -1;
+
+    var all = gachaPlaces.concat(popupPlaces);
+    visiblePlaces = all.filter(function(p){ return currentFilter === "all" || p.type === currentFilter; });
+
+    var bounds = null;
+    visiblePlaces.forEach(function(place, i){
+      var pos = new naver.maps.LatLng(place.lat, place.lng);
+      var marker = new naver.maps.Marker({
+        position: pos, map: naverMap, zIndex: 100,
+        icon: { content: pinHtml(place, false), anchor: new naver.maps.Point(0, 0) }
+      });
+      naver.maps.Event.addListener(marker, "click", function(){ selectPlace(i, { scrollCard: true }); });
+      placeMarkers.push(marker);
+
+      var card = document.createElement("div");
+      card.className = "place-card " + place.type;
+      card.innerHTML = cardHtml(place);
+      card.addEventListener("click", function(){ selectPlace(i, { pan: true }); });
+      placeCards.appendChild(card);
+
+      if (!bounds) bounds = new naver.maps.LatLngBounds(pos, pos);
+      else bounds.extend(pos);
+    });
+
+    if (fit && bounds && visiblePlaces.length > 1) {
+      naverMap.fitBounds(bounds, { top: 150, right: 40, bottom: 150, left: 40 });
+    }
+
+    var label = currentFilter === "all" ? "장소" : PLACE_TYPES[currentFilter].tag;
+    mapStatus.textContent = visiblePlaces.length
+      ? currentArea + " " + label + " " + visiblePlaces.length + "곳"
+      : currentArea + " 근처에 표시할 " + label + "이(가) 없어요";
+  }
+
+  // 카드를 옆으로 넘기면 가운데 카드의 핀으로 지도를 옮긴다
+  var cardScrollTimer = null;
+  placeCards.addEventListener("scroll", function(){
+    clearTimeout(cardScrollTimer);
+    cardScrollTimer = setTimeout(function(){
+      var mid = placeCards.scrollLeft + placeCards.clientWidth / 2;
+      var best = -1, bestDist = Infinity;
+      Array.prototype.forEach.call(placeCards.children, function(card, i){
+        var d = Math.abs(card.offsetLeft + card.offsetWidth / 2 - mid);
+        if (d < bestDist) { bestDist = d; best = i; }
+      });
+      if (best !== -1) selectPlace(best, { pan: true });
+    }, 120);
+  });
+
+  function loadPopups(){
+    return fetch("/data/popups.json").then(function(r){ return r.ok ? r.json() : { popups: [] }; })
+      .then(function(body){
+        popupPlaces = (body.popups || []).filter(function(p){ return p.lat && p.lng; })
+          .map(function(p){
+            return { type: "popup", name: p.name, address: p.address, lat: p.lat, lng: p.lng,
+              emoji: p.emoji, period: p.start && p.end ? p.start + " ~ " + p.end : "" };
+          });
+      }).catch(function(){ popupPlaces = []; });
+  }
+
+  function loadArea(chip){
+    mapAreaGroup.querySelectorAll(".chip").forEach(function(c){ c.classList.remove("on"); });
+    chip.classList.add("on");
+    currentArea = chip.dataset.area;
+    naverMap.setCenter(new naver.maps.LatLng(Number(chip.dataset.lat), Number(chip.dataset.lng)));
+    naverMap.setZoom(15);
+    gachaPlaces = [];
+    renderPlaces(false);
+    mapStatus.textContent = currentArea + " 둘러보는 중…";
+
+    fetch("/api/shops?area=" + encodeURIComponent(currentArea)).then(function(r){
+      return r.json().then(function(body){
+        if (!r.ok) throw new Error(body.error || "검색 실패");
+        return body;
+      });
+    }).then(function(body){
+      if (body.area !== currentArea) return; // 그새 다른 지역을 눌렀으면 무시
+      gachaPlaces = body.shops.map(function(s){
+        return { type: "gacha", name: s.name, address: s.address, lat: s.lat, lng: s.lng };
+      });
+      renderPlaces(true);
+    }).catch(function(e){
+      renderPlaces(false);
+      mapStatus.textContent = e.message;
+    });
+  }
+
+  function openMap(){
+    showScreen("screen-map");
+    if (naverMap) return;
+    mapStatus.textContent = "지도를 불러오는 중…";
+    Promise.all([loadNaverMaps(), loadPopups()]).then(function(results){
+      var cfg = results[0];
+      var first = mapAreaGroup.querySelector(".chip");
+      var options = {
+        center: new naver.maps.LatLng(Number(first.dataset.lat), Number(first.dataset.lng)),
+        zoom: 15,
+        // 네이버 기본 UI는 끄고 우리 UI만 보이게 (네이버 로고는 약관상 유지)
+        zoomControl: false,
+        mapTypeControl: false,
+        scaleControl: false,
+        mapDataControl: false,
+        logoControlOptions: { position: naver.maps.Position.BOTTOM_LEFT }
+      };
+      if (cfg.naverMapStyleId) {
+        options.gl = true;
+        options.customStyleId = cfg.naverMapStyleId;
+      }
+      naverMap = new naver.maps.Map("naver-map", options);
+      loadArea(first);
+
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(function(p){
+          new naver.maps.Marker({
+            position: new naver.maps.LatLng(p.coords.latitude, p.coords.longitude), map: naverMap, zIndex: 50,
+            icon: { content: '<div style="width:16px;height:16px;border-radius:50%;background:#2f6fed;border:3px solid #fff;box-shadow:0 0 0 6px rgba(47,111,237,0.2);"></div>', anchor: new naver.maps.Point(8, 8) }
+          });
+        }, function(){}, { timeout: 5000 });
+      }
+    }).catch(function(e){
+      mapStatus.textContent = e.message;
+    });
+  }
+
+  document.getElementById("btn-open-map").addEventListener("click", openMap);
+  document.getElementById("btn-map-back").addEventListener("click", function(){
+    showScreen("screen-home");
+  });
+  mapAreaGroup.querySelectorAll(".chip").forEach(function(chip){
+    chip.addEventListener("click", function(){
+      if (naverMap) loadArea(chip);
+    });
+  });
+  mapFilter.querySelectorAll("button").forEach(function(btn){
+    btn.addEventListener("click", function(){
+      mapFilter.querySelectorAll("button").forEach(function(b){ b.classList.remove("on"); });
+      btn.classList.add("on");
+      currentFilter = btn.dataset.filter;
+      if (naverMap) renderPlaces(true);
+    });
+  });
+
+  // ---- 거래 ----
+  document.getElementById("btn-deal-back").addEventListener("click", function(){
+    showScreen("screen-home");
+  });
+
+  document.getElementById("btn-send").addEventListener("click", function(){
+    var btn = this;
+    if (btn.disabled) return;
+
+    var chat = document.getElementById("chat-body");
+    var bubble = document.createElement("div");
+    bubble.className = "bubble me";
+    bubble.textContent = "거래합시다";
+    chat.appendChild(bubble);
+    chat.scrollTop = chat.scrollHeight;
+
+    btn.disabled = true;
+
+    setTimeout(function(){
+      var note = document.createElement("div");
+      note.className = "sys-note";
+      note.textContent = "게시물이 자동으로 내려갔어요";
+      chat.appendChild(note);
+      chat.scrollTop = chat.scrollHeight;
+
+      if (currentDealItem !== null){
+        var pos = tradeItems.indexOf(currentDealItem);
+        if (pos !== -1) tradeItems.splice(pos, 1);
+        currentDealItem = null;
+      }
+    }, 500);
+  });
+
+  renderHome();
+</script>
+
+<div class="last-updated">마지막으로 고친 날 2026-10-08</div>
+
+</body>
+</html>

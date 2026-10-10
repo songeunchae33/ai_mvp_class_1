@@ -1,12 +1,11 @@
 {
-  "name": "catchcatch",
+  "name": "my-economy",
   "private": true,
   "type": "module",
   "engines": {
     "node": ">=20"
   },
   "dependencies": {
-    "openai": "^7.30.0",
-    "zod": "^4.6.5"
+    "openai": "^7.30.0"
   }
 }
