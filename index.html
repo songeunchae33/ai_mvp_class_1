@@ -163,6 +163,39 @@
   .results button { min-height: 44px; border: none; border-top: 1px solid #EEF2EF; background: transparent; text-align: left; padding: 0 14px; font-size: 14px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; }
   .results button:first-child { border-top: none; }
   .results button:hover { background: var(--soft); }
+
+  /* 상단 검색 */
+  .searchwrap { padding: 0 16px 8px; position: sticky; top: 62px; z-index: 6; background: var(--bg); }
+  .searchbox { display: flex; align-items: center; gap: 8px; background: var(--card); border-radius: 16px; padding: 0 6px 0 14px; min-height: 48px; border: 1.5px solid transparent; }
+  .searchbox:focus-within { border-color: var(--green); }
+  .searchbox input { flex: 1; min-width: 0; border: none; outline: none; font-size: 15px; background: transparent; min-height: 44px; }
+  .searchbox input::placeholder { color: #5E6E64; }
+  .sresults { display: none; position: absolute; left: 16px; right: 16px; top: 56px; background: var(--card); border-radius: 16px; box-shadow: 0 12px 32px rgba(19,38,28,0.18); max-height: 62vh; overflow-y: auto; padding: 6px 0; }
+  .searchwrap.open .sresults:not(:empty) { display: block; }
+  .sg { font-size: 11px; font-weight: 700; color: var(--sub); padding: 8px 14px 2px; }
+  .si { display: flex; justify-content: space-between; align-items: center; gap: 10px; width: 100%; min-height: 44px; padding: 6px 14px; border: none; background: transparent; text-align: left; font-size: 14px; cursor: pointer; }
+  .si:hover, .si:focus-visible { background: var(--soft); }
+  .si .s2 { font-size: 12px; color: var(--sub); }
+  .si.ask { color: var(--green); font-weight: 700; border-top: 1px solid #EEF2EF; margin-top: 4px; }
+  .def { padding: 6px 14px 10px; font-size: 13px; line-height: 1.6; }
+
+  /* 시세 타일 (지수·환율·내 종목 같은 모양) */
+  .mkt { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .mkt .k { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .mkt .add { border: 1.5px dashed #BFD3C6; background: transparent; justify-content: center; cursor: pointer; color: var(--sub); font-size: 13px; font-weight: 700; min-height: 74px; border-radius: 16px; }
+
+  /* 뉴스 한 줄 */
+  .nl a { display: flex; align-items: center; gap: 8px; min-height: 40px; border-top: 1px solid #EEF2EF; font-size: 14px; }
+  .nl a:first-child { border-top: none; }
+  .nl .t1 { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 500; }
+  .nl .src { font-size: 11px; color: var(--sub); flex-shrink: 0; }
+  .nl a:hover .t1 { color: var(--green); }
+  .plus { min-width: 44px; min-height: 36px; border-radius: 12px; border: 1px solid var(--line); background: var(--soft); font-size: 13px; font-weight: 700; cursor: pointer; padding: 0 10px; }
+  .tabs { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; padding: 2px 0 6px; }
+  .tabs::-webkit-scrollbar { display: none; }
+  .tabs .chip { flex-shrink: 0; }
+  .cal .tagc { font-size: 10px; font-weight: 700; color: var(--green); background: #E1F2E8; border-radius: 5px; padding: 2px 5px; margin-right: 4px; }
+  .dday.approx { background: #FFF1C9; color: #7A5200; }
 </style>
 </head>
 <body>
@@ -187,9 +220,10 @@ function saveUi() {
 }
 
 let profile = loadProfile();
-const data = { market: null, news: null, rates: null, calendar: [], benefits: [], loading: false };
+const data = { market: null, news: null, newsFull: null, rates: null, calendar: [], benefits: [], loading: false };
 const ui = {
-  bubble: 0, kw: null, kwNews: null, draft: "", sheet: null,
+  bubble: 0, q: "", sremote: [], searchOpen: false, sheet: null,
+  news: { tab: "issues", kwItems: {} },
   hideMoney: false, quiz: null, // quiz: { day, pick }
   onb: { step: 0, draft: null }, search: { q: "", results: [], sample: false },
   ...loadUi(),
@@ -220,6 +254,25 @@ function investGuide(a) {
   if (a >= 3) return [50, 70];
   return [60, 90];
 }
+
+const GLOSSARY = [
+  { term: "기준금리", alias: ["금리"], def: "한국은행이 정하는 기준이 되는 금리예요. 오르면 대출·예금 금리도 따라 오르는 경향이 있어요." },
+  { term: "FOMC", alias: ["연준", "연방공개시장위원회"], def: "미국 중앙은행(연준)의 금리 결정 회의예요. 1년에 8번 열리고, 결과에 따라 전 세계 증시·환율이 움직여요." },
+  { term: "금통위", alias: ["금융통화위원회"], def: "한국은행에서 기준금리를 정하는 회의예요. 1년에 8번 열려요." },
+  { term: "환율", alias: ["달러", "원화"], def: "1달러를 사는 데 드는 원화 가격이에요. 환율이 오르면(원화 약세) 해외결제·여행 비용이 늘어요." },
+  { term: "ETF", alias: ["상장지수펀드"], def: "여러 종목을 한 바구니에 담아 주식처럼 사고파는 펀드예요." },
+  { term: "PER", alias: ["주가수익비율"], def: "주가를 주당순이익으로 나눈 값이에요. 낮을수록 버는 돈에 비해 주가가 싸다는 뜻이에요." },
+  { term: "DSR", alias: ["총부채원리금상환비율"], def: "연 소득에서 모든 대출의 원금과 이자를 갚는 데 드는 비율이에요. 대출 한도를 정하는 기준이에요." },
+  { term: "LTV", alias: ["담보인정비율"], def: "집값 대비 대출받을 수 있는 비율이에요. LTV 70%면 5억 집에 3억 5천까지 빌릴 수 있어요." },
+  { term: "인플레이션", alias: ["물가"], def: "물가가 계속 오르는 현상이에요. 같은 돈으로 살 수 있는 물건이 줄어들어요." },
+  { term: "스태그플레이션", alias: [], def: "경기는 침체되는데 물가는 오르는 현상이에요." },
+  { term: "예금자보호", alias: ["예금보호"], def: "금융회사가 망해도 1인당, 금융회사별로 원금과 이자를 합쳐 1억원까지 돌려받을 수 있는 제도예요." },
+  { term: "유류할증료", alias: ["항공료", "항공권"], def: "기름값에 따라 항공권에 더 붙는 요금이에요. 매달 바뀌어서 같은 노선도 발권 시기에 따라 값이 달라요." },
+  { term: "코스피", alias: ["KOSPI"], def: "우리나라 대형 기업 중심 주식시장의 종합 지수예요." },
+  { term: "코스닥", alias: ["KOSDAQ"], def: "기술·성장 기업 중심 주식시장의 지수예요." },
+  { term: "배당락", alias: ["배당"], def: "배당 받을 권리가 사라지는 날이에요. 이날 전까지 주식을 갖고 있어야 배당을 받아요." },
+  { term: "복리", alias: ["이자"], def: "이자에 다시 이자가 붙는 방식이에요. 기간이 길수록 단리와 차이가 커져요." },
+];
 
 const QUIZ = [
   { q: "환율이 오르면(원화 약세) 수출 기업에는 보통 유리하다?", a: "O", ex: "같은 1달러어치를 팔아도 원화로 바꾸면 더 많이 받으니까요. 대신 수입 물가는 올라가요." },
@@ -311,6 +364,7 @@ async function getJson(url, opt) {
 async function loadAll(manual = false) {
   if (!profile) return;
   data.loading = true;
+  data.newsFull = null; // 관심사가 바뀌었을 수 있으니 더보기 목록은 다시 받는다
   const names = profile.watch.map((w) => w.name).join(",");
   const interests = [...profile.watch.map((w) => w.name).slice(0, 3), ...profile.prefs.slice(0, 3)].join(",");
   const jobs = [
@@ -338,22 +392,41 @@ function biggestMover() {
 }
 function qtyOf(name) { return Number(profile.watch.find((w) => w.name === name)?.qty) || 0; }
 
-function upcoming(limit = 4) {
+// 금리 일정은 대출·종목·저축·부동산 관심이 있는 사람에게만
+function interestTags() {
+  const t = new Set(profile.prefs);
+  if ((profile.debts || []).length || profile.watch.length || t.has("저축") || t.has("부동산")) t.add("금리");
+  return t;
+}
+function upcoming(limit = 5) {
   const now = today0();
-  const list = data.calendar
-    .map((e) => ({ ...e, d: new Date(e.date + "T00:00:00") }))
-    .filter((e) => e.d >= now && dayDiff(e.d) <= 60);
+  const tags = interestTags();
+  const list = [];
+  for (const e of data.calendar) {
+    if (e.tags && !e.tags.some((x) => tags.has(x))) continue;
+    if (e.ageMax && profile.age && profile.age > e.ageMax) continue;
+    let d;
+    if (e.monthly) {
+      d = new Date(now.getFullYear(), now.getMonth(), e.monthly);
+      if (d < now) d.setMonth(d.getMonth() + 1);
+    } else d = new Date(e.date + "T00:00:00");
+    if (d < now || dayDiff(d) > 100) continue;
+    list.push({ ...e, d, tag: (e.tags || []).find((x) => tags.has(x)) || "" });
+  }
   // 내 일정: 월급날, 대출 이자일 (다음 한 번)
   const next = (day) => {
     const d = new Date(now.getFullYear(), now.getMonth(), Math.min(day, 28));
     if (d < now) d.setMonth(d.getMonth() + 1);
     return d;
   };
-  if (profile.payday) list.push({ d: next(profile.payday), title: "월급날", type: "내 일정", mine: true });
+  if (profile.payday) list.push({ d: next(profile.payday), title: "월급날", tag: "내 일정", mine: true });
   (profile.debts || []).forEach((dbt) => {
-    if (dbt.day) list.push({ d: next(dbt.day), title: `${dbt.name || "대출"} 이자 납부일`, type: "내 일정", mine: true, note: dbt.amount && dbt.rate ? `약 ${won((dbt.amount * 1e4 * dbt.rate) / 100 / 12)}` : "" });
+    if (dbt.day) list.push({ d: next(dbt.day), title: `${dbt.name || "대출"} 이자 납부일`, tag: "내 일정", mine: true, note: dbt.amount && dbt.rate ? `약 ${won((dbt.amount * 1e4 * dbt.rate) / 100 / 12)}` : "" });
   });
-  return list.sort((a, b) => a.d - b.d).slice(0, limit);
+  // 내 일정 → 관심사 확정 일정 → 관심사 예상 일정 → 금리 일정 순으로 자리를 채우고, 보여줄 때는 날짜순
+  const rank = (e) => (e.mine ? 0 : e.tag === "금리" ? 3 : e.approx ? 2 : 1); // 확정 일정이 예상 일정보다 먼저
+  const picked = list.sort((a, b) => rank(a) - rank(b) || a.d - b.d).slice(0, limit);
+  return picked.sort((a, b) => a.d - b.d);
 }
 
 function matchedBenefits() {
@@ -380,7 +453,7 @@ function impacts() {
     else text = up ? "수입품 가격과 해외결제 비용이 조금 오를 수 있어요." : "해외결제·수입품 비용 부담이 조금 줄어요.";
     out.push({ tag: `환율 ${arrow(vs)} ${fmt(m.usd.v, 1)}원`, tone: tone(vs), text });
   }
-  const rateEvent = upcoming(10).find((e) => e.type === "금리" && !e.mine);
+  const rateEvent = upcoming(20).find((e) => (e.tags || []).includes("금리"));
   const when = rateEvent ? `${rateEvent.d.getMonth() + 1}/${rateEvent.d.getDate()} ${rateEvent.title.includes("한국은행") ? "금통위" : "FOMC"}` : "다음 금리 결정";
   if (p.debts === null) {
     out.push({ tag: "금리", tone: "flat", text: "대출이 있다면 알려주세요. 금리가 바뀔 때 내 이자가 얼마나 달라지는지 계산해드려요.", act: "go-my" });
@@ -417,11 +490,12 @@ function bubbleLines() {
   const ev = upcoming(5).find((e) => dayDiff(e.d) <= 14);
   if (ev) {
     const dd = dayDiff(ev.d);
-    L.push({ text: `${dd === 0 ? "오늘" : `${dd}일 뒤`} ‘${esc(ev.title)}’ 일정이 있어요.${ev.type === "금리" ? " 발표 전후로 시장이 출렁일 수 있어요." : ""}` });
+    const when = ev.approx ? `곧(${esc(ev.when)})` : dd === 0 ? "오늘" : `${dd}일 뒤`;
+    L.push({ text: `${when} ‘${esc(ev.title)}’ 일정이 있어요.${(ev.tags || []).includes("금리") ? " 발표 전후로 시장이 출렁일 수 있어요." : ""}` });
   }
   const b = matchedBenefits()[0];
   if (b) L.push({ text: `‘${esc(b.title)}’, ${esc(name)}님 조건에 맞을 수도 있어요. 아래 혜택 칸에서 확인해 보세요.` });
-  L.push({ text: "궁금한 건 아래 질문창에 편하게 물어보세요!", act: "focus-ask" });
+  L.push({ text: "궁금한 건 맨 위 검색창에 편하게 물어보세요!", act: "focus-ask" });
   return L;
 }
 
@@ -456,55 +530,90 @@ function summaryForAi() {
 }
 
 // ───────────────────────── 화면: 홈 ─────────────────────────
+// 뉴스 제목을 몇 단어로 줄이기: [단독] 같은 머리말, 언론사 꼬리, 부제(… · - |) 떼고 22자 안팎에서 자르기
+function shortTitle(t) {
+  let s = String(t || "").replace(/^\s*(\[[^\]]*\]|【[^】]*】|<[^>]*>)\s*/g, "").replace(/\s*[-|]\s*[^-|]{2,12}$/, "");
+  s = s.split(/…|\.\.\.|\s·\s|\s-\s|\s\|\s|,\s/)[0].trim() || s;
+  if (s.length > 22) {
+    const cut = s.slice(0, 22);
+    const sp = cut.lastIndexOf(" ");
+    s = (sp > 10 ? cut.slice(0, sp) : cut) + "…";
+  }
+  return s;
+}
+function newsLine(it) {
+  return `<a href="${esc(it.url)}" target="_blank" rel="noopener" title="${esc(it.title)}">
+    ${it.tag ? `<span class="badge b-green">${esc(it.tag)}</span>` : ""}<span class="t1">${esc(shortTitle(it.title))}</span><span class="src">${esc(it.source || "")}</span></a>`;
+}
+function newsList(items, numbered) { // 뉴스 더보기 화면: 제목 전체
+  return (items || []).map((it, i) => `<a href="${esc(it.url)}" target="_blank" rel="noopener">
+      ${numbered ? `<span class="no">${i + 1}</span>` : ""}
+      <div style="flex:1"><div class="t">${esc(it.title)}</div><div class="m">${it.tag ? `<span class="badge b-green">${esc(it.tag)}</span>` : ""}<span>${esc(it.source || "")}</span>${it.at ? `<span>· ${ago(it.at)}</span>` : ""}</div></div></a>`).join("");
+}
+function tile(name, v, c, dec) {
+  return `<div><span class="k">${esc(name)}</span><span class="v num">${v === undefined || v === null ? "-" : fmt(v, dec)}</span><span class="c num ${tone(c)}">${pct(c)}</span></div>`;
+}
+const SEARCH_ICON = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" style="flex-shrink:0;color:#4A5A50"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>`;
+
+function header() {
+  const m = data.market;
+  return `<header class="top">
+    <button class="avatar" data-act="go-my" aria-label="마이페이지 열기">${mascot(36)}<span class="brand hand">나만의 경제</span></button>
+    <div style="display:flex;align-items:center">
+      <span class="asof num">${m ? `${ymdLabel(m.kospi?.date)} 종가` : "불러오는 중"}</span>
+      <button class="icon-btn" data-act="refresh" aria-label="새로고침">${ICON.refresh}</button>
+    </div>
+  </header>
+  <div class="searchwrap ${ui.searchOpen ? "open" : ""}" id="searchwrap">
+    <form class="searchbox" id="searchform" role="search">
+      ${SEARCH_ICON}
+      <label for="q" class="sr">앱 안에서 검색하거나 질문하기</label>
+      <input id="q" type="search" autocomplete="off" enterkeyhint="search" placeholder="종목·뉴스·일정·용어 검색, 질문도 OK" value="${esc(ui.q)}">
+    </form>
+    <div class="sresults" id="sresults">${searchResults()}</div>
+  </div>`;
+}
+
 function viewHome() {
   const m = data.market;
   const lines = bubbleLines();
   if (ui.bubble >= lines.length) ui.bubble = 0;
   const line = lines[ui.bubble];
-  const asof = m ? `${ymdLabel(m.kospi?.date)} 종가 기준` : "불러오는 중";
 
-  const marketCells = m ? [
-    ["코스피", m.kospi?.v, m.kospi?.pct, 2],
-    ["코스닥", m.kosdaq?.v, m.kosdaq?.pct, 2],
-    ["원/달러", m.usd?.v, m.usd?.pct, 1],
-  ].map(([k, v, c, d]) => `<div><span class="k">${k}</span><span class="v num">${fmt(v, d)}</span><span class="c num ${tone(c)}">${pct(c)}</span></div>`).join("")
-    : `<div><span class="k">코스피</span><span class="v">…</span></div><div><span class="k">코스닥</span><span class="v">…</span></div><div><span class="k">원/달러</span><span class="v">…</span></div>`;
-
-  const stocks = m?.stocks || [];
-  const stockRows = profile.watch.length
-    ? stocks.map((s) => {
-        const q = qtyOf(s.name);
-        const sub = s.missing ? "시세를 찾지 못했어요" : q ? `${fmt(q)}주 · 평가 ${won(q * s.v)}` : s.market || "";
-        return `<div class="row"><div><div class="name">${esc(s.name)}</div><div class="sub">${esc(sub)}</div></div>
-          <div style="text-align:right"><div class="name num">${s.missing ? "-" : fmt(s.v) + "원"}</div><div class="num ${tone(s.pct)}" style="font-size:12px;font-weight:700">${s.missing ? "" : pct(s.pct)}</div></div></div>`;
-      }).join("") || `<div class="row"><span class="sub">불러오는 중…</span></div>`
-    : `<div class="row"><span class="sub">관심 종목이 아직 없어요</span><button class="btn ghost" data-act="go-my">추가하기</button></div>`;
+  // 지수·환율·내 종목을 같은 모양의 작은 타일로
+  const tiles = m
+    ? [tile("코스피", m.kospi?.v, m.kospi?.pct, 2), tile("코스닥", m.kosdaq?.v, m.kosdaq?.pct, 2), tile("원/달러", m.usd?.v, m.usd?.pct, 1),
+       ...(m.stocks || []).map((s) => tile(s.name, s.missing ? null : s.v, s.missing ? null : s.pct, 0))].join("")
+    : ["코스피", "코스닥", "원/달러", ...profile.watch.map((w) => w.name)].map((n) => `<div><span class="k">${esc(n)}</span><span class="v">…</span></div>`).join("");
+  const addTile = profile.watch.length < 10 ? `<button class="add" data-act="go-my" data-focus="watch">+ 종목</button>` : "";
 
   const imp = impacts().map((c) => `<${c.act ? `button data-act="${c.act}" style="cursor:pointer"` : "div"} class="impact">
       <span class="badge b-${c.tone}" style="align-self:flex-start">${esc(c.tag)}</span><p>${esc(c.text)}</p></${c.act ? "button" : "div"}>`).join("");
 
   const n = data.news;
   const letters = [...LETTERS.filter((l) => profile.letters.includes(l.id)), ...profile.customLetters];
-  const newsList = (items, numbered) => (items || []).map((it, i) => `<a href="${esc(it.url)}" target="_blank" rel="noopener">
-      ${numbered ? `<span class="no">${i + 1}</span>` : ""}
-      <div style="flex:1"><div class="t">${esc(it.title)}</div><div class="m">${it.tag ? `<span class="badge b-green">${esc(it.tag)}</span>` : ""}<span>${esc(it.source || "")}</span>${it.at ? `<span>· ${ago(it.at)}</span>` : ""}</div></div></a>`).join("");
-
   const kws = n?.keywords || [];
-  const kwBlock = kws.length ? `<section class="card">
-      <div class="sec-title"><h2>오늘의 경제 키워드</h2><span>눌러서 관련 뉴스</span></div>
-      <div class="chips">${kws.map((k) => `<button class="chip ${ui.kw === k ? "on" : ""}" data-act="kw" data-k="${esc(k)}">#${esc(k)}</button>`).join("")}</div>
-      ${ui.kw ? `<div class="news" style="margin-top:10px">${ui.kwNews ? newsList(ui.kwNews) || `<p class="hint">관련 뉴스가 없어요</p>` : `<p class="hint">불러오는 중…</p>`}</div>` : ""}
-    </section>` : "";
+  const newsBlock = `<section class="card">
+      <div class="sec-title"><h2>뉴스</h2><div style="display:flex;gap:6px;align-items:center">${n?.sample ? `<span class="badge b-sample">예시</span>` : ""}<button class="plus" data-act="news-more" aria-label="뉴스 더보기">+ 더보기</button></div></div>
+      ${letters.length ? `<div class="chips" style="margin-bottom:8px"><span class="hint">구독 중</span>${letters.map((l) => `<a class="chip small" href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.name)} ${ICON.out}</a>`).join("")}</div>` : ""}
+      <div class="hint" style="font-weight:700;margin-top:4px">오늘의 이슈</div>
+      <div class="nl">${n ? (n.issues || []).slice(0, 2).map(newsLine).join("") : `<p class="hint">불러오는 중…</p>`}</div>
+      <div class="hint" style="font-weight:700;margin-top:10px">나를 위한 뉴스</div>
+      <div class="nl">${n ? (n.forYou || []).slice(0, 2).map(newsLine).join("") || `<p class="hint">관심 종목·선호를 추가하면 떠요</p>` : `<p class="hint">불러오는 중…</p>`}</div>
+      ${kws.length ? `<div class="chips" style="margin-top:10px"><span class="hint">오늘의 키워드</span>${kws.map((k) => `<button class="chip small" data-act="kw" data-k="${esc(k)}">#${esc(k)}</button>`).join("")}</div>` : ""}
+    </section>`;
 
   const cal = upcoming();
   const calBlock = `<section class="card">
-      <div class="sec-title"><h2>다가오는 경제 일정</h2><span>내 일정 포함</span></div>
+      <div class="sec-title"><h2>나를 위한 일정</h2><span>${profile.prefs.length ? esc(profile.prefs.slice(0, 3).join("·")) + " 관심" : "관심사를 고르면 맞춰드려요"}</span></div>
       ${cal.length ? cal.map((e) => {
         const dd = dayDiff(e.d);
-        return `<div class="cal ${e.mine ? "mine" : ""}"><span class="dday ${dd <= 7 ? "soon" : ""}">${dd === 0 ? "오늘" : "D-" + dd}</span>
-          <div><div class="t">${esc(e.title)}</div><div class="d">${e.d.getMonth() + 1}월 ${e.d.getDate()}일 (${"일월화수목금토"[e.d.getDay()]})${e.time ? " " + e.time : ""}${e.note ? " · " + esc(e.note) : ""}</div></div></div>`;
-      }).join("") : `<p class="hint">예정된 일정이 없어요</p>`}
-      ${!profile.payday ? `<button class="link-btn" style="padding-left:0" data-act="go-my">월급날·이자일 추가하기 ›</button>` : ""}
+        const badge = e.approx ? `<span class="dday approx">예상</span>` : `<span class="dday ${dd <= 7 ? "soon" : ""}">${dd === 0 ? "오늘" : "D-" + dd}</span>`;
+        const when = e.approx ? e.when : `${e.d.getMonth() + 1}월 ${e.d.getDate()}일 (${"일월화수목금토"[e.d.getDay()]})${e.time ? " " + e.time : ""}`;
+        const inner = `${badge}<div style="flex:1;min-width:0"><div class="t">${esc(e.title)}</div><div class="d"><span class="tagc">${esc(e.tag)}</span>${esc(when)}${e.note ? " · " + esc(e.note) : ""}</div></div>`;
+        return e.url ? `<a class="cal ${e.mine ? "mine" : ""}" href="${esc(e.url)}" target="_blank" rel="noopener">${inner}</a>` : `<div class="cal ${e.mine ? "mine" : ""}">${inner}</div>`;
+      }).join("") : `<p class="hint">관심사에 맞는 일정이 아직 없어요</p>`}
+      ${!profile.payday || !profile.prefs.length ? `<button class="link-btn" style="padding-left:0" data-act="go-my" data-focus="${profile.prefs.length ? "assets" : "risk"}">${profile.prefs.length ? "월급날·이자일 추가하기" : "관심사 고르기"} ›</button>` : ""}
     </section>`;
 
   const bens = matchedBenefits();
@@ -531,14 +640,7 @@ function viewHome() {
   const nq = nextQuestion();
   const moreBlock = nq ? `<section class="more">${moreQuestion(nq)}</section>` : "";
 
-  return `
-  <header class="top">
-    <button class="avatar" data-act="go-my" aria-label="마이페이지 열기">${mascot(36)}<span class="brand hand">나만의 경제</span></button>
-    <div style="display:flex;align-items:center">
-      <span class="asof num">${asof}</span>
-      <button class="icon-btn" data-act="refresh" aria-label="새로고침">${ICON.refresh}</button>
-    </div>
-  </header>
+  return `${header()}
   <main class="scroll">
     <section class="hero">
       ${mascot(76)}
@@ -552,30 +654,15 @@ function viewHome() {
     </section>
 
     <section>
-      <div class="mkt">${marketCells}</div>
-      <div class="hint" style="margin:6px 4px 0;display:flex;gap:6px;align-items:center">
-        ${m ? `주가 ${ymdLabel(m.kospi?.date)} 종가 · 환율 ${ymdLabel(m.usd?.date)} 수출입은행 고시` : ""}
+      <div class="mkt">${tiles}${addTile}</div>
+      <div class="hint" style="margin:6px 4px 0;display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+        ${m ? `주가 ${ymdLabel(m.kospi?.date)} 종가 · 환율 ${ymdLabel(m.usd?.date)} 고시` : ""}
         ${m?.sample ? `<span class="badge b-sample">예시 데이터</span>` : ""}
       </div>
     </section>
 
-    <section class="card" style="padding-top:8px;padding-bottom:4px">
-      <div class="sec-title" style="margin:6px 0 2px"><h2>내 종목</h2><button class="link-btn" data-act="go-my">편집</button></div>
-      <div class="rows">${stockRows}</div>
-    </section>
-
     ${imp ? `<section><div class="sec-title"><h2>오늘, 나에게 미치는 영향</h2></div><div class="strip bleed">${imp}</div></section>` : ""}
-
-    <section class="card">
-      <div class="sec-title"><h2>뉴스</h2>${n?.sample ? `<span class="badge b-sample">예시 데이터</span>` : ""}</div>
-      ${letters.length ? `<div class="chips" style="margin-bottom:12px"><span class="hint">구독 중</span>${letters.map((l) => `<a class="chip" href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.name)} ${ICON.out}</a>`).join("")}</div>` : ""}
-      <div class="hint" style="font-weight:700;margin-bottom:2px">오늘의 이슈</div>
-      <div class="news">${n ? newsList(n.issues, true) : `<p class="hint">불러오는 중…</p>`}</div>
-      <div class="hint" style="font-weight:700;margin:12px 0 2px">${esc(profile.nickname || "나")}님이 관심 있을 만한 뉴스</div>
-      <div class="news">${n ? newsList(n.forYou) || `<p class="hint">관심 종목이나 선호를 추가하면 맞춤 뉴스가 떠요</p>` : `<p class="hint">불러오는 중…</p>`}</div>
-    </section>
-
-    ${kwBlock}
+    ${newsBlock}
     ${calBlock}
     ${benBlock}
     ${quizBlock}
@@ -583,15 +670,119 @@ function viewHome() {
 
     <p class="foot">주가는 전일 종가(공공데이터포털), 환율은 한국수출입은행 고시, 뉴스는 네이버 검색 기준이에요.<br>이 앱의 정보는 투자 권유가 아닌 참고용이에요.</p>
   </main>
-  <div class="askbar">
-    <div class="strip">${["내 대출, 금리 오르면 이자 얼마?", "지금 환전해도 될까?", "FOMC가 뭐야?", "내 성향에 맞는 저축 방법은?"].map((q) => `<button class="chip small" style="flex-shrink:0" data-act="suggest" data-q="${esc(q)}">${esc(q)}</button>`).join("")}</div>
-    <form class="askform" id="askform">
-      <label for="ask" class="sr">캐릭터에게 경제 질문하기</label>
-      <input id="ask" name="q" type="text" maxlength="300" autocomplete="off" placeholder="금리가 지금처럼 오르면 어떤 영향이 있을까?" value="${esc(ui.draft)}">
-      <button class="send" type="submit" aria-label="질문 보내기">${ICON.send}</button>
-    </form>
-  </div>
   ${ui.sheet ? viewSheet() : ""}`;
+}
+
+// ───────────────────────── 화면: 뉴스 더보기 ─────────────────────────
+function viewNews() {
+  const f = data.newsFull;
+  const N = ui.news;
+  const tags = [...new Set((f?.forYou || []).map((x) => x.tag))];
+  const kws = data.news?.keywords || [];
+  const kwTabs = [...new Set([...kws, ...(N.tab.startsWith("kw:") ? [N.tab.slice(3)] : [])])];
+  const tabs = [["issues", "오늘의 이슈"], ["foryou", "나를 위한 뉴스"], ...tags.map((t) => ["tag:" + t, t]), ...kwTabs.map((k) => ["kw:" + k, "#" + k])];
+  let items = null;
+  if (N.tab.startsWith("kw:")) items = N.kwItems[N.tab.slice(3)];
+  else if (f) items = N.tab === "issues" ? f.issues : N.tab === "foryou" ? f.forYou : (f.forYou || []).filter((x) => "tag:" + x.tag === N.tab);
+  return `<header class="page-head">
+    <button class="icon-btn" data-act="go-home" aria-label="홈으로">${ICON.back}</button>
+    <h1>뉴스</h1>${f?.sample ? `<span class="badge b-sample" style="margin-left:8px">예시 데이터</span>` : ""}
+  </header>
+  <main class="scroll">
+    <div class="tabs" role="tablist">${tabs.map(([id, label]) => `<button class="chip ${N.tab === id ? "on" : ""}" role="tab" aria-selected="${N.tab === id}" data-act="news-tab" data-t="${esc(id)}">${esc(label)}</button>`).join("")}</div>
+    <section class="card"><div class="news">${items ? newsList(items, N.tab === "issues") || `<p class="hint">뉴스가 없어요</p>` : `<p class="hint">불러오는 중…</p>`}</div></section>
+    <p class="foot">제목을 누르면 언론사 원문으로 이동해요.</p>
+  </main>`;
+}
+
+async function openNews(tab) {
+  ui.news.tab = tab;
+  if (location.hash !== "#news") location.hash = "#news"; else render();
+  const jobs = [];
+  if (!data.newsFull) {
+    const interests = [...profile.watch.map((w) => w.name).slice(0, 4), ...profile.prefs.slice(0, 3)].join(",");
+    jobs.push(getJson(`/api/news?full=1&interests=${encodeURIComponent(interests)}`).then((j) => (data.newsFull = j)).catch(() => (data.newsFull = { issues: [], forYou: [] })));
+  }
+  if (tab.startsWith("kw:") && !ui.news.kwItems[tab.slice(3)]) {
+    const k = tab.slice(3);
+    jobs.push(getJson(`/api/news?full=1&q=${encodeURIComponent(k)}`).then((j) => (ui.news.kwItems[k] = j.items || [])).catch(() => (ui.news.kwItems[k] = [])));
+  }
+  await Promise.all(jobs);
+  if (route() === "news") render();
+}
+
+// ───────────────────────── 상단 검색 ─────────────────────────
+const MENU = [
+  { label: "내 자산 진단", keys: ["자산", "진단", "순자산", "비상금"], focus: "diag" },
+  { label: "내 자산 입력", keys: ["자산", "예금", "현금", "월급"], focus: "assets" },
+  { label: "대출(부채) 입력", keys: ["대출", "부채", "이자", "빚"], focus: "debts" },
+  { label: "투자 성향·관심사", keys: ["성향", "위험", "관심", "선호", "쇼핑", "여행", "부동산"], focus: "risk" },
+  { label: "관심 종목 편집", keys: ["종목", "주식", "관심"], focus: "watch" },
+  { label: "뉴스레터 관리", keys: ["뉴스레터", "구독", "머니레터", "뉴닉"], focus: "letters" },
+  { label: "기본 정보 (닉네임·나이·소득)", keys: ["닉네임", "이름", "나이", "소득", "성별", "연봉"], focus: "basic" },
+  { label: "개인정보·데이터 지우기", keys: ["개인정보", "삭제", "데이터", "지우기"], focus: "privacy" },
+];
+const SUGGEST = ["내 대출, 금리 오르면 이자 얼마?", "지금 환전해도 될까?", "FOMC가 뭐야?", "내 성향에 맞는 저축 방법은?"];
+
+function searchResults() {
+  const q = ui.q.trim();
+  if (!q) return `<div class="sg">이렇게 물어볼 수 있어요</div>${SUGGEST.map((s) => `<button class="si" data-act="ask" data-q="${esc(s)}"><span>${esc(s)}</span><span class="s2">질문</span></button>`).join("")}`;
+  const lc = q.toLowerCase();
+  const has = (s) => String(s || "").toLowerCase().includes(lc);
+  const out = [];
+  const group = (title, rows) => { if (rows.length) out.push(`<div class="sg">${title}</div>${rows.join("")}`); };
+  const m = data.market;
+
+  const quotes = [];
+  if (m) {
+    [["코스피", m.kospi, 2], ["코스닥", m.kosdaq, 2], ["원/달러 환율", m.usd, 1]].forEach(([nm, v, d]) => {
+      if (v && has(nm)) quotes.push(`<div class="si"><span>${nm}</span><span class="num">${fmt(v.v, d)} <span class="${tone(v.pct)}">${pct(v.pct)}</span></span></div>`);
+    });
+    (m.stocks || []).filter((s) => has(s.name)).forEach((s) => quotes.push(`<div class="si"><span>${esc(s.name)} <span class="s2">내 종목</span></span><span class="num">${s.missing ? "-" : fmt(s.v) + "원"} <span class="${tone(s.pct)}">${s.missing ? "" : pct(s.pct)}</span></span></div>`));
+  }
+  const mine = new Set(profile.watch.map((w) => w.name));
+  (ui.sremote || []).filter((r) => !mine.has(r.name)).slice(0, 4)
+    .forEach((r) => quotes.push(`<button class="si" data-act="add-watch-s" data-v="${esc(r.name)}"><span>${esc(r.name)} <span class="s2">${esc(r.market || "")}</span></span><span class="s2" style="color:var(--green);font-weight:700">+ 관심 종목</span></button>`));
+  group("시세·종목", quotes);
+
+  group("경제 용어", GLOSSARY.filter((g) => has(g.term) || (g.alias || []).some(has)).slice(0, 2)
+    .map((g) => `<div class="si" style="padding-bottom:0"><b>${esc(g.term)}</b></div><div class="def">${esc(g.def)}</div>`));
+
+  const pool = [...(data.news?.issues || []), ...(data.news?.forYou || []), ...(data.newsFull?.issues || []), ...(data.newsFull?.forYou || [])];
+  const seen = new Set();
+  const news = pool.filter((n) => has(n.title) && !seen.has(n.url) && seen.add(n.url)).slice(0, 3)
+    .map((n) => `<a class="si" href="${esc(n.url)}" target="_blank" rel="noopener"><span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(shortTitle(n.title))}</span><span class="s2">${esc(n.source || "")}</span></a>`);
+  news.push(`<button class="si" data-act="kw" data-k="${esc(q)}"><span>‘${esc(q)}’ 뉴스 더 보기</span><span class="s2">›</span></button>`);
+  group("뉴스", news);
+
+  group("일정", data.calendar.filter((e) => has(e.title) || (e.tags || []).some(has)).slice(0, 3)
+    .map((e) => `<div class="si"><span>${esc(e.title)}</span><span class="s2">${esc(e.approx ? e.when : e.monthly ? `매달 ${e.monthly}일` : `${Number(e.date.slice(5, 7))}/${Number(e.date.slice(8, 10))}`)}</span></div>`));
+
+  group("혜택·정책", data.benefits.filter((b) => has(b.title) || has(b.desc) || has(b.tag)).slice(0, 3)
+    .map((b) => `<a class="si" href="${esc(b.url)}" target="_blank" rel="noopener"><span>${esc(b.title)}</span><span class="s2">${esc(b.tag)} ${ICON.out}</span></a>`));
+
+  group("메뉴", MENU.filter((x) => has(x.label) || x.keys.some((k) => k.includes(q) || q.includes(k))).slice(0, 3)
+    .map((x) => `<button class="si" data-act="go-my" data-focus="${x.focus}"><span>${esc(x.label)}</span><span class="s2">마이페이지 ›</span></button>`));
+
+  out.push(`<button class="si ask" data-act="ask" data-q="${esc(q)}"><span style="display:flex;align-items:center;gap:8px">${mascot(22)} 캐릭터에게 ‘${esc(q.length > 16 ? q.slice(0, 16) + "…" : q)}’ 물어보기</span><span>›</span></button>`);
+  return out.join("");
+}
+function refreshResults() {
+  const box = document.getElementById("sresults");
+  if (box) box.innerHTML = searchResults();
+}
+
+async function askAi(q) {
+  ui.sheet = { q, loading: true };
+  ui.q = ""; ui.sremote = []; ui.searchOpen = false;
+  render();
+  try {
+    const j = await getJson("/api/ask", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ question: q, ...summaryForAi() }) });
+    ui.sheet = { q, a: j.answer || "답을 만들지 못했어요." };
+  } catch (err) {
+    ui.sheet = { q, a: err.body?.error || "지금은 답할 수 없어요. 잠시 후 다시 시도해 주세요." };
+  }
+  if (ui.sheet) render();
 }
 
 function ago(iso) {
@@ -691,7 +882,7 @@ function viewMy() {
       <div class="hint">${p.age ? `만 ${p.age}세 · ` : ""}${riskType(p.avert)} · ${p.prefs.map(esc).join(", ") || "선호 미입력"}</div></div>
     </section>
 
-    <section class="card">
+    <section class="card" id="sec-diag">
       <div class="sec-title"><h2>내 자산 진단</h2><button class="link-btn" data-act="toggle-hide">${hide ? "금액 보이기" : "금액 숨기기"}</button></div>
       ${hasAssets ? `
         <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px"><span class="hint">순자산</span><span class="num" style="font-size:24px;font-weight:700">${money(net)}</span></div>
@@ -702,7 +893,7 @@ function viewMy() {
       : `<p class="hint" style="margin:0">아래에 자산을 입력하면 진단해드려요.</p>`}
     </section>
 
-    <section class="card form">
+    <section class="card form" id="sec-basic">
       <div class="sec-title"><h2>기본 정보</h2></div>
       <div class="grid2">
         <div><label class="lb" for="f-nick">닉네임</label><input class="field" id="f-nick" data-field="nickname" value="${esc(p.nickname)}" maxlength="12"></div>
@@ -712,15 +903,15 @@ function viewMy() {
       </div>
     </section>
 
-    <section class="card form">
-      <div class="sec-title"><h2>투자 성향</h2><span class="type-pill" id="avert-type">${riskType(p.avert)}</span></div>
+    <section class="card form" id="sec-risk">
+      <div class="sec-title"><h2>투자 성향 · 관심사</h2><span class="type-pill" id="avert-type">${riskType(p.avert)}</span></div>
       <label class="lb" for="f-avert">위험을 얼마나 피하고 싶나요? <b class="num" id="avert-val" style="color:var(--ink)">${p.avert}/10</b></label>
       <input class="range" id="f-avert" type="range" min="1" max="10" step="1" value="${p.avert}" data-field="avert">
       <div class="range-ends"><span>1 · 위험 괜찮아요</span><span>10 · 손실은 싫어요</span></div>
       <div><span class="lb">무엇에 가치를 두나요? (여러 개)</span><div class="chips">${PREFS.map((x) => `<button class="chip ${p.prefs.includes(x) ? "on" : ""}" data-act="pref" data-v="${x}" aria-pressed="${p.prefs.includes(x)}">${x}</button>`).join("")}</div></div>
     </section>
 
-    <section class="card form">
+    <section class="card form" id="sec-watch">
       <div class="sec-title"><h2>관심 종목</h2><span>보유 수량을 넣으면 손익을 보여줘요</span></div>
       <div class="rows">${watchRows || `<p class="hint" style="margin:0">아직 없어요</p>`}</div>
       ${stockSearch()}
@@ -742,7 +933,7 @@ function viewMy() {
       <button class="btn ghost" data-act="add-debt">+ 대출 추가</button>
     </section>
 
-    <section class="card form">
+    <section class="card form" id="sec-letters">
       <div class="sec-title"><h2>구독 중인 뉴스레터</h2><span>홈에서 바로 열 수 있어요</span></div>
       <div class="chips">${LETTERS.map((l) => `<button class="chip ${p.letters.includes(l.id) ? "on" : ""}" data-act="letter" data-v="${l.id}" aria-pressed="${p.letters.includes(l.id)}">${l.name} · ${l.by}</button>`).join("")}
         ${p.customLetters.map((l, i) => `<span class="chip on">${esc(l.name)}<button class="icon-btn" style="width:28px;height:28px;color:#fff" data-act="rm-letter" data-i="${i}" aria-label="${esc(l.name)} 삭제">${ICON.x}</button></span>`).join("")}</div>
@@ -753,7 +944,7 @@ function viewMy() {
       </div>
     </section>
 
-    <section class="card form">
+    <section class="card form" id="sec-privacy">
       <div class="sec-title"><h2>개인정보 관리</h2></div>
       <p style="margin:0;font-size:14px;line-height:1.6">입력한 정보는 서버에 저장하지 않고 <b>이 기기(브라우저)에만</b> 저장돼요. 질문창을 쓸 때만 나이대·성향·금액 요약이 답변을 만드는 데 쓰여요 (닉네임은 보내지 않아요).</p>
       <button class="btn danger" data-act="wipe">내 정보 전부 지우기</button>
@@ -762,16 +953,19 @@ function viewMy() {
   </main>`;
 }
 
-function stockSearch() {
+function stockResults() {
   const s = ui.search;
-  const have = new Set(profile ? profile.watch.map((w) => w.name) : (ui.onb.draft?.watch || []).map((w) => w.name));
+  const have = new Set(target().watch.map((w) => w.name));
   const pop = POPULAR.filter((n) => !have.has(n));
+  return `${s.results.length ? `<div class="results" style="margin-top:6px">${s.results.map((r) => `<button data-act="add-watch" data-v="${esc(r.name)}"${have.has(r.name) ? " disabled" : ""}><span>${esc(r.name)}</span><span class="hint">${esc(r.market || "")} ${have.has(r.name) ? "추가됨" : "+ 추가"}</span></button>`).join("")}</div>`
+        : s.q && s.sample ? `<p class="hint">시세 키를 연결하면 검색돼요. 아래 인기 종목에서 골라보세요.</p>` : ""}
+      ${pop.length ? `<div class="chips" style="margin-top:10px"><span class="hint">인기</span>${pop.map((n) => `<button class="chip small" data-act="add-watch" data-v="${esc(n)}">+ ${esc(n)}</button>`).join("")}</div>` : ""}`;
+}
+function stockSearch() {
   return `<div>
       <label class="lb" for="stock-q">종목 검색</label>
-      <input class="field" id="stock-q" placeholder="종목 이름 (예: 삼성)" autocomplete="off" value="${esc(s.q)}" data-search="1">
-      ${s.results.length ? `<div class="results" style="margin-top:6px">${s.results.map((r) => `<button data-act="add-watch" data-v="${esc(r.name)}"${have.has(r.name) ? " disabled" : ""}><span>${esc(r.name)}</span><span class="hint">${esc(r.market || "")} ${have.has(r.name) ? "추가됨" : "+ 추가"}</span></button>`).join("")}</div>`
-        : s.q && s.sample ? `<p class="hint">시세 키를 연결하면 검색돼요. 아래 인기 종목에서 골라보세요.</p>` : ""}
-      ${pop.length ? `<div class="chips" style="margin-top:10px"><span class="hint">인기</span>${pop.map((n) => `<button class="chip small" data-act="add-watch" data-v="${esc(n)}">+ ${esc(n)}</button>`).join("")}</div>` : ""}
+      <input class="field" id="stock-q" placeholder="종목 이름 (예: 삼성)" autocomplete="off" value="${esc(ui.search.q)}" data-search="1">
+      <div id="stock-results">${stockResults()}</div>
     </div>`;
 }
 
@@ -820,14 +1014,14 @@ function viewOnboard() {
 // ───────────────────────── 라우팅 / 그리기 ─────────────────────────
 function route() {
   if (!profile) return "onboard";
-  return location.hash === "#my" ? "my" : "home";
+  return location.hash === "#my" ? "my" : location.hash === "#news" ? "news" : "home";
 }
 function render() {
   const r = route();
   const app = document.getElementById("app");
   const y = window.scrollY;
   const focusId = document.activeElement?.id;
-  app.innerHTML = r === "onboard" ? viewOnboard() : r === "my" ? viewMy() : viewHome();
+  app.innerHTML = r === "onboard" ? viewOnboard() : r === "my" ? viewMy() : r === "news" ? viewNews() : viewHome();
   window.scrollTo(0, y);
   if (focusId) document.getElementById(focusId)?.focus();
 }
@@ -835,7 +1029,7 @@ function go(hash) {
   if (location.hash === hash || (!location.hash && hash === "#home")) { render(); window.scrollTo(0, 0); }
   else location.hash = hash;
 }
-window.addEventListener("hashchange", () => { ui.search = { q: "", results: [], sample: false }; render(); window.scrollTo(0, 0); });
+window.addEventListener("hashchange", () => { ui.search = { q: "", results: [], sample: false }; ui.searchOpen = false; render(); window.scrollTo(0, 0); });
 
 // 지금 편집 중인 프로필 (첫 설문 중이면 초안)
 function target() { return profile || ui.onb.draft; }
@@ -857,16 +1051,19 @@ document.addEventListener("click", async (e) => {
     case "go-home": go("#home"); break;
     case "refresh": loadAll(true); break;
     case "next-line": ui.bubble++; render(); break;
-    case "focus-ask": document.getElementById("ask")?.focus(); break;
-    case "suggest": ui.draft = el.dataset.q; render(); document.getElementById("ask")?.focus(); break;
-    case "kw": {
-      const k = el.dataset.k;
-      if (ui.kw === k) { ui.kw = null; render(); break; }
-      ui.kw = k; ui.kwNews = null; render();
-      try { ui.kwNews = (await getJson(`/api/news?q=${encodeURIComponent(k)}`)).items; } catch { ui.kwNews = []; }
-      if (ui.kw === k) render();
+    case "focus-ask": window.scrollTo(0, 0); document.getElementById("q")?.focus(); break;
+    case "ask": askAi(el.dataset.q); break;
+    case "news-more": openNews("issues"); break;
+    case "news-tab": openNews(el.dataset.t); break;
+    case "add-watch-s": {
+      const v = el.dataset.v;
+      if (profile.watch.length >= 10) { toast("관심 종목은 10개까지예요"); break; }
+      profile.watch.push({ name: v, qty: null }); saveProfile();
+      ui.q = ""; ui.sremote = []; ui.searchOpen = false; render(); loadAll();
+      toast(`${v}${josa(v, "을", "를")} 관심 종목에 추가했어요`);
       break;
     }
+    case "kw": ui.q = ""; ui.searchOpen = false; openNews("kw:" + el.dataset.k); break;
     case "quiz": ui.quiz = { day: Number(el.dataset.day), pick: el.dataset.o }; saveUi(); render(); break;
     case "close-sheet": ui.sheet = null; render(); break;
     case "skip": t.skipped = { ...(t.skipped || {}), [el.dataset.k]: true }; commit(); break;
@@ -964,10 +1161,23 @@ function showAvert(v) {
   if (b) b.textContent = riskType(v);
 }
 
-let searchTimer;
+let searchTimer, remoteTimer;
 document.addEventListener("input", (e) => {
   const el = e.target;
-  if (el.id === "ask") { ui.draft = el.value; return; }
+  if (el.id === "q") {
+    ui.q = el.value;
+    refreshResults();
+    clearTimeout(remoteTimer);
+    const q = el.value.trim();
+    ui.sremote = [];
+    if (q.length >= 2) remoteTimer = setTimeout(async () => {
+      try {
+        const j = await getJson(`/api/market?search=${encodeURIComponent(q)}`);
+        if (ui.q.trim() === q) { ui.sremote = j.results || []; refreshResults(); }
+      } catch {}
+    }, 350);
+    return;
+  }
   if (el.dataset.o) { // 첫 설문 입력
     const d = ui.onb.draft;
     if (el.dataset.o === "nickname") d.nickname = el.value.slice(0, 12);
@@ -982,37 +1192,40 @@ document.addEventListener("input", (e) => {
     ui.search.q = el.value;
     clearTimeout(searchTimer);
     const q = el.value.trim();
-    if (!q) { ui.search.results = []; render(); return; }
+    const paint = () => { const box = document.getElementById("stock-results"); if (box) box.innerHTML = stockResults(); };
+    if (!q) { ui.search.results = []; paint(); return; }
     searchTimer = setTimeout(async () => {
       try {
         const j = await getJson(`/api/market?search=${encodeURIComponent(q)}`);
         if (ui.search.q.trim() !== q) return;
         ui.search.results = j.results || []; ui.search.sample = !!j.sample;
       } catch { ui.search.results = []; }
-      render();
+      paint();
     }, 300);
   }
 });
 
-document.addEventListener("submit", async (e) => {
-  if (e.target.id !== "askform") return;
+document.addEventListener("submit", (e) => {
+  if (e.target.id !== "searchform") return;
   e.preventDefault();
-  const q = ui.draft.trim();
-  if (!q) { document.getElementById("ask")?.focus(); return; }
-  ui.sheet = { q, loading: true };
-  ui.draft = "";
-  render();
-  try {
-    const j = await getJson("/api/ask", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ question: q, ...summaryForAi() }) });
-    ui.sheet = { q, a: j.answer || "답을 만들지 못했어요." };
-  } catch (err) {
-    ui.sheet = { q, a: err.body?.error || "지금은 답할 수 없어요. 잠시 후 다시 시도해 주세요." };
-  }
-  if (ui.sheet) render();
+  const q = ui.q.trim();
+  if (!q) return;
+  // 질문처럼 보이거나 앱 안에서 찾은 게 없으면 바로 캐릭터에게 물어본다
+  const found = document.querySelectorAll("#sresults .si:not(.ask)").length > 1;
+  if (/[?？]$|뭐|어떻게|왜|할까|될까|얼마/.test(q) || !found) askAi(q);
+  else document.getElementById("q")?.blur();
+});
+
+document.addEventListener("focusin", (e) => {
+  if (e.target.id === "q") { ui.searchOpen = true; document.getElementById("searchwrap")?.classList.add("open"); }
+});
+document.addEventListener("pointerdown", (e) => {
+  if (ui.searchOpen && !e.target.closest("#searchwrap")) { ui.searchOpen = false; document.getElementById("searchwrap")?.classList.remove("open"); }
 });
 
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape" && ui.sheet) { ui.sheet = null; render(); }
+  else if (e.key === "Escape" && ui.searchOpen) { ui.searchOpen = false; document.getElementById("searchwrap")?.classList.remove("open"); document.getElementById("q")?.blur(); }
 });
 
 render();
