@@ -244,40 +244,54 @@
   .home-top .searchbox input { font-size: 14px; }
   .home-top .sresults { top: 50px; left: -46px; right: -48px; }
   .scroll.home { padding-top: 0; } /* 칸 사이 간격은 다른 화면과 같은 16px */
-  .home .hero { gap: 8px; padding-top: 0; align-items: flex-start; }
-  .home .bubble { padding: 9px 8px 2px 12px; border-radius: 6px 18px 18px 18px; }
-  .home .bubble p { font-size: 14px; line-height: 1.5; min-height: 0; }
-  .home .bubble .link-btn { min-height: 32px; }
-  .home .sec-title { margin-bottom: 4px; }
-  .home .plus { min-height: 30px; }
-  .home .sec-title h2 { font-size: 15px; }
-  .home .card { padding: 10px 14px; }
+  .home .hero { gap: 10px; padding-top: 2px; align-items: flex-start; }
+  .home .bubble { padding: 12px 10px 4px 14px; border-radius: 6px 20px 20px 20px; }
+  .home .bubble p { font-size: 15.5px; line-height: 1.55; min-height: 0; }
+  .home .bubble .link-btn { min-height: 36px; }
+  .home .sec-title { margin-bottom: 8px; }
+  .home .plus { min-height: 34px; }
+  .home .sec-title h2 { font-size: 16px; }
+  .home .card { padding: 14px 16px; }
   .mkt.line { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; }
   .mkt.line::-webkit-scrollbar { display: none; }
-  .mkt.line > * { flex: 0 0 96px; padding: 8px 6px; border-radius: 14px; }
-  .mkt.line .v { font-size: 15px; }
-  .mkt.line .k, .mkt.line .c { font-size: 11px; }
+  .mkt.line > * { flex: 0 0 112px; padding: 12px 8px; border-radius: 16px; }
+  .mkt.line .v { font-size: 17px; }
+  .mkt.line .k, .mkt.line .c { font-size: 12px; }
   .mkt.line .add { min-height: 0; }
-  .home .impact { width: 214px; padding: 10px 12px; gap: 6px; border-radius: 16px; }
-  .home .impact p { font-size: 13px; line-height: 1.45; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-  .home .nl a { min-height: 34px; }
-  .home .chip.small { min-height: 30px; }
-  .links { padding: 2px 14px !important; }
-  .lrow { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 44px; border: none; background: transparent; text-align: left; font-size: 14px; cursor: pointer; border-top: 1px solid #EEF2EF; padding: 0; }
+  .home .impact { width: 236px; padding: 14px; gap: 8px; border-radius: 18px; }
+  .home .impact p { font-size: 14px; line-height: 1.55; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .home .nl a { min-height: 44px; font-size: 15px; }
+  .home .chip.small { min-height: 34px; font-size: 13px; }
+  .links { padding: 4px 16px !important; }
+  .lrow { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 52px; border: none; background: transparent; text-align: left; font-size: 15px; cursor: pointer; border-top: 1px solid #EEF2EF; padding: 0; }
   .lrow:first-child { border-top: none; }
   .lrow .lk { flex-shrink: 0; font-size: 12px; font-weight: 700; color: var(--green); background: #E1F2E8; border-radius: 6px; padding: 3px 7px; }
   .lrow .lv { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--sub); }
   .lrow .lv b { color: var(--ink); }
   .lrow:hover .lv b { color: var(--green); }
-  .home .quiz { padding: 8px 14px 10px; gap: 4px; }
-  .home .quiz-head { min-height: 28px; font-size: 12px; }
+  .home .quiz { padding: 14px 16px; gap: 8px; }
+  .home .quiz-head { min-height: 32px; font-size: 13px; }
   .qrow { display: flex; align-items: center; gap: 10px; }
-  .qrow .q { flex: 1; font-size: 14px; line-height: 1.45; margin: 0; }
+  .qrow .q { flex: 1; font-size: 15px; line-height: 1.5; margin: 0; }
   .ox.mini { display: flex; gap: 6px; flex-shrink: 0; }
-  .ox.mini button { width: 44px; min-height: 44px; font-size: 18px; border-radius: 12px; }
-  .home .quiz .ex { font-size: 12.5px; line-height: 1.55; }
-  .home .more { padding: 12px 14px; gap: 8px; }
+  .ox.mini button { width: 50px; min-height: 50px; font-size: 20px; border-radius: 14px; }
+  .home .quiz .ex { font-size: 13.5px; line-height: 1.6; }
+  .home .more { padding: 14px 16px; gap: 10px; }
   .home .foot { padding-top: 0; }
+
+  /* 뉴스 쉽게 풀이 */
+  .brief-line { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 44px; border: none; border-radius: 12px; background: #E1F2E8; padding: 0 12px 0 8px; margin-bottom: 4px; text-align: left; font-size: 14px; cursor: pointer; }
+  .brief-line .bl-t { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .brief-line b { color: var(--green); margin-right: 4px; }
+  .bp-mood { display: flex; align-items: center; gap: 10px; font-family: 'Gowun Dodum', sans-serif; font-size: 16px; line-height: 1.5; margin-bottom: 4px; }
+  .bp { border-top: 1px solid #EEF2EF; padding: 12px 0; display: flex; flex-direction: column; gap: 6px; }
+  .bp-t { font-size: 15px; font-weight: 700; }
+  .bp p { margin: 0; font-size: 14px; line-height: 1.65; }
+  .bp .me { background: #E1F2E8; border-radius: 10px; padding: 8px 10px; font-size: 13px; }
+  .bp .me b { color: var(--green); margin-right: 4px; }
+  .bp-s { display: flex; gap: 6px; flex-wrap: wrap; }
+  .bp-s a { font-size: 12px; color: var(--sub); background: var(--soft); border-radius: 999px; padding: 4px 10px; display: inline-flex; align-items: center; gap: 3px; min-height: 28px; }
+  textarea.field { padding: 10px 12px; min-height: 110px; resize: vertical; line-height: 1.5; font-size: 14px; }
 </style>
 </head>
 <body>
@@ -310,10 +324,10 @@ function saveLearn() {
 const learnState = loadLearn();
 
 let profile = loadProfile();
-const data = { market: null, news: null, newsFull: null, rates: null, calendar: [], benefitsApi: null, learn: null, loading: false };
+const data = { market: null, news: null, newsFull: null, rates: null, calendar: [], benefitsApi: null, learn: null, brief: null, loading: false };
 const ui = {
   bubble: 0, q: "", sremote: [], searchOpen: false, sheet: null,
-  news: { tab: "issues", kwItems: {} },
+  news: { tab: "issues", kwItems: {} }, letter: { text: "", loading: false, result: null, error: "" },
   hideMoney: false, schedAll: false, learnTab: "all", learnOpen: null, benTab: "all",
   onb: { step: 0, draft: null }, search: { q: "", results: [], sample: false },
   ...loadUi(),
@@ -431,6 +445,7 @@ async function loadAll(manual = false) {
   if (!data.calendar.length) jobs.push(getJson("/data/calendar.json").then((j) => (data.calendar = j.events || [])).catch(() => {}));
   if (!data.learn) jobs.push(getJson("/data/learn.json").then((j) => (data.learn = j)).catch(() => {}));
   jobs.push(loadBenefits());
+  loadBrief();
   if (!data.rates) jobs.push(getJson("/api/rates").then((j) => (data.rates = j)).catch(() => {}));
   await Promise.all(jobs);
   data.loading = false;
@@ -674,6 +689,7 @@ function viewHome() {
   const kws = n?.keywords || [];
   const newsBlock = `<section class="card">
       <div class="sec-title"><h2>뉴스</h2><div style="display:flex;gap:6px;align-items:center">${n?.sample ? `<span class="badge b-sample">예시</span>` : ""}<button class="plus" data-act="news-more">+ 더보기</button></div></div>
+      ${briefReady() ? `<button class="brief-line" data-act="news-brief">${mascot(22)}<span class="bl-t"><b>쉽게 풀이</b> ${esc(data.brief.mood)}</span><span aria-hidden="true">›</span></button>` : ""}
       <div class="nl">${n ? top.map(newsLine).join("") : `<p class="hint">불러오는 중…</p>`}</div>
       ${kws.length || letters.length ? `<div class="strip" style="gap:6px;margin-top:8px;align-items:center">
         ${kws.map((k) => `<button class="chip small" style="flex-shrink:0" data-act="kw" data-k="${esc(k)}">#${esc(k)}</button>`).join("")}
@@ -709,7 +725,7 @@ function viewHome() {
   return `${header()}
   <main class="scroll home">
     <section class="hero">
-      ${mascot(44)}
+      ${mascot(58)}
       <div class="bubble">
         <p class="hand" aria-live="polite">${line.text}</p>
         <div class="bubble-foot">
@@ -721,7 +737,7 @@ function viewHome() {
 
     <section>
       <div class="mkt line bleed">${tiles}${addTile}</div>
-      <div class="hint" style="margin:4px 4px 0;display:flex;gap:6px;align-items:center;flex-wrap:wrap;font-size:11px">
+      <div class="hint" style="margin:6px 4px 0;display:flex;gap:6px;align-items:center;flex-wrap:wrap">
         ${m ? `주가 ${ymdLabel(m.kospi?.date)} 종가 · 환율 ${ymdLabel(m.usd?.date)} 고시` : ""}
         ${m?.sample ? `<span class="badge b-sample">예시 데이터</span>` : ""}
       </div>
@@ -745,7 +761,7 @@ function viewNews() {
   const tags = [...new Set((f?.forYou || []).map((x) => x.tag))];
   const kws = data.news?.keywords || [];
   const kwTabs = [...new Set([...kws, ...(N.tab.startsWith("kw:") ? [N.tab.slice(3)] : [])])];
-  const tabs = [["issues", "오늘의 이슈"], ["foryou", "나를 위한 뉴스"], ...tags.map((t) => ["tag:" + t, t]), ...kwTabs.map((k) => ["kw:" + k, "#" + k])];
+  const tabs = [["brief", "쉽게 풀이"], ["issues", "오늘의 이슈"], ["foryou", "나를 위한 뉴스"], ...tags.map((t) => ["tag:" + t, t]), ...kwTabs.map((k) => ["kw:" + k, "#" + k])];
   let items = null;
   if (N.tab.startsWith("kw:")) items = N.kwItems[N.tab.slice(3)];
   else if (f) items = N.tab === "issues" ? f.issues : N.tab === "foryou" ? f.forYou : (f.forYou || []).filter((x) => "tag:" + x.tag === N.tab);
@@ -753,10 +769,40 @@ function viewNews() {
   return `${pageHead("뉴스", f?.sample ? `<span class="badge b-sample" style="margin-left:8px">예시 데이터</span>` : "")}
   <main class="scroll">
     <div class="tabs" role="tablist">${tabs.map(([id, label]) => `<button class="chip ${N.tab === id ? "on" : ""}" role="tab" aria-selected="${N.tab === id}" data-act="news-tab" data-t="${esc(id)}">${esc(label)}</button>`).join("")}</div>
-    <section class="card"><div class="news">${items ? newsList(items, N.tab === "issues") || `<p class="hint">뉴스가 없어요</p>` : `<p class="hint">불러오는 중…</p>`}</div></section>
+    ${N.tab === "brief" ? viewBrief() : `<section class="card"><div class="news">${items ? newsList(items, N.tab === "issues") || `<p class="hint">뉴스가 없어요</p>` : `<p class="hint">불러오는 중…</p>`}</div></section>`}
     ${letters.length ? `<div class="chips"><span class="hint">구독 중</span>${letters.map((l) => `<a class="chip small" href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.name)} ${ICON.out}</a>`).join("")}</div>` : ""}
     <p class="foot">제목을 누르면 언론사 원문으로 이동해요.</p>
   </main>`;
+}
+
+function briefCards(b) {
+  return (b.points || []).map((pt) => `<div class="bp">
+      <div class="bp-t">${esc(pt.title)}</div>
+      <p>${esc(pt.easy)}</p>
+      <p class="me"><b>나에게는</b> ${esc(pt.forMe)}</p>
+      ${pt.sources?.length ? `<div class="bp-s">${pt.sources.map((x) => `<a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.source || "기사")} ${ICON.out}</a>`).join("")}</div>` : ""}
+    </div>`).join("");
+}
+function viewBrief() {
+  const b = data.brief;
+  const L = ui.letter;
+  const today = !b ? `<p class="hint" style="margin:0">풀이를 만드는 중…</p>`
+    : !b.available ? `<p class="hint" style="margin:0">뉴스 키와 AI 키가 연결되면 오늘 뉴스를 쉽게 풀어드려요.</p>`
+    : !b.points?.length ? `<p class="hint" style="margin:0">${esc(b.error || "오늘은 풀이할 뉴스가 아직 모이지 않았어요.")}</p>`
+    : `<div class="bp-mood">${mascot(28)}<span>${esc(b.mood)}</span></div>${briefCards(b)}`;
+  return `<section class="card">
+      <div class="sec-title"><h2>오늘 뉴스 쉽게 풀이</h2>${b?.count ? `<span>기사 ${b.count}개 종합</span>` : ""}</div>
+      ${today}
+      <p class="hint" style="margin:10px 0 0">여러 언론사 기사의 제목과 요약 문구를 AI가 종합해 다시 쓴 거예요. 정확한 내용은 원문 링크에서 확인하세요.</p>
+    </section>
+    <section class="card form">
+      <div class="sec-title"><h2>뉴스레터 쉽게 풀이</h2><span>저장하지 않아요</span></div>
+      <label class="lb" for="letter-text">구독 중인 뉴스레터(머니레터·뉴닉 등) 내용을 복사해서 붙여넣어 주세요</label>
+      <textarea class="field" id="letter-text" rows="5" maxlength="6000" placeholder="메일에서 본문을 복사해 여기에 붙여넣기">${esc(L.text)}</textarea>
+      <button class="btn" data-act="letter-brief" ${L.loading ? "disabled" : ""}>${L.loading ? "풀이하는 중…" : "쉽게 풀어줘"}</button>
+      ${L.error ? `<p class="hint" style="margin:0;color:var(--up)">${esc(L.error)}</p>` : ""}
+      ${L.result ? `<div class="bp-mood">${mascot(28)}<span>${esc(L.result.mood)}</span></div>${briefCards(L.result)}` : ""}
+    </section>`;
 }
 
 async function openNews(tab) {
@@ -876,6 +922,13 @@ function viewBenefits() {
     <p class="foot">정부24 ‘대한민국 공공서비스 정보’ 기준이에요. 학교별 공지는 자동으로 모을 수 없어서 검색으로 연결해요.<br>조건은 바뀔 수 있으니 신청 전에 꼭 확인하세요.</p>
   </main>`;
 }
+
+async function loadBrief() {
+  const interests = [...profile.watch.map((w) => w.name).slice(0, 2), ...profile.prefs.slice(0, 3)].join(",");
+  try { data.brief = await getJson(`/api/brief?interests=${encodeURIComponent(interests)}`); } catch { data.brief = null; }
+  if (["home", "news"].includes(route())) render();
+}
+function briefReady() { return data.brief?.available && data.brief.points?.length; }
 
 async function loadBenefits() {
   const r = profile?.region;
@@ -1235,7 +1288,21 @@ document.addEventListener("click", async (e) => {
     case "next-line": ui.bubble++; render(); break;
     case "focus-ask": window.scrollTo(0, 0); document.getElementById("q")?.focus(); break;
     case "ask": askAi(el.dataset.q); break;
-    case "news-more": openNews("issues"); break;
+    case "news-more": openNews(briefReady() ? "brief" : "issues"); break;
+    case "news-brief": openNews("brief"); break;
+    case "letter-brief": {
+      const text = (document.getElementById("letter-text")?.value || "").trim();
+      ui.letter = { text, loading: true, result: null, error: "" };
+      render();
+      try {
+        const j = await getJson("/api/brief", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text }) });
+        ui.letter = { text, loading: false, result: j.available === false ? null : j, error: j.available === false ? "AI 키가 연결되면 풀이할 수 있어요" : "" };
+      } catch (err) {
+        ui.letter = { text, loading: false, result: null, error: err.body?.error || "풀이를 만들지 못했어요" };
+      }
+      if (route() === "news") render();
+      break;
+    }
     case "news-tab": openNews(el.dataset.t); break;
     case "add-watch-s": {
       const v = el.dataset.v;
@@ -1391,6 +1458,7 @@ document.addEventListener("input", (e) => {
     }, 350);
     return;
   }
+  if (el.id === "letter-text") { ui.letter.text = el.value; return; }
   if (el.dataset.o) { // 첫 설문 입력
     const d = ui.onb.draft;
     if (el.dataset.o === "nickname") d.nickname = el.value.slice(0, 12);
