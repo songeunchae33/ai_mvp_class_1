@@ -1288,7 +1288,7 @@ document.addEventListener("click", async (e) => {
     case "next-line": ui.bubble++; render(); break;
     case "focus-ask": window.scrollTo(0, 0); document.getElementById("q")?.focus(); break;
     case "ask": askAi(el.dataset.q); break;
-    case "news-more": openNews(briefReady() ? "brief" : "issues"); break;
+    case "news-more": openNews("brief"); break; // 더보기를 누르면 쉽게 풀이부터
     case "news-brief": openNews("brief"); break;
     case "letter-brief": {
       const text = (document.getElementById("letter-text")?.value || "").trim();
