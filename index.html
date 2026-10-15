@@ -418,7 +418,7 @@
   .dr-item { text-align: left; background: transparent; border: none; border-radius: 12px; padding: 0 12px 0 22px; min-height: 44px; font-size: 15px; color: var(--ink); cursor: pointer; position: relative; }
   .dr-item::before { content: ""; position: absolute; left: 10px; top: 50%; width: 5px; height: 5px; margin-top: -2.5px; border-radius: 50%; background: #C9B8F5; }
   .dr-item:hover, .dr-item:focus-visible { background: rgba(255, 255, 255, 0.75); }
-  [id^="h-"], [id^="sec-"] { scroll-margin-top: 76px; }
+  [id^="h-"], [id^="sec-"], [id^="m-"] { scroll-margin-top: 76px; }
 
   /* 경제 공부: 정렬·화제 */
   .sortbar { display: flex; gap: 4px; background: rgba(255,255,255,0.7); border: 1px solid #E3E8F5; border-radius: 999px; padding: 4px; align-self: flex-start; max-width: 100%; overflow-x: auto; }
@@ -624,6 +624,13 @@
   #splash span { font-size: 14px; color: #8B95A1; }
   @keyframes sp-pop { from { transform: scale(0.85); opacity: 0; } to { transform: none; opacity: 1; } }
   @media (prefers-reduced-motion: reduce) { #splash .sp-in { animation: none; } }
+
+  /* 공부 탭 바로가기 */
+  .hub { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .hub-item { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; min-height: 76px; padding: 14px; border: none; border-radius: 18px; background: #fff; box-shadow: 0 2px 12px rgba(0,0,0,0.04); text-align: left; cursor: pointer; font-size: inherit; }
+  .hub-item b { font-size: 15px; font-weight: 700; color: var(--ink); }
+  .hub-item span { font-size: 12px; color: var(--sub); }
+  .hub-item:hover { background: #FAFBFC; }
 </style>
 </head>
 <body>
@@ -1006,7 +1013,7 @@ const TABS = [
   ["learn", "공부", `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15H6.5A2.5 2.5 0 0 0 4 20.5z"/><path d="M4 20.5A2.5 2.5 0 0 0 6.5 23H20v-5"/><path d="M9 8h7M9 12h5"/></svg>`],
 ];
 function tabBar(r) {
-  const cur = r === "money" ? "assets" : r;
+  const cur = r === "money" ? "assets" : ["news", "schedule", "benefits", "watch", "letters"].includes(r) ? "learn" : r;
   return `<nav class="tabbar" aria-label="주요 메뉴">${TABS.map(([id, label, icon]) =>
     `<button class="${cur === id ? "on" : ""}" data-act="tab" data-t="${id}" ${cur === id ? 'aria-current="page"' : ""}>${icon}<span>${label}</span></button>`).join("")}</nav>`;
 }
@@ -1159,22 +1166,27 @@ function viewDrawer() {
     ["hero", "오늘의 한마디", "h-hero"], ["market", "지수", "h-market"], ["market", "주식 가격", "h-market", "stocks"],
     ["impact", "나에게 미치는 영향", "h-impact"], ["news", "뉴스", "h-news"], ["links", "일정 · 혜택", "h-links"], ["quiz", "오늘의 퀴즈", "h-quiz"], ["goals", "목표 저축", "h-goals"], ["money", "이번 주 지출", "h-money"],
   ].filter(([id]) => !hidden.has(id));
-  const my = [["홈 화면 수정", "sec-layout"], ["내 자산", "sec-diag"], ["목표 저축", "sec-goals"], ["자산 입력", "sec-assets"], ["부채(대출)", "sec-debts"],
-    ["기본 정보", "sec-basic"], ["투자 성향 · 관심사", "sec-risk"], ["투자 성향 정밀 진단", "", "risktest"], ["관심 종목", "sec-watch"], ["뉴스레터", "sec-letters"], ["개인정보", "sec-privacy"]];
-  const pages = [["내 돈 기록", "money"], ["뉴스 쉽게 풀이", "news"], ["나를 위한 일정", "schedule"], ["경제 공부", "learn"], ["우리 지역 혜택", "benefits"]];
+  const assets = [["순자산·자산 진단", "assets", "sec-diag"], ["가계부 (캡처 기록)", "assets", "m-ledger"], ["목표 저축", "assets", "sec-goals"], ["자산·대출 입력", "assets", "sec-assets"]];
+  const study = [["경제 개념·퀴즈", "learn", ""], ["뉴스레터", "letters", ""], ["내 돈 기록", "assets", "m-ledger"], ["뉴스 쉽게 풀이", "news", ""],
+    ["나를 위한 일정", "schedule", ""], ["우리 지역 혜택", "benefits", ""], ["관심 종목", "watch", ""]];
+  const my = [["기본 정보", "my", "sec-basic"], ["투자 성향 · 관심사", "my", "sec-risk"], ["투자 성향 정밀 진단", "risktest", ""]];
+  const etc = [["개인정보·데이터 지우기", "etc", "sec-privacy"], ["앱 정보", "etc", ""]];
   const item = (label, route, target, extra = "") =>
     `<button class="dr-item" data-act="nav" data-route="${route}" data-target="${target || ""}" ${extra}>${esc(label)}</button>`;
-  const myItem = ([label, target, to]) => item(label, to || "my", target);
   return `<div class="drawer-back" data-act="close-drawer">
     <nav class="drawer" data-stop="1" aria-label="목차">
       <div class="dr-head">${mascot(40)}<div><b class="hand">${esc(profile.nickname || "나")}님의 경제</b><span>어디로 갈까요?</span></div>
         <button class="icon-btn" data-act="close-drawer" aria-label="목차 닫기">${ICON.close}</button></div>
       <div class="dr-group"><button class="dr-title" data-act="nav" data-route="home">홈 화면</button>
-        ${home.map(([, label, target, sub]) => item(label, "home", target, sub ? `data-sub="${sub}"` : "")).join("")}</div>
+        ${home.map(([, label, target, sub]) => item(label, "home", target, sub ? `data-sub="${sub}"` : "")).join("")}${item("홈 화면 꾸미기", "layout", "")}</div>
+      <div class="dr-group"><button class="dr-title" data-act="nav" data-route="assets">나의 자산관리</button>
+        ${assets.map(([l, r, t]) => item(l, r, t)).join("")}</div>
+      <div class="dr-group"><button class="dr-title" data-act="nav" data-route="learn">경제공부</button>
+        ${study.map(([l, r, t]) => item(l, r, t)).join("")}</div>
       <div class="dr-group"><button class="dr-title" data-act="nav" data-route="my">마이페이지</button>
-        ${my.map(myItem).join("")}</div>
-      <div class="dr-group"><span class="dr-title">더 보기</span>
-        ${pages.map(([label, route]) => item(label, route)).join("")}</div>
+        ${my.map(([l, r, t]) => item(l, r, t)).join("")}</div>
+      <div class="dr-group"><span class="dr-title">기타</span>
+        ${etc.map(([l, r, t]) => item(l, r, t)).join("")}</div>
     </nav></div>`;
 }
 function navTo(to, target, sub) {
@@ -1621,6 +1633,11 @@ function viewAssets() {
         <b>${riskType(p.avert)}</b><span class="hint">${p.riskTest ? "정밀 진단 결과" : "위험기피 " + p.avert + "/10"}</span></button>
     </div>
     ${moneyBody()}
+    ${(() => { const S = mySections(); return `<div class="sec-title" style="margin:10px 2px 0"><h2 style="font-size:20px">내 자산</h2><span>진단·목표·입력</span></div>${S.diag}${S.goals}${S.assets}${S.debts}`; })()}
+    <div class="savebar">
+      <span>${ui.savedAt ? `저장됨 · ${ui.savedAt}` : "고친 내용은 이 기기에 저장돼요"}</span>
+      <button class="btn" data-act="save-my">저장하기</button>
+    </div>
   </main>`;
 }
 
@@ -1751,6 +1768,11 @@ function viewLearn() {
 
   return `${tabHead("공부")}
   <main class="scroll">
+    <section class="hub">
+      ${[["news", "", "뉴스 쉽게 풀이", "오늘의 경제를 쉬운 말로"], ["letters", "", "뉴스레터", "구독 관리·붙여넣기 풀이"], ["schedule", "", "나를 위한 일정", "관심사별 세일·정책 일정"],
+         ["benefits", "", "우리 지역 혜택", "지자체·정부 혜택"], ["watch", "", "관심 종목", "추가·순서·보유 수량"], ["assets", "m-ledger", "내 돈 기록", "캡처로 소비 기록"]]
+        .map(([r, t, n, d]) => `<button class="hub-item" data-act="nav" data-route="${r}" data-target="${t}"><b>${n}</b><span>${d}</span></button>`).join("")}
+    </section>
     <section class="card stats">
       <div><b class="num">${done.length}<small>/${L.concepts.length}</small></b><span>푼 문제</span></div>
       <div><b class="num">${done.length ? rate + "%" : "-"}</b><span>정답률</span></div>
@@ -1944,7 +1966,7 @@ function viewSheet() {
 }
 
 // ───────────────────────── 화면: 마이페이지 ─────────────────────────
-function viewMy() {
+function mySections() {
   const p = profile;
   const hide = ui.hideMoney;
   const a = p.assets;
@@ -1994,19 +2016,15 @@ function viewMy() {
         <div class="money"><label for="dd-${i}" class="sr">이자 납부일</label><input class="field num" id="dd-${i}" inputmode="numeric" placeholder="이자일" data-field="debt-day" data-i="${i}" value="${d.day ?? ""}"><span class="unit">일</span></div>
       </div></div>`).join("");
 
-  return `
-  <header class="page-head">
-    <button class="icon-btn" data-act="go-home" aria-label="홈으로">${ICON.back}</button>
-    <h1>마이페이지</h1>
-    <button class="icon-btn menu-btn" data-act="open-drawer" aria-label="목차 열기">${ICON.menu}</button>
-  </header>
-  <main class="scroll">
+  return {
+    profile: `
     <section class="card" style="display:flex;align-items:center;gap:14px">
       ${mascot(56)}
       <div style="flex:1"><div style="font-size:18px;font-weight:700">${esc(p.nickname || "이름 없음")}님</div>
       <div class="hint">${p.age ? `만 ${p.age}세 · ` : ""}${riskType(p.avert)} · ${p.prefs.map(esc).join(", ") || "선호 미입력"}</div></div>
     </section>
-
+    `,
+    layout: `
     <section class="card form" id="sec-layout">
       <div class="sec-title"><h2>홈 화면 꾸미기</h2><button class="link-btn" data-act="layout-reset">처음대로</button></div>
       <p class="hint" style="margin:0">화살표로 순서를 바꾸고, 눈 버튼으로 칸을 숨겨요. 바꾸는 즉시 미리보기에 보여요.</p>
@@ -2037,7 +2055,8 @@ function viewMy() {
         </div>
       </div>
     </section>
-
+    `,
+    diag: `
     <section class="card" id="sec-diag">
       <div class="sec-title"><h2>내 자산 진단</h2><button class="link-btn" data-act="toggle-hide">${hide ? "금액 보이기" : "금액 숨기기"}</button></div>
       ${hasAssets ? `
@@ -2048,7 +2067,8 @@ function viewMy() {
         <p class="hint" style="margin:12px 0 0">입력한 값으로 계산한 일반적인 참고 기준이에요. 투자 권유가 아니에요.</p>`
       : `<p class="hint" style="margin:0">아래에 자산을 입력하면 진단해드려요.</p>`}
     </section>
-
+    `,
+    basic: `
     <section class="card form" id="sec-basic">
       <div class="sec-title"><h2>기본 정보</h2></div>
       <div class="grid2">
@@ -2059,7 +2079,8 @@ function viewMy() {
       </div>
       ${regionFields(p)}
     </section>
-
+    `,
+    risk: `
     <section class="card form" id="sec-risk">
       <div class="sec-title"><h2>투자 성향 · 관심사</h2><span class="type-pill" id="avert-type">${riskType(p.avert)}</span></div>
       <label class="lb" for="f-avert">위험을 얼마나 피하고 싶나요? <b class="num" id="avert-val" style="color:var(--ink)">${p.avert}/10</b></label>
@@ -2068,15 +2089,16 @@ function viewMy() {
       <button class="btn ghost" data-act="go-risktest">${p.riskTest ? `정밀 진단 다시 받기 (지난 결과: ${esc(p.riskTest.type)})` : "7문항 정밀 진단 받기 ›"}</button>
       <div><span class="lb">무엇에 가치를 두나요? (여러 개)</span><div class="chips">${PREFS.map((x) => `<button class="chip ${p.prefs.includes(x) ? "on" : ""}" data-act="pref" data-v="${x}" aria-pressed="${p.prefs.includes(x)}">${x}</button>`).join("")}</div></div>
     </section>
-
-    ${goalsMy(p)}
-
+    `,
+    goals: goalsMy(p),
+    watch: `
     <section class="card form" id="sec-watch">
       <div class="sec-title"><h2>관심 종목</h2><span>보유 수량을 넣으면 손익을 보여줘요</span></div>
       <div class="rows">${watchRows || `<p class="hint" style="margin:0">아직 없어요</p>`}</div>
       ${stockSearch()}
     </section>
-
+    `,
+    assets: `
     <section class="card form" id="sec-assets">
       <div class="sec-title"><h2>내 자산</h2><span>대략적인 금액도 괜찮아요</span></div>
       <div class="grid2">
@@ -2086,13 +2108,15 @@ function viewMy() {
         <div><label class="lb" for="f-payday">월급날</label><div class="money"><input class="field num" id="f-payday" inputmode="numeric" data-field="payday" value="${p.payday ?? ""}"><span class="unit">일</span></div></div>
       </div>
     </section>
-
+    `,
+    debts: `
     <section class="card form" id="sec-debts">
       <div class="sec-title"><h2>부채</h2>${p.debts === null ? `<button class="link-btn" data-act="no-debt">대출 없어요</button>` : ""}</div>
       ${debtRows || (p.debts ? `<p class="hint" style="margin:0">대출 없음</p>` : "")}
       <button class="btn ghost" data-act="add-debt">+ 대출 추가</button>
     </section>
-
+    `,
+    letters: `
     <section class="card form" id="sec-letters">
       <div class="sec-title"><h2>구독 중인 뉴스레터</h2><span>홈에서 바로 열 수 있어요</span></div>
       <div class="chips">${LETTERS.map((l) => `<button class="chip ${p.letters.includes(l.id) ? "on" : ""}" data-act="letter" data-v="${l.id}" aria-pressed="${p.letters.includes(l.id)}">${l.name} · ${l.by}</button>`).join("")}
@@ -2103,17 +2127,63 @@ function viewMy() {
         <button class="btn ghost" data-act="add-letter">추가</button>
       </div>
     </section>
-
+    `,
+    privacy: `
     <section class="card form" id="sec-privacy">
       <div class="sec-title"><h2>개인정보 관리</h2></div>
       <p style="margin:0;font-size:14px;line-height:1.6">입력한 정보는 서버에 저장하지 않고 <b>이 기기(브라우저)에만</b> 저장돼요. 질문창을 쓸 때만 나이대·성향·금액 요약이 답변을 만드는 데 쓰여요 (닉네임은 보내지 않아요).</p>
       <button class="btn danger" data-act="wipe">내 정보 전부 지우기</button>
+    </section>
+    `,
+  };
+}
+
+// 마이페이지: 나에 대한 정보만 (기본 정보·투자 성향)
+function viewMy() {
+  const S = mySections();
+  return `${pageHead("마이페이지")}
+  <main class="scroll">
+    ${S.profile}
+    ${S.basic}
+    ${S.risk}
+    <section class="card links">
+      <button class="lrow" data-act="nav" data-route="assets" data-target="sec-assets"><span class="lk">자산</span><span class="lv">자산·대출 입력과 진단은 <b>나의 자산관리</b>에서</span><span aria-hidden="true">›</span></button>
+      <button class="lrow" data-act="nav" data-route="etc" data-target=""><span class="lk">기타</span><span class="lv">개인정보·데이터 지우기, 앱 정보</span><span aria-hidden="true">›</span></button>
     </section>
     <p class="foot">나만의 경제 · 투자 권유가 아닌 참고용 정보예요.</p>
     <div class="savebar">
       <span>${ui.savedAt ? `저장됨 · ${ui.savedAt}` : "고친 내용은 이 기기에 저장돼요"}</span>
       <button class="btn" data-act="save-my">저장하기</button>
     </div>
+  </main>`;
+}
+// 홈 화면 꾸미기 (홈 화면 묶음)
+function viewLayout() {
+  return `${pageHead("홈 화면 꾸미기")}<main class="scroll">${mySections().layout}</main>`;
+}
+// 관심 종목 · 뉴스레터 (경제공부 묶음)
+function viewWatch() {
+  return `${pageHead("관심 종목")}<main class="scroll">${mySections().watch}<div class="savebar">
+      <span>${ui.savedAt ? `저장됨 · ${ui.savedAt}` : "고친 내용은 이 기기에 저장돼요"}</span>
+      <button class="btn" data-act="save-my">저장하기</button>
+    </div></main>`;
+}
+function viewLetters() {
+  return `${pageHead("뉴스레터")}<main class="scroll">${mySections().letters}
+    <button class="card line" data-act="news-brief"><span><b>뉴스레터 쉽게 풀이</b> <span class="hint">메일 본문을 붙여넣으면 쉬운 말로 풀어드려요</span></span><span aria-hidden="true">›</span></button>
+  </main>`;
+}
+// 기타: 아직 어디에 넣기 애매한 것들
+function viewEtc() {
+  const S = mySections();
+  return `${pageHead("기타")}
+  <main class="scroll">
+    ${S.privacy}
+    <section class="card">
+      <div class="sec-title"><h2>앱 정보</h2><span>v0.5</span></div>
+      <p style="margin:0;font-size:14px;line-height:1.7">주가·지수: 공공데이터포털(금융위원회, 전일 종가) · 환율: 한국수출입은행 · 뉴스: 네이버(제목·링크) · 쉽게 풀이·화제순: 정책브리핑 정책뉴스 · 혜택: 정부24 공공서비스 정보 · AI: OpenAI</p>
+      <p class="hint" style="margin:8px 0 0">이 앱의 정보는 투자 권유가 아닌 참고용이에요.</p>
+    </section>
   </main>`;
 }
 
@@ -2179,14 +2249,14 @@ function viewOnboard() {
 function route() {
   if (!profile) return "onboard";
   const h = location.hash.slice(1);
-  return ["my", "news", "schedule", "learn", "benefits", "risktest", "money", "assets"].includes(h) ? h : "home";
+  return ["my", "news", "schedule", "learn", "benefits", "risktest", "money", "assets", "layout", "watch", "letters", "etc"].includes(h) ? h : "home";
 }
 function render() {
   const r = route();
   const app = document.getElementById("app");
   const y = window.scrollY;
   const focusId = document.activeElement?.id;
-  app.innerHTML = ({ onboard: viewOnboard, my: viewMy, news: viewNews, schedule: viewSchedule, learn: viewLearn, benefits: viewBenefits, risktest: viewRiskTest, money: viewAssets, assets: viewAssets }[r] || viewHome)()
+  app.innerHTML = ({ onboard: viewOnboard, my: viewMy, news: viewNews, schedule: viewSchedule, learn: viewLearn, benefits: viewBenefits, risktest: viewRiskTest, money: viewAssets, assets: viewAssets, layout: viewLayout, watch: viewWatch, letters: viewLetters, etc: viewEtc }[r] || viewHome)()
     + (r !== "onboard" ? tabBar(r) : "")
     + (ui.drawer && r !== "onboard" ? viewDrawer() : "");
   window.scrollTo(0, y);
@@ -2211,10 +2281,12 @@ document.addEventListener("click", async (e) => {
   const t = target();
 
   switch (act) {
-    case "go-my":
-      go("#my");
-      if (el.dataset.focus) setTimeout(() => document.getElementById("sec-" + el.dataset.focus)?.scrollIntoView({ behavior: "smooth" }), 50);
+    case "go-my": {
+      // 칸마다 사는 화면이 다르다
+      const where = { layout: "layout", diag: "assets", assets: "assets", debts: "assets", goals: "assets", watch: "watch", letters: "letters", privacy: "etc" }[el.dataset.focus] || "my";
+      navTo(where, el.dataset.focus ? "sec-" + el.dataset.focus : "");
       break;
+    }
     case "go-home": go("#home"); break;
     case "refresh": loadAll(true); break;
     case "next-line": ui.bubble++; render(); break;
@@ -2356,7 +2428,7 @@ document.addEventListener("click", async (e) => {
       if (["money", "assets"].includes(route())) render();
       break;
     }
-    case "go-goals": go("#my"); setTimeout(() => document.getElementById("sec-goals")?.scrollIntoView({ block: "start" }), 60); break;
+    case "go-goals": navTo("assets", "sec-goals"); break;
     case "goal-add": {
       const name = document.getElementById("g-name").value.trim().slice(0, 20);
       const target = readAmount("g-target");
@@ -2373,8 +2445,7 @@ document.addEventListener("click", async (e) => {
     case "rt-apply": {
       profile.avert = Number(el.dataset.v);
       profile.riskTest = { score: Number(el.dataset.s), type: riskType(profile.avert), date: new Date().toISOString().slice(0, 10) };
-      saveProfile(); toast(`${profile.riskTest.type}으로 반영했어요`); go("#my");
-      setTimeout(() => document.getElementById("sec-risk")?.scrollIntoView({ block: "start" }), 60);
+      saveProfile(); toast(`${profile.riskTest.type}으로 반영했어요`); navTo("my", "sec-risk");
       break;
     }
     case "note-toggle": {
