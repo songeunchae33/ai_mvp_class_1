@@ -26,7 +26,7 @@ export default async function handler(req, res) {
     if (!ready) return res.status(200).json({ sample: true, items: [{ title: `${q} 뉴스 검색 결과 보기`, url: searchUrl(q), source: "네이버 뉴스" }] });
     try {
       const items = dedupe(await naver(q + " 경제", { display: full ? 40 : 15, sort: "sim" })).slice(0, full ? 15 : 3);
-      cache(res, 900);
+      cache(res, 3600); // 네이버 사용량을 아끼려고 1시간 동안 같은 결과를 재사용
       return res.status(200).json({ items: strip(items) });
     } catch (e) {
       console.error(e);
@@ -61,7 +61,7 @@ export default async function handler(req, res) {
       });
     }
 
-    cache(res, 900);
+    cache(res, 3600); // 네이버 사용량을 아끼려고 1시간 동안 같은 결과를 재사용
     res.status(200).json({ issues: strip(issues), forYou: strip(forYou), keywords: keywords(pool) });
   } catch (e) {
     console.error(e);
