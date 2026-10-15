@@ -382,6 +382,22 @@
   .si.ask { color: #6C63E8; border-top-color: #EEE9FF; }
   .home-top .icon-btn { border-radius: 999px; background: rgba(255,255,255,0.85); border: 1px solid #E6E0FA; color: #7C8DF5; box-shadow: 0 4px 12px rgba(150, 140, 230, 0.14); }
   .home-top .avatar:hover { background: transparent; }
+
+  /* 홈 화면 꾸미기 */
+  .layout-wrap { display: flex; gap: 14px; align-items: flex-start; flex-wrap: wrap; }
+  .preview { flex: 0 0 auto; width: 176px; height: 380px; overflow: hidden; border-radius: 22px; border: 6px solid #fff; outline: 1px solid #E3E8F5; box-shadow: 0 10px 24px rgba(110, 130, 200, 0.18); pointer-events: none; margin: 0 auto; }
+  .pv-inner { width: 390px; min-height: 0; zoom: 0.43; }
+  .pv-inner .top { position: static; }
+  .layout-lists { flex: 1 1 200px; min-width: 0; display: flex; flex-direction: column; gap: 14px; }
+  .lo-row { display: flex; align-items: center; gap: 6px; min-height: 48px; border-top: 1px solid #EEF1F8; }
+  .lo-row:first-of-type { border-top: none; }
+  .lo-n { width: 20px; flex-shrink: 0; font-size: 12px; color: var(--sub); text-align: center; }
+  .lo-t { flex: 1; min-width: 0; font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .lo-row.off .lo-t { color: #AEB8CC; text-decoration: line-through; }
+  .lo-b { min-width: 44px; height: 44px; border-radius: 999px; border: 1px solid #D8E1ED; background: #fff; color: var(--green); font-size: 12px; font-weight: 700; cursor: pointer; flex-shrink: 0; }
+  .lo-b:disabled { opacity: 0.35; cursor: default; }
+  .lo-b.eye { min-width: 52px; }
+  .lo-row.off .lo-b.eye { background: #F5F7FE; color: var(--sub); }
 </style>
 </head>
 <body>
@@ -568,6 +584,7 @@ function biggestMover() {
   const list = (data.market?.stocks || []).filter((s) => !s.missing && s.pct !== null);
   return list.sort((a, b) => Math.abs(b.pct) - Math.abs(a.pct))[0];
 }
+function watchIndex(name) { const i = profile.watch.findIndex((w) => w.name === name); return i < 0 ? 99 : i; }
 function qtyOf(name) { return Number(profile.watch.find((w) => w.name === name)?.qty) || 0; }
 
 // 금리 일정은 대출·종목·저축·부동산 관심이 있는 사람에게만
@@ -771,7 +788,7 @@ function todayConcept() {
 }
 function catName(id) { return data.learn?.categories.find((c) => c.id === id)?.name || ""; }
 
-function viewHome() {
+function homeBlocks() {
   const m = data.market;
   const lines = bubbleLines();
   if (ui.bubble >= lines.length) ui.bubble = 0;
@@ -780,7 +797,7 @@ function viewHome() {
   // 지수·환율·내 종목을 같은 모양의 작은 타일로
   const tiles = m
     ? [tile("코스피", m.kospi?.v, m.kospi?.pct, 2), tile("코스닥", m.kosdaq?.v, m.kosdaq?.pct, 2), tile("원/달러", m.usd?.v, m.usd?.pct, 1),
-       ...(m.stocks || []).map((s) => tile(s.name, s.missing ? null : s.v, s.missing ? null : s.pct, 0))].join("")
+       ...[...(m.stocks || [])].sort((a, b) => watchIndex(a.name) - watchIndex(b.name)).map((s) => tile(s.name, s.missing ? null : s.v, s.missing ? null : s.pct, 0))].join("")
     : ["코스피", "코스닥", "원/달러", ...profile.watch.map((w) => w.name)].map((n) => `<div><span class="k">${esc(n)}</span><span class="v">…</span></div>`).join("");
   const addTile = profile.watch.length < 10 ? `<button class="add" data-act="go-my" data-focus="watch">+ 종목</button>` : "";
 
@@ -827,9 +844,8 @@ function viewHome() {
   const nq = nextQuestion();
   const moreBlock = nq ? `<section class="more">${moreQuestion(nq)}</section>` : "";
 
-  return `${header()}
-  <main class="scroll home">
-    <section class="hero">
+  const blocks = {
+    hero: `<section class="hero">
       ${mascot(58)}
       <div class="bubble">
         <p class="hand" aria-live="polite">${line.text}</p>
@@ -838,25 +854,51 @@ function viewHome() {
           ${line.act ? `<button class="link-btn" data-act="${line.act}">${line.label || "질문하기"} ›</button>` : `<button class="link-btn" data-act="next-line">다음 ›</button>`}
         </div>
       </div>
-    </section>
-
-    <section>
+    </section>`,
+    market: `<section>
       <div class="mkt line bleed">${tiles}${addTile}</div>
       <div class="hint" style="margin:6px 4px 0;display:flex;gap:6px;align-items:center;flex-wrap:wrap">
         ${m ? `주가 ${ymdLabel(m.kospi?.date)} 종가 · 환율 ${ymdLabel(m.usd?.date)} 고시` : ""}
         ${m?.sample ? `<span class="badge b-sample">예시 데이터</span>` : ""}
       </div>
-    </section>
+    </section>`,
+    impact: imp ? `<section><div class="sec-title"><h2>오늘, 나에게 미치는 영향</h2></div><div class="strip bleed">${imp}</div></section>` : "",
+    news: newsBlock,
+    links: linksBlock,
+    quiz: quizBlock,
+    more: moreBlock,
+  };
+  return { blocks, html: layout().order.filter((id) => !layout().hidden.has(id)).map((id) => blocks[id] || "").join("\n") };
+}
 
-    ${imp ? `<section><div class="sec-title"><h2>오늘, 나에게 미치는 영향</h2></div><div class="strip bleed">${imp}</div></section>` : ""}
-    ${newsBlock}
-    ${linksBlock}
-    ${quizBlock}
-    ${moreBlock}
-
+function viewHome() {
+  return `${header()}
+  <main class="scroll home">
+    ${homeBlocks().html}
     <p class="foot">주가는 전일 종가(공공데이터포털), 환율은 한국수출입은행 고시, 뉴스는 네이버 검색 기준이에요.<br>이 앱의 정보는 투자 권유가 아닌 참고용이에요.</p>
   </main>
   ${ui.sheet ? viewSheet() : ""}`;
+}
+
+// 홈 화면 칸 목록과 순서 (마이페이지 '홈 화면 꾸미기'에서 바꿈)
+const SECTIONS = [
+  { id: "hero", label: "캐릭터 말풍선" },
+  { id: "market", label: "시세 (코스피·환율·내 종목)" },
+  { id: "impact", label: "오늘, 나에게 미치는 영향" },
+  { id: "news", label: "뉴스" },
+  { id: "links", label: "일정 · 우리 지역 혜택" },
+  { id: "quiz", label: "오늘의 OX 퀴즈" },
+  { id: "more", label: "맞춤 질문 카드" },
+];
+function layout() {
+  const L = profile.layout || {};
+  const order = (L.order || []).filter((id) => SECTIONS.some((x) => x.id === id));
+  SECTIONS.forEach((x) => { if (!order.includes(x.id)) order.push(x.id); });
+  return { order, hidden: new Set(L.hidden || []) };
+}
+// 실제 홈 화면을 작게 줄여서 보여주는 미리보기 (눌러지지 않음)
+function homePreview() {
+  return `<div class="preview" inert aria-hidden="true"><div class="phone pv-inner">${header()}<main class="scroll home">${homeBlocks().html}</main></div></div>`;
 }
 
 // ───────────────────────── 화면: 뉴스 더보기 ─────────────────────────
@@ -1050,6 +1092,7 @@ const MENU = [
   { label: "대출(부채) 입력", keys: ["대출", "부채", "이자", "빚"], focus: "debts" },
   { label: "투자 성향·관심사", keys: ["성향", "위험", "관심", "선호", "쇼핑", "여행", "부동산"], focus: "risk" },
   { label: "관심 종목 편집", keys: ["종목", "주식", "관심"], focus: "watch" },
+  { label: "홈 화면 꾸미기 (순서·숨기기)", keys: ["홈", "화면", "순서", "꾸미기", "편집", "배치", "숨기"], focus: "layout" },
   { label: "뉴스레터 관리", keys: ["뉴스레터", "구독", "머니레터", "뉴닉"], focus: "letters" },
   { label: "기본 정보 (닉네임·나이·소득·지역)", keys: ["닉네임", "이름", "나이", "소득", "성별", "연봉", "지역", "학교"], focus: "basic" },
   { label: "개인정보·데이터 지우기", keys: ["개인정보", "삭제", "데이터", "지우기"], focus: "privacy" },
@@ -1218,6 +1261,37 @@ function viewMy() {
       ${mascot(56)}
       <div style="flex:1"><div style="font-size:18px;font-weight:700">${esc(p.nickname || "이름 없음")}님</div>
       <div class="hint">${p.age ? `만 ${p.age}세 · ` : ""}${riskType(p.avert)} · ${p.prefs.map(esc).join(", ") || "선호 미입력"}</div></div>
+    </section>
+
+    <section class="card form" id="sec-layout">
+      <div class="sec-title"><h2>홈 화면 꾸미기</h2><button class="link-btn" data-act="layout-reset">처음대로</button></div>
+      <p class="hint" style="margin:0">화살표로 순서를 바꾸고, 눈 버튼으로 칸을 숨겨요. 바꾸는 즉시 미리보기에 보여요.</p>
+      <div class="layout-wrap">
+        ${homePreview()}
+        <div class="layout-lists">
+          <div>
+            <span class="lb">홈 화면 칸 순서</span>
+            ${layout().order.map((id, i, arr) => {
+              const sec = SECTIONS.find((x) => x.id === id);
+              const off = layout().hidden.has(id);
+              return `<div class="lo-row ${off ? "off" : ""}">
+                <span class="lo-n num">${i + 1}</span><span class="lo-t">${esc(sec.label)}</span>
+                <button class="lo-b" data-act="sec-move" data-id="${id}" data-d="-1" ${i === 0 ? "disabled" : ""} aria-label="${esc(sec.label)} 위로">▲</button>
+                <button class="lo-b" data-act="sec-move" data-id="${id}" data-d="1" ${i === arr.length - 1 ? "disabled" : ""} aria-label="${esc(sec.label)} 아래로">▼</button>
+                <button class="lo-b eye" data-act="sec-toggle" data-id="${id}" aria-pressed="${!off}" aria-label="${esc(sec.label)} ${off ? "보이기" : "숨기기"}">${off ? "숨김" : "보임"}</button>
+              </div>`;
+            }).join("")}
+          </div>
+          ${p.watch.length > 1 ? `<div>
+            <span class="lb">시세에 보일 종목 순서</span>
+            ${p.watch.map((w, i, arr) => `<div class="lo-row">
+                <span class="lo-n num">${i + 1}</span><span class="lo-t">${esc(w.name)}</span>
+                <button class="lo-b" data-act="watch-move" data-i="${i}" data-d="-1" ${i === 0 ? "disabled" : ""} aria-label="${esc(w.name)} 앞으로">▲</button>
+                <button class="lo-b" data-act="watch-move" data-i="${i}" data-d="1" ${i === arr.length - 1 ? "disabled" : ""} aria-label="${esc(w.name)} 뒤로">▼</button>
+              </div>`).join("")}
+          </div>` : ""}
+        </div>
+      </div>
     </section>
 
     <section class="card" id="sec-diag">
@@ -1425,6 +1499,27 @@ document.addEventListener("click", async (e) => {
     }
     case "retry": delete learnState.answers[el.dataset.id]; saveLearn(); render(); break;
     case "go-learn": go("#learn"); break;
+    case "sec-move": {
+      const L = layout(); const i = L.order.indexOf(el.dataset.id); const j = i + Number(el.dataset.d);
+      if (j < 0 || j >= L.order.length) break;
+      [L.order[i], L.order[j]] = [L.order[j], L.order[i]];
+      profile.layout = { order: L.order, hidden: [...L.hidden] }; saveProfile(); render();
+      break;
+    }
+    case "sec-toggle": {
+      const L = layout(); const id = el.dataset.id;
+      if (L.hidden.has(id)) L.hidden.delete(id); else L.hidden.add(id);
+      profile.layout = { order: L.order, hidden: [...L.hidden] }; saveProfile(); render();
+      break;
+    }
+    case "watch-move": {
+      const i = Number(el.dataset.i), j = i + Number(el.dataset.d);
+      if (j < 0 || j >= profile.watch.length) break;
+      [profile.watch[i], profile.watch[j]] = [profile.watch[j], profile.watch[i]];
+      saveProfile(); render();
+      break;
+    }
+    case "layout-reset": delete profile.layout; saveProfile(); render(); toast("홈 화면을 처음 모양으로 돌렸어요"); break;
     case "learn-tab": ui.learnTab = el.dataset.t; ui.learnOpen = null; render(); break;
     case "toggle-concept": ui.learnOpen = ui.learnOpen === el.dataset.id ? null : el.dataset.id; render(); break;
     case "open-concept": {
