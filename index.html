@@ -626,7 +626,7 @@
   @media (prefers-reduced-motion: reduce) { #splash .sp-in { animation: none; } }
 
   /* 공부 탭 바로가기 */
-  .hub { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .hub { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
   .hub-item { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; min-height: 76px; padding: 14px; border: none; border-radius: 18px; background: #fff; box-shadow: 0 2px 12px rgba(0,0,0,0.04); text-align: left; cursor: pointer; font-size: inherit; }
   .hub-item b { font-size: 15px; font-weight: 700; color: var(--ink); }
   .hub-item span { font-size: 12px; color: var(--sub); }
@@ -1013,7 +1013,7 @@ const TABS = [
   ["learn", "공부", `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15H6.5A2.5 2.5 0 0 0 4 20.5z"/><path d="M4 20.5A2.5 2.5 0 0 0 6.5 23H20v-5"/><path d="M9 8h7M9 12h5"/></svg>`],
 ];
 function tabBar(r) {
-  const cur = r === "money" ? "assets" : ["news", "schedule", "benefits", "watch", "letters"].includes(r) ? "learn" : r;
+  const cur = r === "money" ? "assets" : ["schedule", "benefits", "layout"].includes(r) ? "home" : ["news", "watch", "letters"].includes(r) ? "learn" : r;
   return `<nav class="tabbar" aria-label="주요 메뉴">${TABS.map(([id, label, icon]) =>
     `<button class="${cur === id ? "on" : ""}" data-act="tab" data-t="${id}" ${cur === id ? 'aria-current="page"' : ""}>${icon}<span>${label}</span></button>`).join("")}</nav>`;
 }
@@ -1125,8 +1125,6 @@ function homeBlocks() {
     news: newsBlock,
     links: linksBlock,
     quiz: quizBlock,
-    goals: goalsHome(),
-    money: moneyHome(),
     more: moreBlock,
   };
   return { blocks, html: layout().order.filter((id) => !layout().hidden.has(id)).map((id) => blocks[id] || "").join("\n") };
@@ -1149,8 +1147,6 @@ const SECTIONS = [
   { id: "news", label: "뉴스" },
   { id: "links", label: "일정 · 우리 지역 혜택" },
   { id: "quiz", label: "오늘의 OX 퀴즈" },
-  { id: "goals", label: "목표 저축" },
-  { id: "money", label: "이번 주 지출 (내 돈 기록)" },
   { id: "more", label: "맞춤 질문 카드" },
 ];
 function layout() {
@@ -1164,11 +1160,11 @@ function viewDrawer() {
   const hidden = layout().hidden;
   const home = [
     ["hero", "오늘의 한마디", "h-hero"], ["market", "지수", "h-market"], ["market", "주식 가격", "h-market", "stocks"],
-    ["impact", "나에게 미치는 영향", "h-impact"], ["news", "뉴스", "h-news"], ["links", "일정 · 혜택", "h-links"], ["quiz", "오늘의 퀴즈", "h-quiz"], ["goals", "목표 저축", "h-goals"], ["money", "이번 주 지출", "h-money"],
+    ["impact", "나에게 미치는 영향", "h-impact"], ["news", "뉴스", "h-news"], ["quiz", "오늘의 퀴즈", "h-quiz"],
   ].filter(([id]) => !hidden.has(id));
-  const assets = [["순자산·자산 진단", "assets", "sec-diag"], ["가계부 (캡처 기록)", "assets", "m-ledger"], ["목표 저축", "assets", "sec-goals"], ["자산·대출 입력", "assets", "sec-assets"]];
-  const study = [["경제 개념·퀴즈", "learn", ""], ["뉴스레터", "letters", ""], ["내 돈 기록", "assets", "m-ledger"], ["뉴스 쉽게 풀이", "news", ""],
-    ["나를 위한 일정", "schedule", ""], ["우리 지역 혜택", "benefits", ""], ["관심 종목", "watch", ""]];
+  const homeMore = [["나를 위한 일정", "schedule", ""], ["우리 지역 혜택", "benefits", ""], ["홈 화면 꾸미기", "layout", ""]];
+  const assets = [["순자산·자산 진단", "assets", "sec-diag"], ["내 돈 기록 (가계부)", "assets", "m-ledger"], ["목표 저축", "assets", "sec-goals"], ["자산·대출 입력", "assets", "sec-assets"]];
+  const study = [["경제 개념·퀴즈", "learn", ""], ["뉴스 쉽게 풀이", "news", ""], ["뉴스레터", "letters", ""], ["관심 종목", "watch", ""]];
   const my = [["기본 정보", "my", "sec-basic"], ["투자 성향 · 관심사", "my", "sec-risk"], ["투자 성향 정밀 진단", "risktest", ""]];
   const etc = [["개인정보·데이터 지우기", "etc", "sec-privacy"], ["앱 정보", "etc", ""]];
   const item = (label, route, target, extra = "") =>
@@ -1177,14 +1173,14 @@ function viewDrawer() {
     <nav class="drawer" data-stop="1" aria-label="목차">
       <div class="dr-head">${mascot(40)}<div><b class="hand">${esc(profile.nickname || "나")}님의 경제</b><span>어디로 갈까요?</span></div>
         <button class="icon-btn" data-act="close-drawer" aria-label="목차 닫기">${ICON.close}</button></div>
+      <div class="dr-group"><button class="dr-title" data-act="nav" data-route="my">마이페이지</button>
+        ${my.map(([l, r, t]) => item(l, r, t)).join("")}</div>
       <div class="dr-group"><button class="dr-title" data-act="nav" data-route="home">홈 화면</button>
-        ${home.map(([, label, target, sub]) => item(label, "home", target, sub ? `data-sub="${sub}"` : "")).join("")}${item("홈 화면 꾸미기", "layout", "")}</div>
+        ${home.map(([, label, target, sub]) => item(label, "home", target, sub ? `data-sub="${sub}"` : "")).join("")}${homeMore.map(([l, r, t]) => item(l, r, t)).join("")}</div>
       <div class="dr-group"><button class="dr-title" data-act="nav" data-route="assets">나의 자산관리</button>
         ${assets.map(([l, r, t]) => item(l, r, t)).join("")}</div>
       <div class="dr-group"><button class="dr-title" data-act="nav" data-route="learn">경제공부</button>
         ${study.map(([l, r, t]) => item(l, r, t)).join("")}</div>
-      <div class="dr-group"><button class="dr-title" data-act="nav" data-route="my">마이페이지</button>
-        ${my.map(([l, r, t]) => item(l, r, t)).join("")}</div>
       <div class="dr-group"><span class="dr-title">기타</span>
         ${etc.map(([l, r, t]) => item(l, r, t)).join("")}</div>
     </nav></div>`;
@@ -1769,8 +1765,7 @@ function viewLearn() {
   return `${tabHead("공부")}
   <main class="scroll">
     <section class="hub">
-      ${[["news", "", "뉴스 쉽게 풀이", "오늘의 경제를 쉬운 말로"], ["letters", "", "뉴스레터", "구독 관리·붙여넣기 풀이"], ["schedule", "", "나를 위한 일정", "관심사별 세일·정책 일정"],
-         ["benefits", "", "우리 지역 혜택", "지자체·정부 혜택"], ["watch", "", "관심 종목", "추가·순서·보유 수량"], ["assets", "m-ledger", "내 돈 기록", "캡처로 소비 기록"]]
+      ${[["news", "", "뉴스 쉽게 풀이", "오늘의 경제를 쉬운 말로"], ["letters", "", "뉴스레터", "구독 관리·붙여넣기 풀이"], ["watch", "", "관심 종목", "추가·순서·보유 수량"]]
         .map(([r, t, n, d]) => `<button class="hub-item" data-act="nav" data-route="${r}" data-target="${t}"><b>${n}</b><span>${d}</span></button>`).join("")}
     </section>
     <section class="card stats">
