@@ -100,7 +100,7 @@ export default async function handler(req, res) {
 
   if (hasData) {
     tasks.push(
-      index("코스피").then((v) => (out.kospi = v)).catch((e) => console.error("kospi", e.message)),
+      index("코스피").then((v) => (out.kospi = v)).catch((e) => { console.error("kospi", e.message); out.note = String(e.message).slice(0, 80); }),
       index("코스닥").then((v) => (out.kosdaq = v)).catch((e) => console.error("kosdaq", e.message)),
       Promise.all(names.map((n) => stock(n).catch(() => ({ name: n, missing: true })))).then((v) => (out.stocks = v))
     );

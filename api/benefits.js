@@ -71,7 +71,7 @@ export default async function handler(req, res) {
       const org = r.org || "";
       // 지자체·교육청이면 '우리 지역', 부처·공공기관이면 '정부'
       const isLocal = r.orgType
-        ? /지방|자치/.test(r.orgType) || /교육청$/.test(org)
+        ? /지방|자치|시군구|시도|광역|기초/.test(r.orgType) || /교육청$/.test(org)
         : /^(.+(특별시|광역시|특별자치시|특별자치도|도))(\s|$)/.test(org) || /교육청$/.test(org);
       // 다른 지역 지자체 서비스는 제외
       if (isLocal && !org.includes(sidoShort)) continue;
