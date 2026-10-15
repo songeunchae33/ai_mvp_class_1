@@ -4,7 +4,7 @@
 // 키가 없거나 호출이 실패하면 예시 데이터를 sample:true 로 돌려준다.
 import { kstYmd, fetchJson, num, dataGoItems, dataGoKey, cache } from "./_util.js";
 
-const BASE = "https://apis.data.go.kr/1160100/service";
+const BASE = "https://apis.data.go.kr/1160100"; // 금융위원회 시세 API (V2 주소)
 
 const SAMPLE = {
   kospi: { v: 7250.32, vs: 60.4, pct: 0.84 },
@@ -31,19 +31,19 @@ function latest(items) {
 }
 
 async function index(name) {
-  const it = latest(await dataGo("GetMarketIndexInfoService/getStockMarketIndex", { idxNm: name }));
+  const it = latest(await dataGo("GetMarketIndexInfoService_V2/getStockMarketIndex_V2", { idxNm: name }));
   if (!it) return null;
   return { v: num(it.clpr), vs: num(it.vs), pct: num(it.fltRt), date: it.basDt };
 }
 
 async function stock(name) {
-  const it = latest(await dataGo("GetStockSecuritiesInfoService/getStockPriceInfo", { itmsNm: name }));
+  const it = latest(await dataGo("GetStockSecuritiesInfoService_V2/getStockPriceInfo_V2", { itmsNm: name }));
   if (!it) return { name, missing: true };
   return { name: it.itmsNm, code: it.srtnCd, market: it.mrktCtg, v: num(it.clpr), vs: num(it.vs), pct: num(it.fltRt), date: it.basDt };
 }
 
 async function search(q) {
-  const items = await dataGo("GetStockSecuritiesInfoService/getStockPriceInfo", {
+  const items = await dataGo("GetStockSecuritiesInfoService_V2/getStockPriceInfo_V2", {
     likeItmsNm: q,
     beginBasDt: kstYmd(7),
     numOfRows: "100",
