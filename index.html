@@ -459,6 +459,10 @@
   .streak-card b { font-family: 'Jua', sans-serif; font-weight: 400; font-size: 26px; color: #E5486A; }
   .streak-card span { font-size: 11px; color: var(--sub); }
   .streak-card p { margin: 0; font-size: 14px; line-height: 1.5; }
+
+  .amt { display: flex; gap: 6px; }
+  .amt input { flex: 1; min-width: 0; text-align: right; }
+  .amt select { flex: 0 0 auto; width: auto; padding-right: 8px; }
 </style>
 </head>
 <body>
@@ -1124,6 +1128,42 @@ function goalsHome() {
       }).join("")}
     </section>`;
 }
+// 금액 칸: 숫자 + 단위(만원/억원). 저장은 항상 '만원' 단위
+function amountField(id, label, valueMan, field, i) {
+  const big = Number(valueMan) >= 10000;
+  const shown = valueMan === null || valueMan === undefined || valueMan === "" ? "" : big ? +(valueMan / 10000).toFixed(4) : valueMan;
+  const data = field ? `data-field="${field}" data-i="${i}"` : "";
+  return `<div><label class="lb" for="${id}">${label}</label><div class="amt">
+      <input class="field num" id="${id}" inputmode="decimal" ${data} value="${shown}" placeholder="${field ? "" : "100"}">
+      <label class="sr" for="${id}-u">${label} 단위</label>
+      <select class="field" id="${id}-u" ${data}><option value="1" ${big ? "" : "selected"}>만원</option><option value="10000" ${big ? "selected" : ""}>억원</option></select>
+    </div></div>`;
+}
+function readAmount(id) {
+  const v = parseFloat(String(document.getElementById(id)?.value || "").replace(/[^0-9.]/g, ""));
+  const unit = Number(document.getElementById(id + "-u")?.value || 1);
+  return Number.isFinite(v) ? Math.round(v * unit) : null;
+}
+const GOAL_LAST_YEAR = 2056;
+function dueFields(id, due, field, i) {
+  const [y, m] = String(due || "").split("-").map(Number);
+  const now = new Date().getFullYear();
+  const data = field ? `data-field="${field}" data-i="${i}"` : "";
+  const years = [];
+  for (let yy = now; yy <= GOAL_LAST_YEAR; yy++) years.push(yy);
+  return `<div><span class="lb">언제까지</span><div class="amt">
+      <label class="sr" for="${id}-y">목표 연도</label>
+      <select class="field" id="${id}-y" ${data}><option value="">기한 없음</option>${years.map((yy) => `<option ${yy === y ? "selected" : ""}>${yy}</option>`).join("")}</select>
+      <label class="sr" for="${id}-m">목표 월</label>
+      <select class="field" id="${id}-m" ${data}>${Array.from({ length: 12 }, (_, k) => k + 1).map((mm) => `<option value="${mm}" ${mm === (m || 12) ? "selected" : ""}>${mm}월</option>`).join("")}</select>
+    </div></div>`;
+}
+function readDue(id) {
+  const y = document.getElementById(id + "-y")?.value;
+  const m = document.getElementById(id + "-m")?.value || "12";
+  return y ? `${y}-${String(m).padStart(2, "0")}` : "";
+}
+
 function goalsMy(p) {
   const goals = p.goals || [];
   return `<section class="card form" id="sec-goals">
@@ -1133,20 +1173,17 @@ function goalsMy(p) {
         return `<div class="debt">
           <div class="goal-top"><b>${esc(g.name)}</b><span class="num">${c.pct}%</span><button class="icon-btn" data-act="goal-rm" data-i="${i}" aria-label="${esc(g.name)} 목표 삭제">${ICON.x}</button></div>
           ${goalBar(c.pct)}
-          <div class="grid2">
-            <div><label class="lb" for="gs-${i}">지금까지 모은 돈</label><div class="money"><input class="field num" id="gs-${i}" inputmode="numeric" data-field="goal-saved" data-i="${i}" value="${g.saved ?? ""}"><span class="unit">만원</span></div></div>
-            <div><label class="lb" for="gt-${i}">목표 금액</label><div class="money"><input class="field num" id="gt-${i}" inputmode="numeric" data-field="goal-target" data-i="${i}" value="${g.target ?? ""}"><span class="unit">만원</span></div></div>
-          </div>
-          <p class="hint" style="margin:0">${c.done ? "목표 달성! 새 목표를 만들어 보세요." : `${g.due ? `${g.due.replace("-", "년 ")}월까지 ` : ""}${man(c.left)} 남았어요${c.monthly ? ` · 매달 ${man(c.monthly)}씩` : ""}`}</p>
+          ${amountField(`gs-${i}`, "지금까지 모은 돈", g.saved ?? 0, "goal-saved", i)}
+          ${amountField(`gt-${i}`, "목표 금액", g.target, "goal-target", i)}
+          ${dueFields(`gd-${i}`, g.due, "goal-due", i)}
+          <p class="hint" style="margin:0">${c.done ? "목표 달성! 새 목표를 만들어 보세요." : `${g.due ? `${g.due.split("-")[0]}년 ${Number(g.due.split("-")[1])}월까지 ` : ""}${man(c.left)} 남았어요${c.monthly ? ` · 매달 ${man(c.monthly)}씩` : ""}`}</p>
         </div>`;
       }).join("")}
       <div class="debt">
         <span class="lb" style="margin:0">새 목표 만들기</span>
         <div><label class="sr" for="g-name">목표 이름</label><input class="field" id="g-name" maxlength="20" placeholder="예: 제주 여행, 새 노트북"></div>
-        <div class="grid2">
-          <div><label class="lb" for="g-target">목표 금액</label><div class="money"><input class="field num" id="g-target" inputmode="numeric" placeholder="100"><span class="unit">만원</span></div></div>
-          <div><label class="lb" for="g-due">언제까지</label><input class="field" id="g-due" type="month"></div>
-        </div>
+        ${amountField("g-target", "목표 금액", "", "", "")}
+        ${dueFields("g-due", "", "", "")}
         <button class="btn" data-act="goal-add">목표 추가</button>
       </div>
     </section>`;
@@ -1873,9 +1910,9 @@ document.addEventListener("click", async (e) => {
     case "go-goals": go("#my"); setTimeout(() => document.getElementById("sec-goals")?.scrollIntoView({ block: "start" }), 60); break;
     case "goal-add": {
       const name = document.getElementById("g-name").value.trim().slice(0, 20);
-      const target = parseInt(document.getElementById("g-target").value.replace(/[^0-9]/g, ""), 10);
+      const target = readAmount("g-target");
       if (!name || !(target > 0)) { toast("목표 이름과 금액을 적어주세요"); break; }
-      profile.goals = [...(profile.goals || []), { name, target, saved: 0, due: document.getElementById("g-due").value || "" }];
+      profile.goals = [...(profile.goals || []), { name, target, saved: 0, due: readDue("g-due") }];
       saveProfile(); render(); toast("목표를 만들었어요");
       break;
     }
@@ -1965,8 +2002,9 @@ document.addEventListener("change", (e) => {
   else if (["cash", "invest", "other"].includes(f)) p.assets[f] = int(el.value);
   else if (f === "payday") { const d = int(el.value); p.payday = d >= 1 && d <= 31 ? d : null; }
   else if (f === "qty") p.watch[i].qty = int(el.value);
-  else if (f === "goal-saved") p.goals[i].saved = int(el.value) || 0;
-  else if (f === "goal-target") p.goals[i].target = int(el.value) || p.goals[i].target;
+  else if (f === "goal-saved") p.goals[i].saved = readAmount(`gs-${i}`) ?? 0;
+  else if (f === "goal-target") p.goals[i].target = readAmount(`gt-${i}`) || p.goals[i].target;
+  else if (f === "goal-due") p.goals[i].due = readDue(`gd-${i}`);
   else if (f === "debt-name") p.debts[i].name = el.value.trim().slice(0, 20);
   else if (f === "debt-amount") p.debts[i].amount = int(el.value);
   else if (f === "debt-rate") { const r = parseFloat(el.value); p.debts[i].rate = Number.isFinite(r) ? r : null; }
