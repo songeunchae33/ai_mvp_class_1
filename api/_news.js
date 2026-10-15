@@ -45,18 +45,25 @@ function source(url) {
   }
 }
 
+// 네이버 뉴스 검색. 새 방식(NAVER API HUB, 네이버 클라우드 플랫폼)을 먼저 쓰고,
+// 예전 개발자센터 키만 있으면 그걸 쓴다. 약관상 결과는 '그대로 보여주기'에만 쓴다 (AI 요약 금지).
+export function newsReady() {
+  return !!((process.env.NAVER_HUB_ID && process.env.NAVER_HUB_SECRET) || (process.env.NAVER_SEARCH_ID && process.env.NAVER_SEARCH_SECRET));
+}
+
 export async function naver(query, { display = 10, sort = "date" } = {}) {
   const qs = new URLSearchParams({ query, display: String(display), sort });
-  const json = await fetchJson(`https://openapi.naver.com/v1/search/news.json?${qs}`, {
-    headers: {
-      "X-Naver-Client-Id": process.env.NAVER_SEARCH_ID,
-      "X-Naver-Client-Secret": process.env.NAVER_SEARCH_SECRET,
-    },
-  });
+  const hub = process.env.NAVER_HUB_ID && process.env.NAVER_HUB_SECRET;
+  const json = hub
+    ? await fetchJson(`https://naverapihub.apigw.ntruss.com/search/v1/news?${qs}`, {
+        headers: { "X-NCP-APIGW-API-KEY-ID": process.env.NAVER_HUB_ID, "X-NCP-APIGW-API-KEY": process.env.NAVER_HUB_SECRET },
+      })
+    : await fetchJson(`https://openapi.naver.com/v1/search/news.json?${qs}`, {
+        headers: { "X-Naver-Client-Id": process.env.NAVER_SEARCH_ID, "X-Naver-Client-Secret": process.env.NAVER_SEARCH_SECRET },
+      });
   return (json.items || []).map((it) => {
     const url = it.originallink || it.link;
-    // desc(기사 요약 한두 줄)는 AI 풀이 재료로만 쓰고 화면에는 보여주지 않는다
-    return { title: clean(it.title), desc: clean(it.description), url, source: source(url), at: new Date(it.pubDate).toISOString() };
+    return { title: clean(it.title), url, source: source(url), at: new Date(it.pubDate).toISOString() };
   });
 }
 

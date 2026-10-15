@@ -3,10 +3,10 @@
 // GET /api/news?q=FOMC                     → { items: 해당 키워드 뉴스 3 }
 // 둘 다 &full=1 을 붙이면 '뉴스 더보기' 화면용으로 더 많이 돌려준다
 import { cache } from "./_util.js";
-import { PREF_QUERY, naver, dedupe, keywords, searchUrl } from "./_news.js";
+import { PREF_QUERY, naver, dedupe, keywords, searchUrl, newsReady } from "./_news.js";
 
 // 화면에는 제목·링크만 보낸다
-const strip = (list) => list.map(({ desc, ...n }) => n);
+const strip = (list) => list;
 
 function sampleHome(interests) {
   const issues = ["FOMC 앞두고 금리 동결 전망 우세", "원/달러 환율 1,470원대서 등락", "반도체 업황 개선 기대에 대형주 강세"]
@@ -17,7 +17,7 @@ function sampleHome(interests) {
 }
 
 export default async function handler(req, res) {
-  const ready = process.env.NAVER_SEARCH_ID && process.env.NAVER_SEARCH_SECRET;
+  const ready = newsReady();
 
   const full = req.query.full === "1";
 

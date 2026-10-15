@@ -1,8 +1,9 @@
-// 경제 공부 '화제순': 개념마다 최근 7일 동안 뉴스 기사에 몇 번 나왔는지 센다 (네이버 검색 API).
-// 같은 앱 사용자들의 기록을 모으는 서버가 없어서, '요즘 사람들이 많이 보는 개념'을 뉴스 언급량으로 대신한다.
-// GET /api/trending → { available, counts: { 개념id: 기사 수(최대 100) }, at }
+// 경제 공부 '화제순': 개념마다 최근 7일 정부 보도자료(정책브리핑)에 몇 번 나왔는지 센다.
+// 앱 사용자 기록을 모으는 서버가 없어서 '요즘 많이 나오는 개념'을 보도자료 언급량으로 대신한다.
+// (네이버 검색 결과는 약관상 '그대로 보여주기'에만 쓸 수 있어서 집계에 쓰지 않는다)
+// GET /api/trending → { available, counts: { 개념id: 언급 횟수 }, total: 본 보도자료 수, at }
 import { cache } from "./_util.js";
-import { naver } from "./_news.js";
+import { pressReleases } from "./_policy.js";
 
 // "토큰증권 (STO)" → "토큰증권", "양적완화 / 양적긴축" → "양적완화", "고정금리 vs 변동금리" → "고정금리"
 function searchWord(term) {
@@ -10,22 +11,22 @@ function searchWord(term) {
 }
 
 export default async function handler(req, res) {
-  if (!process.env.NAVER_SEARCH_ID || !process.env.NAVER_SEARCH_SECRET) return res.status(200).json({ available: false });
+  if (!process.env.DATA_GO_KR_KEY) return res.status(200).json({ available: false });
   try {
     const proto = req.headers["x-forwarded-proto"] || "https";
-    const learn = await fetch(`${proto}://${req.headers.host}/data/learn.json`).then((r) => r.json());
-    const weekAgo = Date.now() - 7 * 86400e3;
+    const [learn, docs] = await Promise.all([
+      fetch(`${proto}://${req.headers.host}/data/learn.json`).then((r) => r.json()),
+      pressReleases(7),
+    ]);
+    if (!docs.length) return res.status(200).json({ available: false });
+    const texts = docs.map((d) => `${d.title} ${d.sub} ${d.body}`);
     const counts = {};
-    await Promise.all(learn.concepts.map(async (c) => {
-      try {
-        const items = await naver(searchWord(c.term), { display: 100, sort: "date" });
-        counts[c.id] = items.filter((n) => new Date(n.at).getTime() > weekAgo).length;
-      } catch {
-        counts[c.id] = 0;
-      }
-    }));
+    for (const c of learn.concepts) {
+      const w = searchWord(c.term);
+      counts[c.id] = texts.reduce((n, t) => n + (t.split(w).length - 1), 0);
+    }
     cache(res, 21600); // 6시간마다 다시 셈
-    res.status(200).json({ available: true, counts, at: new Date().toISOString() });
+    res.status(200).json({ available: true, counts, total: docs.length, at: new Date().toISOString() });
   } catch (e) {
     console.error(e);
     res.status(200).json({ available: false });

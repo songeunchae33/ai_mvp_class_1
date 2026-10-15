@@ -1006,13 +1006,13 @@ function viewBrief() {
   const b = data.brief;
   const L = ui.letter;
   const today = !b ? `<p class="hint" style="margin:0">풀이를 만드는 중…</p>`
-    : !b.available ? `<p class="hint" style="margin:0">뉴스 키와 AI 키가 연결되면 오늘 뉴스를 쉽게 풀어드려요.</p>`
+    : !b.available ? `<p class="hint" style="margin:0">공공데이터포털 키와 AI 키가 연결되면 오늘의 경제 정책을 쉽게 풀어드려요.</p>`
     : !b.points?.length ? `<p class="hint" style="margin:0">${esc(b.error || "오늘은 풀이할 뉴스가 아직 모이지 않았어요.")}</p>`
     : `<div class="bp-mood">${mascot(28)}<span>${esc(b.mood)}</span></div>${briefCards(b)}`;
   return `<section class="card">
-      <div class="sec-title"><h2>오늘 뉴스 쉽게 풀이</h2>${b?.count ? `<span>기사 ${b.count}개 종합</span>` : ""}</div>
+      <div class="sec-title"><h2>오늘의 경제 쉽게 풀이</h2>${b?.count ? `<span>보도자료 ${b.count}개 종합</span>` : ""}</div>
       ${today}
-      <p class="hint" style="margin:10px 0 0">여러 언론사 기사의 제목과 요약 문구를 AI가 종합해 다시 쓴 거예요. 정확한 내용은 원문 링크에서 확인하세요.</p>
+      <p class="hint" style="margin:10px 0 0">최근 3일 정부 보도자료(정책브리핑)를 AI가 쉬운 말로 정리한 거예요. 정확한 내용은 원문 링크에서 확인하세요.</p>
     </section>
     <section class="card form">
       <div class="sec-title"><h2>뉴스레터 쉽게 풀이</h2><span>저장하지 않아요</span></div>
@@ -1077,7 +1077,7 @@ function sortConcepts(list) {
   const L = data.learn, ans = learnState.answers;
   const idx = (c) => L.concepts.indexOf(c);
   const sorts = {
-    // 화제순: 최근 7일 뉴스 언급 많은 순 (데이터가 없으면 '요즘 뜨는' 먼저, 원래 순서)
+    // 화제순: 최근 7일 정부 보도자료에 많이 나온 순 (데이터가 없으면 '요즘 뜨는' 먼저, 원래 순서)
     hot: (a, b) => (data.trending?.available ? hotCount(b) - hotCount(a) : 0) || (a.cat === "trend" ? 0 : 1) - (b.cat === "trend" ? 0 : 1) || idx(a) - idx(b),
     // 최신순: 새로 추가한 개념 먼저 (added 날짜, 같으면 목록 뒤쪽이 최신)
     new: (a, b) => String(b.added || "").localeCompare(String(a.added || "")) || idx(b) - idx(a),
@@ -1097,7 +1097,7 @@ function conceptRow(c, showCat) {
   const hc = ui.learnSort === "hot" ? hotCount(c) : null;
   return `<div class="concept">
     <button class="c-head" data-act="toggle-concept" data-id="${c.id}" aria-expanded="${open}">
-      <div style="flex:1;min-width:0"><div class="t">${esc(c.term)} ${showCat ? `<span class="tagc">${esc(catName(c.cat))}</span>` : ""}${hc ? `<span class="hot">기사 ${hc >= 100 ? "100+" : hc}</span>` : ""}</div><div class="d">${esc(c.short)}</div></div>${st}
+      <div style="flex:1;min-width:0"><div class="t">${esc(c.term)} ${showCat ? `<span class="tagc">${esc(catName(c.cat))}</span>` : ""}${hc ? `<span class="hot">언급 ${hc}</span>` : ""}</div><div class="d">${esc(c.short)}</div></div>${st}
     </button>
     ${open ? `<div class="c-body"><p>${esc(c.body)}</p><p class="me"><b>나와 연결하면</b> ${esc(c.me)}</p><div class="c-quiz">${quizBox(c, false)}</div></div>` : ""}
   </div>`;
@@ -1119,8 +1119,8 @@ function viewLearn() {
   // 이번 주 화제 TOP 5 (뉴스 언급량)
   const top5 = T?.available ? [...L.concepts].sort((a, b) => hotCount(b) - hotCount(a)).filter((c) => hotCount(c) > 0).slice(0, 5) : [];
   const hotBlock = top5.length ? `<section class="card">
-      <div class="sec-title"><h2>이번 주 화제 개념 TOP 5</h2><span>최근 7일 뉴스 기준</span></div>
-      <div class="hot-list">${top5.map((c, i) => `<button class="hot-item" data-act="open-concept" data-id="${c.id}"><span class="hot-rank">${i + 1}</span><span class="hot-t">${esc(c.term)}</span><span class="hint">기사 ${hotCount(c) >= 100 ? "100+" : hotCount(c)}</span></button>`).join("")}</div>
+      <div class="sec-title"><h2>이번 주 화제 개념 TOP 5</h2><span>최근 7일 정부 보도자료 기준</span></div>
+      <div class="hot-list">${top5.map((c, i) => `<button class="hot-item" data-act="open-concept" data-id="${c.id}"><span class="hot-rank">${i + 1}</span><span class="hot-t">${esc(c.term)}</span><span class="hint">언급 ${hotCount(c)}</span></button>`).join("")}</div>
     </section>` : "";
 
   // 목록: 전체는 주제별로 묶어서(주제마다 4개 + 더보기), 주제 탭은 그 주제만, 복습·푼 문제는 그대로
@@ -1160,9 +1160,9 @@ function viewLearn() {
     ${tab !== "done" ? `<div class="sortbar" role="group" aria-label="정렬">
       ${LEARN_SORTS.map(([id, label]) => `<button class="${ui.learnSort === id ? "on" : ""}" data-act="learn-sort" data-s="${id}" aria-pressed="${ui.learnSort === id}">${label}</button>`).join("")}
     </div>
-    ${ui.learnSort === "hot" && T && !T.available ? `<p class="hint" style="margin:-6px 4px 0">뉴스 키를 연결하면 최근 7일 뉴스에 많이 나온 순으로 정렬돼요. 지금은 ‘요즘 뜨는’ 개념이 먼저 보여요.</p>` : ""}` : ""}
+    ${ui.learnSort === "hot" && T && !T.available ? `<p class="hint" style="margin:-6px 4px 0">공공데이터포털 키를 연결하면 최근 7일 정부 보도자료에 많이 나온 순으로 정렬돼요. 지금은 ‘요즘 뜨는’ 개념이 먼저 보여요.</p>` : ""}` : ""}
     ${listHtml}
-    <p class="foot">‘화제순’은 최근 7일 동안 뉴스 기사에 많이 나온 순서예요. 푼 기록은 이 기기에만 저장돼요.</p>
+    <p class="foot">‘화제순’은 최근 7일 정부 보도자료(정책브리핑)에 많이 나온 순서예요. 푼 기록은 이 기기에만 저장돼요.</p>
   </main>`;
 }
 
