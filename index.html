@@ -432,6 +432,13 @@
   .hot-rank { width: 24px; height: 24px; border-radius: 50%; flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; font-family: 'Jua', sans-serif; font-size: 14px; color: #fff; background: linear-gradient(135deg, #7C96FF, #FF9EBB); }
   .hot-t { flex: 1; font-weight: 600; }
   .more-btn { width: 100%; min-height: 44px; border: none; border-top: 1px solid #EEF1F8; background: transparent; color: var(--green); font-size: 13px; font-weight: 700; cursor: pointer; }
+
+  /* 마이페이지 저장 버튼 */
+  .savebar { position: sticky; bottom: 0; z-index: 6; margin: 4px -16px -20px; padding: 12px 16px calc(14px + env(safe-area-inset-bottom));
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    background: rgba(248, 248, 255, 0.9); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); border-top: 1px solid #E3E8F5; }
+  .savebar span { font-size: 13px; color: var(--sub); }
+  .savebar .btn { min-width: 120px; }
 </style>
 </head>
 <body>
@@ -1498,6 +1505,10 @@ function viewMy() {
       <button class="btn danger" data-act="wipe">내 정보 전부 지우기</button>
     </section>
     <p class="foot">나만의 경제 · 투자 권유가 아닌 참고용 정보예요.</p>
+    <div class="savebar">
+      <span>${ui.savedAt ? `저장됨 · ${ui.savedAt}` : "고친 내용은 이 기기에 저장돼요"}</span>
+      <button class="btn" data-act="save-my">저장하기</button>
+    </div>
   </main>`;
 }
 
@@ -1697,6 +1708,7 @@ document.addEventListener("click", async (e) => {
       break;
     }
     case "toggle-hide": ui.hideMoney = !ui.hideMoney; saveUi(); render(); break;
+    case "save-my": saveMy(); break;
     case "pref": {
       const v = el.dataset.v;
       t.prefs = t.prefs.includes(v) ? t.prefs.filter((x) => x !== v) : [...t.prefs, v];
@@ -1781,6 +1793,24 @@ function showAvert(v) {
   if (a) a.textContent = `${v}/10`;
   if (b) b.textContent = riskType(v);
 }
+
+// 마이페이지 '저장하기': 지금 쓰고 있던 칸의 값까지 반영해서 저장
+// (버튼을 누르는 순간 칸에서 벗어나며 화면이 다시 그려져 클릭이 사라질 수 있어서, 누르는 즉시(pointerdown) 처리한다)
+let lastSave = 0;
+function saveMy() {
+  if (Date.now() - lastSave < 600) return;
+  lastSave = Date.now();
+  const a = document.activeElement;
+  if (a?.dataset?.field) a.dispatchEvent(new Event("change", { bubbles: true }));
+  saveProfile();
+  const t = new Date();
+  ui.savedAt = `${t.getHours()}:${String(t.getMinutes()).padStart(2, "0")}`;
+  render();
+  toast("저장했어요");
+}
+document.addEventListener("pointerdown", (e) => {
+  if (e.target.closest('[data-act="save-my"]')) { e.preventDefault(); saveMy(); }
+});
 
 let searchTimer, remoteTimer;
 document.addEventListener("input", (e) => {
