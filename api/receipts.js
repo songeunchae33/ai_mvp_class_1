@@ -46,7 +46,7 @@ function allow(ip, n) {
   const day = new Date().toISOString().slice(0, 10);
   const h = hits.get(ip);
   const cur = h && h.day === day ? h.count : 0;
-  if (cur + n > 40) return false;
+  if (cur + n > 30) return false; // 캡처 하루 20장 + 피드백 여유분
   hits.set(ip, { day, count: cur + n });
   return true;
 }

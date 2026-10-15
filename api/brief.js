@@ -48,11 +48,20 @@ async function ask(input) {
   return JSON.parse(r.output_text);
 }
 
+// 뉴스레터 붙여넣기 풀이: 하루 5번 (IP 기준)
+const letterHits = new Map();
+
 export default async function handler(req, res) {
   if (!process.env.OPENAI_API_KEY) return res.status(200).json({ available: false });
 
   // 뉴스레터 붙여넣기 풀이
   if (req.method === "POST") {
+    const ip = String(req.headers["x-forwarded-for"] || "").split(",")[0] || "local";
+    const day = new Date().toISOString().slice(0, 10);
+    const h = letterHits.get(ip);
+    const used = h && h.day === day ? h.n : 0;
+    if (used >= 5) return res.status(429).json({ error: "오늘 풀이는 다 썼어요. 내일 다시 해주세요!" });
+    letterHits.set(ip, { day, n: used + 1 });
     const text = String(req.body?.text || "").trim();
     if (text.length < 50) return res.status(400).json({ error: "내용을 조금 더 붙여넣어 주세요" });
     try {

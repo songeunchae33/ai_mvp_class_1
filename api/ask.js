@@ -10,14 +10,28 @@ const SYSTEM = `너는 '나만의 경제' 앱의 금융 길잡이 캐릭터 '루
 - 특정 종목 매수·매도 추천이나 수익 보장은 하지 마. 판단은 사용자 몫이라고 자연스럽게 남겨.
 - 모르는 최신 사실은 지어내지 말고 모른다고 말해. 시세는 주어진 값만 사용해.`;
 
+// 하루 질문 한도 (IP 기준, 서버 인스턴스마다 따로 세는 대략적인 보호)
+const DAILY = 20;
+const hits = new Map();
+function allow(ip) {
+  const day = new Date().toISOString().slice(0, 10);
+  const h = hits.get(ip);
+  const n = h && h.day === day ? h.n : 0;
+  if (n >= DAILY) return false;
+  hits.set(ip, { day, n: n + 1 });
+  return true;
+}
+
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "POST만 지원해요" });
+  const ip = String(req.headers["x-forwarded-for"] || "").split(",")[0] || "local";
   if (!process.env.OPENAI_API_KEY) return res.status(503).json({ error: "AI 질문 기능이 아직 설정되지 않았어요" });
 
   const { question, profile, market } = req.body || {};
   if (typeof question !== "string" || !question.trim() || question.length > 300) {
     return res.status(400).json({ error: "질문은 300자 이내로 적어주세요" });
   }
+  if (!allow(ip)) return res.status(429).json({ error: "오늘 질문은 다 썼어요. 내일 다시 물어봐 주세요!" });
   const context = JSON.stringify({ profile: profile || {}, market: market || {} }).slice(0, 2000);
 
   try {

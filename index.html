@@ -1318,6 +1318,7 @@ function viewBrief() {
       <label class="lb" for="letter-text">구독 중인 뉴스레터(머니레터·뉴닉 등) 내용을 복사해서 붙여넣어 주세요</label>
       <textarea class="field" id="letter-text" rows="5" maxlength="6000" placeholder="메일에서 본문을 복사해 여기에 붙여넣기">${esc(L.text)}</textarea>
       <button class="btn" data-act="letter-brief" ${L.loading ? "disabled" : ""}>${L.loading ? "풀이하는 중…" : "쉽게 풀어줘"}</button>
+      <p class="hint" style="margin:0">오늘 남은 풀이 ${aiLeft("letter")}번 (하루 ${AI_LIMIT.letter}번)</p>
       ${L.error ? `<p class="hint" style="margin:0;color:var(--up)">${esc(L.error)}</p>` : ""}
       ${L.result ? `<div class="bp-mood">${mascot(28)}<span>${esc(L.result.mood)}</span></div>${briefCards(L.result)}` : ""}
     </section>`;
@@ -1984,12 +1985,30 @@ function refreshResults() {
   if (box) box.innerHTML = searchResults();
 }
 
+// ── AI 사용 한도: 하루 질문 20번 · 뉴스레터 풀이 5번 · 캡처 20장(가계부에서 따로 셈) ──
+const AI_LIMIT = { ask: 20, letter: 5 };
+const AI_KEY = "myeco.ai.v1";
+function aiUse() {
+  const day = ymd(today0());
+  try { const v = JSON.parse(localStorage.getItem(AI_KEY)) || {}; return v.day === day ? v : { day, ask: 0, letter: 0 }; } catch { return { day, ask: 0, letter: 0 }; }
+}
+function aiLeft(kind) { return Math.max(0, AI_LIMIT[kind] - (aiUse()[kind] || 0)); }
+function aiCount(kind) {
+  const v = aiUse(); v[kind] = (v[kind] || 0) + 1;
+  try { localStorage.setItem(AI_KEY, JSON.stringify(v)); } catch {}
+}
+
 async function askAi(q) {
+  if (!aiLeft("ask")) {
+    ui.sheet = { q, a: `오늘 질문은 ${AI_LIMIT.ask}번을 다 썼어요. 내일 다시 물어봐 주세요!`, limited: true };
+    ui.q = ""; ui.searchOpen = false; render(); return;
+  }
   ui.sheet = { q, loading: true };
   ui.q = ""; ui.sremote = []; ui.searchOpen = false;
   render();
   try {
     const j = await getJson("/api/ask", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ question: q, ...summaryForAi() }) });
+    aiCount("ask");
     ui.sheet = { q, a: j.answer || "답을 만들지 못했어요." };
   } catch (err) {
     ui.sheet = { q, a: err.body?.error || "지금은 답할 수 없어요. 잠시 후 다시 시도해 주세요." };
@@ -2032,7 +2051,7 @@ function viewSheet() {
       <div style="display:flex;justify-content:space-between;align-items:center"><b class="hand" style="font-size:16px">물어봐요</b><button class="icon-btn" data-act="close-sheet" aria-label="닫기">${ICON.close}</button></div>
       <div class="qline">${esc(s.q)}</div>
       <div class="ans">${mascot(40)}<p class="${s.loading ? "hand" : ""}">${s.loading ? "음… 생각하는 중이에요" : esc(s.a)}</p></div>
-      ${!s.loading ? `<p class="hint" style="margin:0">참고용 설명이에요. 투자 결정은 직접 판단해 주세요.</p>` : ""}
+      ${!s.loading ? `<p class="hint" style="margin:0">참고용 설명이에요. 투자 결정은 직접 판단해 주세요. · 오늘 남은 질문 ${aiLeft("ask")}번</p>` : ""}
     </div></div>`;
 }
 
@@ -2376,10 +2395,12 @@ document.addEventListener("click", async (e) => {
     case "news-brief": openNews("brief"); break;
     case "letter-brief": {
       const text = (document.getElementById("letter-text")?.value || "").trim();
+      if (!aiLeft("letter")) { ui.letter = { text, loading: false, result: null, error: `오늘 풀이는 ${AI_LIMIT.letter}번을 다 썼어요. 내일 다시 해주세요!` }; render(); break; }
       ui.letter = { text, loading: true, result: null, error: "" };
       render();
       try {
         const j = await getJson("/api/brief", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text }) });
+        if (j.available !== false) aiCount("letter");
         ui.letter = { text, loading: false, result: j.available === false ? null : j, error: j.available === false ? "AI 키가 연결되면 풀이할 수 있어요" : "" };
       } catch (err) {
         ui.letter = { text, loading: false, result: null, error: err.body?.error || "풀이를 만들지 못했어요" };
