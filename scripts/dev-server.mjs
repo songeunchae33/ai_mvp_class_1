@@ -8,7 +8,7 @@ import { pathToFileURL, fileURLToPath } from "node:url";
 
 const root = process.argv[2] || path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const port = Number(process.argv[3] || 3123);
-const types = { ".html": "text/html; charset=utf-8", ".json": "application/json; charset=utf-8", ".js": "text/javascript" };
+const types = { ".html": "text/html; charset=utf-8", ".json": "application/json; charset=utf-8", ".js": "text/javascript", ".png": "image/png", ".svg": "image/svg+xml", ".jpg": "image/jpeg" };
 
 http.createServer(async (req, res) => {
   const url = new URL(req.url, "http://x");

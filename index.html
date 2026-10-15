@@ -5,7 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#F2F4F6">
 <title>나만의 경제</title>
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%231E40AF'/%3E%3Cg transform='translate%284 6%29 scale%28.9%29'%3E%3Cpath d='M20 54C14.5 54 13 48.5 16.5 46C11.5 43 10.5 35 15.5 31.5C16 21 23 15 31.5 15C32.5 9.5 38 7 42 9.5C46 12 45.5 17 42.5 18.5C48.5 21.5 50.5 28.5 49.5 34C54.5 32 58.5 36.5 55.5 40.5C53.5 43.5 50.5 43.5 48.5 42.5C48.5 47.5 46 52.5 41 53.5C38 56.5 33 56.5 31 53.5C27 56.5 22.5 56.5 20 54Z' fill='%23FAFAF8'/%3E%3Cellipse cx='26' cy='33' rx='2' ry='2.7' fill='%231E3A8A'/%3E%3Cellipse cx='38' cy='33' rx='2' ry='2.7' fill='%231E3A8A'/%3E%3Cpath d='M29 38Q32 41 35 38' fill='none' stroke='%231E3A8A' stroke-width='2' stroke-linecap='round'/%3E%3Cellipse cx='21.5' cy='38' rx='2.6' ry='1.6' fill='%23A7F3D0'/%3E%3Cellipse cx='42.5' cy='38' rx='2.6' ry='1.6' fill='%23A7F3D0'/%3E%3C/g%3E%3C/svg%3E">
+<link rel="icon" href="/img/lumi/icon.png">
+<link rel="apple-touch-icon" href="/img/lumi/icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
@@ -675,11 +676,26 @@
   @keyframes lumi-sway { 0%, 100% { transform: translateY(0) rotate(-1.5deg); } 50% { transform: translateY(-1px) rotate(1.5deg); } }
   @keyframes lumi-pat { 0%, 100% { transform: rotate(0); } 50% { transform: rotate(18deg); } }
   @media (prefers-reduced-motion: reduce) { .lumi .lumi-body, .lumi .lumi-arm, .lumi .lumi-spark { animation: none !important; } }
+
+  /* ═════ 루미 (시트 그림) ═════ */
+  .lumi { display: inline-flex; flex-shrink: 0; border-radius: 28%; background: #F4F5F7; overflow: hidden; }
+  .lumi img { width: 100%; height: 100%; object-fit: contain; display: block; transform-origin: 50% 85%; user-select: none; }
+  .lumi.is-main { background: #FAFAFA; }
+  .lumi.is-icon { border-radius: 24%; }
+  .lumi.is-wave { background: #F5F6F8; }
+  .lumi-up img { animation: lumi-hop 1.1s ease-in-out infinite; }
+  .lumi-flat img { animation: lumi-peek 3s ease-in-out infinite; }
+  .lumi-down img { animation: lumi-breathe 3.4s ease-in-out infinite; }
+  @keyframes lumi-hop { 0%, 100% { transform: translateY(0) rotate(0); } 25% { transform: translateY(-7%) rotate(-6deg); } 50% { transform: translateY(0) rotate(0); } 75% { transform: translateY(-5%) rotate(6deg); } }
+  @keyframes lumi-peek { 0%, 100% { transform: rotate(0) translateX(0); } 30% { transform: rotate(-8deg) translateX(-3%); } 70% { transform: rotate(8deg) translateX(3%); } }
+  @keyframes lumi-breathe { 0%, 100% { transform: scale(1) translateY(0); } 50% { transform: scale(1.06) translateY(-2%); } }
+  #splash .lumi { border-radius: 32px; }
+  .hero .lumi { border-radius: 22px; }
 </style>
 </head>
 <body>
 <div id="splash" role="status" aria-label="불러오는 중">
-  <div class="sp-in"><svg class='lumi lumi-up' width='104' height='104' viewBox='0 0 64 64' aria-hidden='true' style='flex-shrink:0;overflow:visible'><ellipse cx='33' cy='59' rx='15' ry='2.6' fill='#DCE6F8' opacity='.8'/><g class='lumi-body'><path d='M20 54C14.5 54 13 48.5 16.5 46C11.5 43 10.5 35 15.5 31.5C16 21 23 15 31.5 15C32.5 9.5 38 7 42 9.5C46 12 45.5 17 42.5 18.5C48.5 21.5 50.5 28.5 49.5 34C54.5 32 58.5 36.5 55.5 40.5C53.5 43.5 50.5 43.5 48.5 42.5C48.5 47.5 46 52.5 41 53.5C38 56.5 33 56.5 31 53.5C27 56.5 22.5 56.5 20 54Z' fill='#FAFAF8' stroke='#1E40AF' stroke-width='3' stroke-linejoin='round'/><path d='M38.6 13.4q1.8-2 3.6 0' fill='none' stroke='#1E40AF' stroke-width='2.2' stroke-linecap='round'/><g class='lumi-arm'><path d='M16.5 31C11 27 8.5 21 11 17.5' fill='none' stroke='#1E40AF' stroke-width='3' stroke-linecap='round'/></g><ellipse cx='21.5' cy='38' rx='2.6' ry='1.6' fill='#A7F3D0'/><ellipse cx='42.5' cy='38' rx='2.6' ry='1.6' fill='#A7F3D0'/><ellipse cx='26' cy='33' rx='1.9' ry='2.6' fill='#1E3A8A'/><ellipse cx='38' cy='33' rx='1.9' ry='2.6' fill='#1E3A8A'/><path d='M29 38Q32 41 35 38' fill='none' stroke='#1E3A8A' stroke-width='2' stroke-linecap='round'/><g class='lumi-spark' stroke='#10B981' stroke-width='2.4' stroke-linecap='round'><path d='M5 23l-3.5-1.5M7.5 17.5L4.5 14.5M12 13.5l-1-4'/></g></g></svg>
+  <div class="sp-in"><span class="lumi is-main lumi-up" style="width:136px;height:136px"><img src="/img/lumi/main.png" alt="" width="136" height="136"></span>
     <b>나만의 경제</b>
     <span>루미가 금융 길을 밝혀줄게요</span>
   </div>
@@ -701,7 +717,7 @@ function loadUi() {
   try { return JSON.parse(localStorage.getItem(UI_KEY)) || {}; } catch { return {}; }
 }
 function saveUi() {
-  try { localStorage.setItem(UI_KEY, JSON.stringify({ hideMoney: ui.hideMoney })); } catch {}
+  try { localStorage.setItem(UI_KEY, JSON.stringify({ hideMoney: ui.hideMoney, lumiStill: ui.lumiStill })); } catch {}
 }
 const LEARN_KEY = "myeco.learn.v1";
 function loadLearn() {
@@ -791,21 +807,19 @@ function toast(msg) {
   document.body.appendChild(t);
   setTimeout(() => t.remove(), 2200);
 }
-// 캐릭터 루미(이루미): 길을 밝혀주는 금융 길잡이. 표정 face = wave(기본)·happy·curious·reassure,
-// anim = '' | 'up'(신나서 손 흔들기) | 'flat'(두리번) | 'down'(차분히 토닥)
-const LUMI_FACES = {
-  wave: `<ellipse cx='26' cy='33' rx='1.9' ry='2.6' fill='#1E3A8A'/><ellipse cx='38' cy='33' rx='1.9' ry='2.6' fill='#1E3A8A'/><path d='M29 38Q32 41 35 38' fill='none' stroke='#1E3A8A' stroke-width='2' stroke-linecap='round'/>`,
-  happy: `<path d='M23.5 34Q26 30.5 28.5 34M35.5 34Q38 30.5 40.5 34' fill='none' stroke='#1E3A8A' stroke-width='2' stroke-linecap='round'/><path d='M28.5 38Q32 42 35.5 38' fill='none' stroke='#1E3A8A' stroke-width='2' stroke-linecap='round'/>`,
-  curious: `<ellipse cx='26' cy='32.5' rx='2.1' ry='2.8' fill='#1E3A8A'/><ellipse cx='38' cy='32.5' rx='2.1' ry='2.8' fill='#1E3A8A'/><circle cx='26.7' cy='31.6' r='.7' fill='#fff'/><circle cx='38.7' cy='31.6' r='.7' fill='#fff'/><ellipse cx='32' cy='39' rx='1.6' ry='1.4' fill='#1E3A8A'/>`,
-  reassure: `<path d='M23.5 32.5Q26 35 28.5 32.5M35.5 32.5Q38 35 40.5 32.5' fill='none' stroke='#1E3A8A' stroke-width='2' stroke-linecap='round'/><path d='M29.5 38.5Q32 40.5 34.5 38.5' fill='none' stroke='#1E3A8A' stroke-width='2' stroke-linecap='round'/>`,
-};
+// 캐릭터 루미(이루미): 길을 밝혀주는 금융 길잡이. 그림은 사용자가 만든 캐릭터 시트(img/lumi/)를 그대로 쓴다.
+// face = 포즈·표정 이름: main(대표) · wave(손 흔들기) · sit(앉기) · lookup(올려다보기) · happy · curious · reassure · confident · icon(앱 아이콘)
+// anim = '' | 'up'(신나서 콩콩) | 'flat'(두리번) | 'down'(차분히 숨쉬기)
+const LUMI_ALIAS = { wave: "wave" };
 function mascot(size = 40, face = "wave", anim = "") {
-  return `<svg class='lumi ${anim ? "lumi-" + anim : ""}' width='${size}' height='${size}' viewBox='0 0 64 64' aria-hidden='true' style='flex-shrink:0;overflow:visible'><ellipse cx='33' cy='59' rx='15' ry='2.6' fill='#DCE6F8' opacity='.8'/><g class='lumi-body'><path d='M20 54C14.5 54 13 48.5 16.5 46C11.5 43 10.5 35 15.5 31.5C16 21 23 15 31.5 15C32.5 9.5 38 7 42 9.5C46 12 45.5 17 42.5 18.5C48.5 21.5 50.5 28.5 49.5 34C54.5 32 58.5 36.5 55.5 40.5C53.5 43.5 50.5 43.5 48.5 42.5C48.5 47.5 46 52.5 41 53.5C38 56.5 33 56.5 31 53.5C27 56.5 22.5 56.5 20 54Z' fill='#FAFAF8' stroke='#1E40AF' stroke-width='3' stroke-linejoin='round'/><path d='M38.6 13.4q1.8-2 3.6 0' fill='none' stroke='#1E40AF' stroke-width='2.2' stroke-linecap='round'/><g class='lumi-arm'><path d='M16.5 31C11 27 8.5 21 11 17.5' fill='none' stroke='#1E40AF' stroke-width='3' stroke-linecap='round'/></g><ellipse cx='21.5' cy='38' rx='2.6' ry='1.6' fill='#A7F3D0'/><ellipse cx='42.5' cy='38' rx='2.6' ry='1.6' fill='#A7F3D0'/>${LUMI_FACES[face] || LUMI_FACES.wave}<g class='lumi-spark' stroke='#10B981' stroke-width='2.4' stroke-linecap='round'><path d='M5 23l-3.5-1.5M7.5 17.5L4.5 14.5M12 13.5l-1-4'/></g></g></svg>`;
+  const img = size <= 36 && face === "wave" ? "icon" : LUMI_ALIAS[face] || face; // 작은 자리는 앱 아이콘
+  const move = anim && !ui.lumiStill ? " lumi-" + anim : "";
+  return `<span class="lumi is-${img}${move}" style="width:${size}px;height:${size}px" aria-hidden="true"><img src="/img/lumi/${img}.png" alt="" width="${size}" height="${size}" draggable="false"></span>`;
 }
-// 오늘 코스피 분위기 → 루미의 표정과 움직임
+// 오늘 코스피 분위기 → 루미의 포즈와 움직임
 function lumiMood() {
   const m = marketMood();
-  return m === "상승" ? ["happy", "up"] : m === "하락" ? ["reassure", "down"] : ["curious", "flat"];
+  return m === "상승" ? ["wave", "up"] : m === "하락" ? ["sit", "down"] : ["lookup", "flat"];
 }
 const ICON = {
   gear: `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>`,
@@ -2229,6 +2243,10 @@ function viewEtc() {
   const S = mySections();
   return `${pageHead("기타")}
   <main class="scroll">
+    <section class="card form">
+      <div class="sec-title"><h2>루미 움직임</h2><span>홈에서 코스피 분위기대로 움직여요</span></div>
+      <button class="btn ${ui.lumiStill ? "" : "ghost"}" data-act="lumi-move">${ui.lumiStill ? "움직이게 하기" : "멈추기"}</button>
+    </section>
     ${S.privacy}
     <section class="card">
       <div class="sec-title"><h2>앱 정보</h2><span>v0.5</span></div>
@@ -2264,20 +2282,20 @@ function viewOnboard() {
   const steps = `<div class="steps" aria-label="${st + 1}/3 단계">${[0, 1, 2].map((i) => `<i class="${i <= st ? "on" : ""}"></i>`).join("")}</div>`;
   let body = "";
   if (st === 0) body = `
-    ${lumiSays("안녕하세요! 저는 <b>이루미</b>, 루미라고 불러주세요.<br>당신의 금융 길을 밝혀주는 길잡이예요. 원하는 걸 이룰 수 있게 도와드릴게요!", "wave", "up")}
+    ${lumiSays("안녕하세요! 저는 <b>이루미</b>, 루미라고 불러주세요.<br>당신의 금융 길을 밝혀주는 길잡이예요. 원하는 걸 이룰 수 있게 도와드릴게요!", "main", "up")}
     <h1>먼저, 뭐라고 불러드릴까요?</h1>
     <div class="form">
       <div><label class="lb" for="o-nick">닉네임</label><input class="field" id="o-nick" maxlength="12" data-o="nickname" value="${esc(d.nickname)}" placeholder="예: 은채"></div>
       <div><label class="lb" for="o-age">만 나이</label><input class="field num" id="o-age" inputmode="numeric" data-o="age" value="${d.age ?? ""}" placeholder="예: 24"></div>
     </div>`;
   if (st === 1) body = `
-    ${lumiSays(`반가워요, ${esc(d.nickname || "")}님! 관심 있는 종목을 알려주면 매일 챙겨볼게요.`, "happy", "")}
+    ${lumiSays(`반가워요, ${esc(d.nickname || "")}님! 관심 있는 종목을 알려주면 매일 챙겨볼게요.`, "wave", "up")}
     <h1>관심 있는 종목을<br>골라주세요</h1>
     <p class="hint" style="margin:-8px 0 0">홈에서 가격과 등락을 바로 보여드려요. 나중에 바꿀 수 있어요.</p>
     <div class="chips">${d.watch.map((w, i) => `<span class="chip on">${esc(w.name)}<button class="icon-btn" style="width:28px;height:28px;color:#fff" data-act="rm-watch" data-i="${i}" aria-label="${esc(w.name)} 빼기">${ICON.x}</button></span>`).join("") || `<span class="hint">아직 고른 종목이 없어요</span>`}</div>
     ${stockSearch()}`;
   if (st === 2) body = `
-    ${lumiSays("마지막이에요! 성향을 알면 같은 뉴스도 당신에게 맞게 풀어드릴 수 있어요.", "curious", "flat")}
+    ${lumiSays("마지막이에요! 성향을 알면 같은 뉴스도 당신에게 맞게 풀어드릴 수 있어요.", "lookup", "flat")}
     <h1>마지막으로,<br>당신의 성향을 알려주세요</h1>
     <div class="card form">
       <label class="lb" for="o-avert">위험을 얼마나 피하고 싶나요? <b class="num" id="avert-val" style="color:var(--ink)">${d.avert}/10</b> · <span class="type-pill" id="avert-type">${riskType(d.avert)}</span></label>
@@ -2380,6 +2398,7 @@ document.addEventListener("click", async (e) => {
     }
     case "retry": delete learnState.answers[el.dataset.id]; saveLearn(); render(); break;
     case "go-learn": go("#learn"); break;
+    case "lumi-move": ui.lumiStill = !ui.lumiStill; saveUi(); render(); toast(ui.lumiStill ? "루미가 멈췄어요" : "루미가 다시 움직여요"); break;
     case "open-drawer": ui.drawer = true; ui.searchOpen = false; render(); document.querySelector(".drawer .dr-item")?.focus(); break;
     case "close-drawer": ui.drawer = false; render(); break;
     case "nav": navTo(el.dataset.route, el.dataset.target, el.dataset.sub); break;
