@@ -9,7 +9,7 @@ import { PREF_QUERY, naver, dedupe, keywords, searchUrl, newsReady } from "./_ne
 const strip = (list) => list;
 
 function sampleHome(interests) {
-  const issues = ["FOMC 앞두고 금리 동결 전망 우세", "원/달러 환율 1,470원대서 등락", "반도체 업황 개선 기대에 대형주 강세"]
+  const issues = ["(예시) 미국 금리 결정 앞두고 시장 관심 집중", "(예시) 원/달러 환율 흐름 살펴보기", "(예시) 반도체 업황과 대형주 소식"]
     .map((title) => ({ title, url: searchUrl(title), source: "예시" }));
   const forYou = (interests.length ? interests : ["경제"]).slice(0, 3)
     .map((q) => ({ title: `${q} 관련 최신 뉴스 (예시)`, url: searchUrl(q), source: "예시", tag: q }));
@@ -30,7 +30,7 @@ export default async function handler(req, res) {
       return res.status(200).json({ items: strip(items) });
     } catch (e) {
       console.error(e);
-      return res.status(200).json({ items: [], error: "뉴스를 불러오지 못했어요" });
+      return res.status(200).json({ items: [], error: "뉴스를 불러오지 못했어요", why: String(e.message).slice(0, 80) });
     }
   }
 
@@ -65,6 +65,6 @@ export default async function handler(req, res) {
     res.status(200).json({ issues: strip(issues), forYou: strip(forYou), keywords: keywords(pool) });
   } catch (e) {
     console.error(e);
-    res.status(200).json({ ...sampleHome(interests), error: "뉴스를 불러오지 못했어요" });
+    res.status(200).json({ ...sampleHome(interests), error: "뉴스를 불러오지 못했어요", why: String(e.message).slice(0, 80) });
   }
 }

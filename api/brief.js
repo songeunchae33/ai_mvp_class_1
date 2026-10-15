@@ -61,9 +61,9 @@ export default async function handler(req, res) {
     const h = letterHits.get(ip);
     const used = h && h.day === day ? h.n : 0;
     if (used >= 5) return res.status(429).json({ error: "오늘 풀이는 다 썼어요. 내일 다시 해주세요!" });
-    letterHits.set(ip, { day, n: used + 1 });
     const text = String(req.body?.text || "").trim();
-    if (text.length < 50) return res.status(400).json({ error: "내용을 조금 더 붙여넣어 주세요" });
+    if (text.length < 50) return res.status(400).json({ error: "내용을 조금 더 붙여넣어 주세요" }); // 짧은 글은 횟수를 깎지 않는다
+    letterHits.set(ip, { day, n: used + 1 });
     try {
       const out = await ask([
         { role: "system", content: RULES + "\n- 사용자가 구독하는 뉴스레터 내용을 붙여넣었어. 핵심 2~3개만 골라 points로 정리하고, sources는 빈 배열로 둬." },

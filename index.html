@@ -831,7 +831,7 @@ const ICON = {
 function newProfile() {
   return {
     nickname: "", age: null, gender: "", income: null, avert: 6, prefs: [],
-    watch: [], letters: ["uppity", "newneek"], customLetters: [],
+    watch: [], letters: [], customLetters: [],
     assets: { cash: null, invest: null, other: null }, debts: null, payday: null,
     region: { sido: "", sigungu: "" }, status: "", school: "",
     skipped: {}, createdAt: new Date().toISOString(),
@@ -859,7 +859,6 @@ async function loadAll(manual = false) {
   if (!data.calendar.length) jobs.push(getJson("/data/calendar.json").then((j) => (data.calendar = j.events || [])).catch(() => {}));
   if (!data.learn) jobs.push(getJson("/data/learn.json").then((j) => (data.learn = j)).catch(() => {}));
   jobs.push(loadBenefits());
-  loadBrief();
   if (!data.rates) jobs.push(getJson("/api/rates").then((j) => (data.rates = j)).catch(() => {}));
   await Promise.all(jobs);
   data.loading = false;
@@ -873,8 +872,8 @@ function marketMood() {
   if (p === undefined || p === null) return "확인 중";
   return p >= 0.7 ? "상승" : p <= -0.7 ? "하락" : "관망";
 }
-function biggestMover() {
-  const list = (data.market?.stocks || []).filter((s) => !s.missing && s.pct !== null);
+function biggestMover() { // 0.01% 미만은 '움직이지 않음'으로 본다
+  const list = (data.market?.stocks || []).filter((s) => !s.missing && s.pct !== null && Math.abs(s.pct) >= 0.01);
   return list.sort((a, b) => Math.abs(b.pct) - Math.abs(a.pct))[0];
 }
 function watchIndex(name) { const i = profile.watch.findIndex((w) => w.name === name); return i < 0 ? 99 : i; }
@@ -958,7 +957,7 @@ function bubbleLines() {
   const L = [];
   const name = profile.nickname || "오늘";
   const m = data.market;
-  L.push({ text: `${esc(name)}님, ${greet()}! ${m ? `오늘 시장은 ‘${marketMood()}’ 분위기예요.` : "오늘 경제 소식을 모으고 있어요."}` });
+  L.push({ text: `${esc(name)}님, ${greet()}! ${m ? `${{ 상승: "오늘 시장은 ‘오르는’ 분위기예요.", 하락: "오늘 시장은 ‘내리는’ 분위기예요." }[marketMood()] || "오늘 시장은 크게 오르지도 내리지도 않고 지켜보는 분위기예요."}` : "오늘 경제 소식을 모으고 있어요."}` });
   const top = biggestMover();
   if (top) L.push({ text: `관심 종목 ${esc(top.name)}${josa(top.name, "이", "가")} 전일보다 ${fmt(Math.abs(top.pct), 2)}% ${top.pct >= 0 ? "올랐어요" : "내렸어요"}.` });
   const fx = impacts()[0];
@@ -1072,7 +1071,7 @@ function tabHead(title) {
     </div>
   </header>`;
 }
-// 하단 탭: 홈 / 나의 자산관리 / 공부
+// 하단 탭: 홈 / 공부 / 나의 자산관리 / 가계부
 const TABS = [
   ["home", "홈", `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 10.5 12 4l8.5 6.5V19a1.5 1.5 0 0 1-1.5 1.5h-4.5v-5.5h-5v5.5H5A1.5 1.5 0 0 1 3.5 19z"/></svg>`],
   ["learn", "공부", `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15H6.5A2.5 2.5 0 0 0 4 20.5z"/><path d="M4 20.5A2.5 2.5 0 0 0 6.5 23H20v-5"/><path d="M9 8h7M9 12h5"/></svg>`],
@@ -1134,7 +1133,7 @@ function homeBlocks() {
   const kws = n?.keywords || [];
   const newsBlock = `<section class="card" id="h-news">
       <div class="sec-title"><h2>뉴스</h2><div style="display:flex;gap:6px;align-items:center">${n?.sample ? `<span class="badge b-sample">예시</span>` : ""}<button class="plus" data-act="news-more">+ 더보기</button></div></div>
-      ${briefReady() ? `<button class="brief-line" data-act="news-brief">${mascot(22)}<span class="bl-t"><b>쉽게 풀이</b> ${esc(data.brief.mood)}</span><span aria-hidden="true">›</span></button>` : ""}
+      <button class="brief-line" data-act="news-brief">${mascot(22)}<span class="bl-t"><b>쉽게 풀이</b> ${briefReady() ? esc(data.brief.mood) : "오늘 경제 정책을 쉬운 말로 풀어드려요"}</span><span aria-hidden="true">›</span></button>
       <div class="nl">${n ? top.map(newsLine).join("") : `<p class="hint">불러오는 중…</p>`}</div>
       ${kws.length || letters.length ? `<div class="strip" style="gap:6px;margin-top:8px;align-items:center">
         ${kws.map((k) => `<button class="chip small" style="flex-shrink:0" data-act="kw" data-k="${esc(k)}">#${esc(k)}</button>`).join("")}
@@ -1176,7 +1175,7 @@ function homeBlocks() {
           <div class="dots" aria-hidden="true">${lines.map((_, i) => `<span class="dot ${i === ui.bubble ? "on" : ""}"></span>`).join("")}</div>
           <div style="display:flex">
             ${line.act ? `<button class="link-btn" data-act="${line.act}">${line.label || "질문하기"} ›</button>` : ""}
-            ${ui.bubble < lines.length - 1 ? `<button class="link-btn" data-act="next-line" ${line.act ? 'style="color:var(--sub)"' : ""}>다음 ›</button>` : ""}
+            ${lines.length > 1 ? `<button class="link-btn" data-act="next-line" ${line.act ? 'style="color:var(--sub)"' : ""}>${ui.bubble < lines.length - 1 ? "다음" : "처음으로"} ›</button>` : ""}
           </div>
         </div>
       </div>
@@ -1328,6 +1327,7 @@ async function openNews(tab) {
   ui.news.tab = tab;
   if (location.hash !== "#news") location.hash = "#news"; else render();
   const jobs = [];
+  if (tab === "brief" && !data.brief) loadBrief(); // AI 풀이는 볼 때만 만든다 (비용 절약)
   if (!data.newsFull) {
     const interests = [...profile.watch.map((w) => w.name).slice(0, 4), ...profile.prefs.slice(0, 3)].join(",");
     jobs.push(getJson(`/api/news?full=1&interests=${encodeURIComponent(interests)}`).then((j) => (data.newsFull = j)).catch(() => (data.newsFull = { issues: [], forYou: [] })));
@@ -1358,7 +1358,7 @@ function viewSchedule() {
     </div>
     ${[...byMonth.entries()].map(([k, rows]) => `<section class="card"><div class="sec-title" style="margin-bottom:4px"><h2>${esc(k)}</h2></div>${rows.map(calRow).join("")}</section>`).join("")
       || `<section class="card"><p class="hint" style="margin:0">다가오는 일정이 없어요</p></section>`}
-    <p class="foot">‘예상’은 매년 비슷한 시기에 열리지만 올해 공식 일정이 나오기 전인 행사예요.<br>마이페이지에서 월급날·대출 이자일을 넣으면 내 일정도 함께 떠요.</p>
+    <p class="foot">‘예상’은 매년 비슷한 시기에 열리지만 올해 공식 일정이 나오기 전인 행사예요.<br>나의 자산관리에서 월급날·대출 이자일을 넣으면 내 일정도 함께 떠요.</p>
   </main>`;
 }
 
@@ -2310,13 +2310,14 @@ function viewOnboard() {
     ${lumiSays("안녕하세요! 저는 <b>이루미</b>, 루미라고 불러주세요.<br>당신의 금융 길을 밝혀주는 길잡이예요. 원하는 걸 이룰 수 있게 도와드릴게요!", "main", "up")}
     <h1>먼저, 뭐라고 불러드릴까요?</h1>
     <div class="form">
-      <div><label class="lb" for="o-nick">닉네임</label><input class="field" id="o-nick" maxlength="12" data-o="nickname" value="${esc(d.nickname)}" placeholder="예: 은채"></div>
+      <div><label class="lb" for="o-nick">닉네임</label><input class="field" id="o-nick" maxlength="12" data-o="nickname" value="${esc(d.nickname)}" placeholder="예: 경제새싹"></div>
       <div><label class="lb" for="o-age">만 나이</label><input class="field num" id="o-age" inputmode="numeric" data-o="age" value="${d.age ?? ""}" placeholder="예: 24"></div>
+      <p class="hint" style="margin:0">나이는 받을 수 있는 청년 혜택·정책을 찾는 데만 써요. 이 기기에만 저장돼요.</p>
     </div>`;
   if (st === 1) body = `
     ${lumiSays(`반가워요, ${esc(d.nickname || "")}님! 관심 있는 종목을 알려주면 매일 챙겨볼게요.`, "wave", "up")}
     <h1>관심 있는 종목을<br>골라주세요</h1>
-    <p class="hint" style="margin:-8px 0 0">홈에서 가격과 등락을 바로 보여드려요. 나중에 바꿀 수 있어요.</p>
+    <p class="hint" style="margin:-8px 0 0">종목은 주식시장에서 사고파는 회사(예: 삼성전자)예요. 홈에서 가격과 등락을 바로 보여드려요.<br>잘 모르겠으면 고르지 않고 ‘다음’을 눌러도 돼요. 나중에 바꿀 수 있어요.</p>
     <div class="chips">${d.watch.map((w, i) => `<span class="chip on">${esc(w.name)}<button class="icon-btn" style="width:28px;height:28px;color:#fff" data-act="rm-watch" data-i="${i}" aria-label="${esc(w.name)} 빼기">${ICON.x}</button></span>`).join("") || `<span class="hint">아직 고른 종목이 없어요</span>`}</div>
     ${stockSearch()}`;
   if (st === 2) body = `
@@ -2326,6 +2327,7 @@ function viewOnboard() {
       <label class="lb" for="o-avert">위험을 얼마나 피하고 싶나요? <b class="num" id="avert-val" style="color:var(--ink)">${d.avert}/10</b> · <span class="type-pill" id="avert-type">${riskType(d.avert)}</span></label>
       <input class="range" id="o-avert" type="range" min="1" max="10" step="1" value="${d.avert}" data-o="avert">
       <div class="range-ends"><span>1 · 위험 괜찮아요</span><span>10 · 손실은 싫어요</span></div>
+      <p class="hint" id="avert-desc" style="margin:0">${riskShort(d.avert)}</p>
     </div>
     <div class="card form">
       <span class="lb">무엇에 가치를 두나요? (여러 개)</span>
@@ -2395,6 +2397,7 @@ document.addEventListener("click", async (e) => {
     case "news-brief": openNews("brief"); break;
     case "letter-brief": {
       const text = (document.getElementById("letter-text")?.value || "").trim();
+      if (text.length < 50) { ui.letter = { text, loading: false, result: null, error: "내용을 조금 더 붙여넣어 주세요 (50자 이상)" }; render(); break; }
       if (!aiLeft("letter")) { ui.letter = { text, loading: false, result: null, error: `오늘 풀이는 ${AI_LIMIT.letter}번을 다 썼어요. 내일 다시 해주세요!` }; render(); break; }
       ui.letter = { text, loading: true, result: null, error: "" };
       render();
@@ -2450,7 +2453,7 @@ document.addEventListener("click", async (e) => {
       break;
     }
     case "layout-reset": delete profile.layout; saveProfile(); render(); toast("홈 화면을 처음 모양으로 돌렸어요"); break;
-    case "learn-tab": ui.learnTab = el.dataset.t; ui.learnOpen = null; render(); break;
+    case "learn-tab": ui.learnTab = el.dataset.t; render(); break;
     case "learn-sort": ui.learnSort = el.dataset.s; render(); break;
     case "learn-expand": ui.learnExpand = { ...ui.learnExpand, [el.dataset.c]: !ui.learnExpand[el.dataset.c] }; render(); break;
     case "toggle-concept": ui.learnOpen = ui.learnOpen === el.dataset.id ? null : el.dataset.id; render(); break;
@@ -2512,7 +2515,7 @@ document.addEventListener("click", async (e) => {
       ui.quickCat = null; render(); toast("기록했어요");
       break;
     }
-    case "tx-rm": ledger.tx = ledger.tx.filter((t) => t.id !== el.dataset.id); saveLedger(); render(); break;
+    case "tx-rm": if (!confirm("이 기록을 지울까요?")) break; ledger.tx = ledger.tx.filter((t) => t.id !== el.dataset.id); saveLedger(); render(); break;
     case "money-feedback": {
       const kind = ui.moneyKind || "week";
       const s = spendSummary(kind), pv = spendSummary(kind, true);
@@ -2573,7 +2576,7 @@ document.addEventListener("click", async (e) => {
       let url = document.getElementById("f-lu").value.trim();
       if (!name || !url) { toast("이름과 주소를 모두 적어주세요"); break; }
       if (!/^https?:\/\//.test(url)) url = "https://" + url;
-      t.customLetters.push({ name: name.slice(0, 20), url }); commit(); break;
+      t.customLetters.push({ name: name.slice(0, 20), url }); commit(); toast(`${name.slice(0, 20)}${josa(name.slice(0, 20), "을", "를")} 추가했어요`); break;
     }
     case "rm-letter": t.customLetters.splice(Number(el.dataset.i), 1); commit(); break;
     case "add-watch": {
@@ -2592,7 +2595,8 @@ document.addEventListener("click", async (e) => {
     case "rm-debt": t.debts.splice(Number(el.dataset.i), 1); commit(); break;
     case "wipe":
       if (confirm("이 기기에 저장된 내 정보를 모두 지울까요? 되돌릴 수 없어요.")) {
-        try { localStorage.removeItem(STORE_KEY); localStorage.removeItem(UI_KEY); } catch {}
+        try { [STORE_KEY, UI_KEY, LEARN_KEY, LEDGER_KEY, AI_KEY].forEach((k) => localStorage.removeItem(k)); } catch {}
+        ledger.tx = []; ledger.uploads = {}; learnState.answers = {}; learnState.notes = {};
         profile = null; ui.onb = { step: 0, draft: null }; location.hash = ""; render();
       }
       break;
@@ -2652,7 +2656,10 @@ function showAvert(v) {
   const a = document.getElementById("avert-val"), b = document.getElementById("avert-type");
   if (a) a.textContent = `${v}/10`;
   if (b) b.textContent = riskType(v);
+  const c = document.getElementById("avert-desc");
+  if (c) c.textContent = riskShort(v);
 }
+function riskShort(v) { const t = riskType(v); return `${t}: ${RISK_DESC[t].split(".")[0]}.`; }
 
 // 마이페이지 '저장하기': 지금 쓰고 있던 칸의 값까지 반영해서 저장
 // (버튼을 누르는 순간 칸에서 벗어나며 화면이 다시 그려져 클릭이 사라질 수 있어서, 누르는 즉시(pointerdown) 처리한다)

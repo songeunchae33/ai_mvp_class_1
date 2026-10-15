@@ -4,20 +4,20 @@
 경제 뉴스레터를 따로 찾아 읽기 번거로운 2030 대학생·사회초년생에게, 내 자산·성향·관심사에 맞춘 경제 정보를 한 화면에 모아 '나에게 어떤 의미인지'까지 쉬운 말로 알려주는 앱.
 
 ## 2. 화면
-- 로딩 화면 (index.html 맨 위 splash, img/lumi/main.png): 앱을 열 때 루미가 손 흔들며 0.7초 인사한다.
-- 첫 설문 (index.html · viewOnboard): 루미와 함께 닉네임·나이, 관심 종목, 투자 성향·선호를 3단계로 받는다.
-- 홈 (index.html · viewHome, homeBlocks / api/market.js, api/news.js): 루미의 한마디, 주가, 나에게 미치는 영향, 뉴스, 일정·혜택, 오늘의 OX 퀴즈를 한눈에 보여준다.
-- 공부 (index.html · viewLearn / data/learn.json, api/trending.js): 경제 개념 40개와 OX 퀴즈를 주제별로 정렬·복습한다.
+- 로딩 화면 (index.html 맨 위 splash, img/lumi/ 그림 9장): 앱을 열 때 루미가 손 흔들며 0.7초 인사한다.
+- 첫 설문 (index.html · viewOnboard): 루미와 함께 닉네임·나이, 관심 종목, 투자 성향·선호·구독 뉴스레터를 3단계로 받는다.
+- 홈 (index.html · viewHome, homeBlocks / api/market.js, api/news.js): 루미의 한마디, 주가, 나에게 미치는 영향, 뉴스, 일정·혜택, 오늘의 OX 퀴즈, 자산·소득을 하나씩 묻는 맞춤 질문 카드를 한눈에 보여준다.
+- 공부 (index.html · viewLearn / data/learn.json, api/trending.js): 경제 개념 40개와 OX 퀴즈를 주제별로 정렬·복습하고, 내 노트와 연속 기록을 남긴다.
 - 나의 자산관리 (index.html · viewAssets): 순자산·자산 진단, 목표 저축, 자산·대출 입력을 한다.
 - 가계부 (index.html · viewLedger, moneyBody / api/receipts.js): 카드·은행 캡처나 직접 입력으로 소비를 기록하고 주간·월간 요약과 루미 피드백을 준다.
 - 마이페이지 (index.html · viewMy): 기본 정보와 투자 성향을 고친다.
 - 투자 성향 진단 (index.html · viewRiskTest): 7문항으로 투자 성향을 알려준다.
 - 뉴스 (index.html · viewNews, viewBrief / api/news.js, api/brief.js): 오늘의 경제 쉽게 풀이, 오늘의 이슈, 나를 위한 뉴스, 뉴스레터 붙여넣기 풀이를 본다.
 - 나를 위한 일정 (index.html · viewSchedule / data/calendar.json): 관심사에 맞는 세일·여행·정책·금리 일정을 모아 보여준다.
-- 우리 지역 혜택 (index.html · viewBenefits / api/benefits.js): 사는 지역·나이·상황에 맞는 지자체·정부 혜택을 찾아준다.
-- 관심 종목 (index.html · viewWatch): 종목을 추가·삭제하고 순서와 보유 수량을 정한다.
+- 우리 지역 혜택 (index.html · viewBenefits / api/benefits.js, api/rates.js): 사는 지역·나이·상황에 맞는 지자체·정부 혜택과 은행 정기예금 금리 TOP 3, 학교 장학 공지 검색 링크를 보여준다.
+- 관심 종목 (index.html · viewWatch): 종목을 추가·삭제하고 보유 수량을 정한다. 종목 순서는 홈 화면 꾸미기에서 바꾼다.
 - 뉴스레터 (index.html · viewLetters): 구독 중인 뉴스레터를 관리한다.
-- 홈 화면 꾸미기 (index.html · viewLayout): 홈 칸의 순서를 바꾸고 숨긴다.
+- 홈 화면 꾸미기 (index.html · viewLayout): 홈 칸과 관심 종목의 순서를 바꾸고 칸을 숨긴다.
 - 기타 (index.html · viewEtc): 루미 움직임 켜기·끄기, 내 정보 전부 지우기, 앱 정보를 둔다.
 - 목차 (index.html · viewDrawer): 왼쪽에서 열리며 모든 화면으로 바로 간다.
 - 루미에게 물어보기 (index.html · viewSheet / api/ask.js): 검색창 질문에 루미가 쉬운 말로 답한다.
