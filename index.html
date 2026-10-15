@@ -611,7 +611,7 @@
   /* 하단 탭 */
   .scroll { padding-bottom: 104px !important; }
   .tabbar { position: fixed; left: 50%; transform: translateX(-50%); bottom: 0; width: 100%; max-width: 440px; z-index: 15;
-    display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); background: #FFFFFF; border-top: 1px solid var(--line);
+    display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); background: #FFFFFF; border-top: 1px solid var(--line);
     padding: 6px 8px calc(8px + env(safe-area-inset-bottom)); }
   .tabbar button { display: flex; flex-direction: column; align-items: center; gap: 3px; min-height: 52px; justify-content: center; border: none; background: transparent; color: #B0B8C1; font-size: 11px; font-weight: 600; cursor: pointer; }
   .tabbar button.on { color: var(--ink); }
@@ -1079,11 +1079,12 @@ function tabHead(title) {
 // 하단 탭: 홈 / 나의 자산관리 / 공부
 const TABS = [
   ["home", "홈", `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 10.5 12 4l8.5 6.5V19a1.5 1.5 0 0 1-1.5 1.5h-4.5v-5.5h-5v5.5H5A1.5 1.5 0 0 1 3.5 19z"/></svg>`],
-  ["assets", "나의 자산관리", `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="6" width="18" height="14" rx="3"/><path d="M3 10h18M16 15h2"/><path d="M7 6V5a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v1"/></svg>`],
   ["learn", "공부", `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15H6.5A2.5 2.5 0 0 0 4 20.5z"/><path d="M4 20.5A2.5 2.5 0 0 0 6.5 23H20v-5"/><path d="M9 8h7M9 12h5"/></svg>`],
+  ["assets", "나의 자산관리", `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="6" width="18" height="14" rx="3"/><path d="M3 10h18M16 15h2"/><path d="M7 6V5a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v1"/></svg>`],
+  ["ledger", "가계부", `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" aria-hidden="true"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6M9 16h3"/></svg>`],
 ];
 function tabBar(r) {
-  const cur = r === "money" ? "assets" : ["schedule", "benefits", "layout"].includes(r) ? "home" : ["news", "watch", "letters"].includes(r) ? "learn" : r;
+  const cur = r === "money" ? "ledger" : ["schedule", "benefits", "layout"].includes(r) ? "home" : ["news", "watch", "letters"].includes(r) ? "learn" : r;
   return `<nav class="tabbar" aria-label="주요 메뉴">${TABS.map(([id, label, icon]) =>
     `<button class="${cur === id ? "on" : ""}" data-act="tab" data-t="${id}" ${cur === id ? 'aria-current="page"' : ""}>${icon}<span>${label}</span></button>`).join("")}</nav>`;
 }
@@ -1233,7 +1234,8 @@ function viewDrawer() {
     ["impact", "나에게 미치는 영향", "h-impact"], ["news", "뉴스", "h-news"], ["quiz", "오늘의 퀴즈", "h-quiz"],
   ].filter(([id]) => !hidden.has(id));
   const homeMore = [["나를 위한 일정", "schedule", ""], ["우리 지역 혜택", "benefits", ""], ["홈 화면 꾸미기", "layout", ""]];
-  const assets = [["순자산·자산 진단", "assets", "sec-diag"], ["내 돈 기록 (가계부)", "assets", "m-ledger"], ["목표 저축", "assets", "sec-goals"], ["자산·대출 입력", "assets", "sec-assets"]];
+  const assets = [["순자산·자산 진단", "assets", "sec-diag"], ["목표 저축", "assets", "sec-goals"], ["자산·대출 입력", "assets", "sec-assets"]];
+  const ledgerItems = [["이번 주·이번 달 지출", "ledger", "m-summary"], ["캡처로 기록하기", "ledger", "m-capture"], ["직접 기록", "ledger", "m-quick"], ["최근 기록", "ledger", "m-recent"]];
   const study = [["경제 개념·퀴즈", "learn", ""], ["뉴스 쉽게 풀이", "news", ""], ["뉴스레터", "letters", ""], ["관심 종목", "watch", ""]];
   const my = [["기본 정보", "my", "sec-basic"], ["투자 성향 · 관심사", "my", "sec-risk"], ["투자 성향 정밀 진단", "risktest", ""]];
   const etc = [["개인정보·데이터 지우기", "etc", "sec-privacy"], ["앱 정보", "etc", ""]];
@@ -1247,10 +1249,12 @@ function viewDrawer() {
         ${my.map(([l, r, t]) => item(l, r, t)).join("")}</div>
       <div class="dr-group"><button class="dr-title" data-act="nav" data-route="home">홈 화면</button>
         ${home.map(([, label, target, sub]) => item(label, "home", target, sub ? `data-sub="${sub}"` : "")).join("")}${homeMore.map(([l, r, t]) => item(l, r, t)).join("")}</div>
-      <div class="dr-group"><button class="dr-title" data-act="nav" data-route="assets">나의 자산관리</button>
-        ${assets.map(([l, r, t]) => item(l, r, t)).join("")}</div>
       <div class="dr-group"><button class="dr-title" data-act="nav" data-route="learn">경제공부</button>
         ${study.map(([l, r, t]) => item(l, r, t)).join("")}</div>
+      <div class="dr-group"><button class="dr-title" data-act="nav" data-route="assets">나의 자산관리</button>
+        ${assets.map(([l, r, t]) => item(l, r, t)).join("")}</div>
+      <div class="dr-group"><button class="dr-title" data-act="nav" data-route="ledger">가계부</button>
+        ${ledgerItems.map(([l, r, t]) => item(l, r, t)).join("")}</div>
       <div class="dr-group"><span class="dr-title">기타</span>
         ${etc.map(([l, r, t]) => item(l, r, t)).join("")}</div>
     </nav></div>`;
@@ -1639,8 +1643,7 @@ function moneyBody() {
   const byDate = {};
   recent.forEach((t) => (byDate[t.date] = byDate[t.date] || []).push(t));
 
-  return `<div class="sec-title" id="m-ledger" style="margin:10px 2px 0"><h2 style="font-size:20px">가계부</h2><span>캡처·직접 기록</span></div>
-    <div class="sortbar" role="group" aria-label="기간">
+  return `<div class="sortbar" id="m-summary" role="group" aria-label="기간">
       <button class="${kind === "week" ? "on" : ""}" data-act="money-kind" data-v="week">이번 주</button>
       <button class="${kind === "month" ? "on" : ""}" data-act="money-kind" data-v="month">이번 달</button>
     </div>
@@ -1657,7 +1660,7 @@ function moneyBody() {
     </section>
     ${captureBlock}
     ${quickBlock}
-    <section class="card" style="padding:8px 16px">
+    <section class="card" id="m-recent" style="padding:8px 16px">
       <div class="sec-title" style="margin:6px 0"><h2>최근 기록</h2><span>${ledger.tx.length}건</span></div>
       ${Object.entries(byDate).map(([d, list]) => `<div class="tx-day">${Number(d.slice(5, 7))}월 ${Number(d.slice(8))}일</div>
         ${list.map((t) => `<div class="tx-row"><span class="tx-dot" style="background:${CAT_COLOR[t.cat] || "#CBD3E6"}"></span><div class="cap-main"><b>${esc(t.merchant)}</b><span class="hint">${esc(t.cat)}${t.src ? " · " + esc(t.src) : ""}</span></div>
@@ -1667,6 +1670,14 @@ function moneyBody() {
       ${ledger.tx.length > 15 && !ui.moneyAll ? `<button class="more-btn" data-act="money-all">전체 기록 보기</button>` : ""}
     </section>
     <p class="foot">기록은 이 기기에만 저장돼요. 캡처 사진은 AI가 읽는 데만 쓰고 저장하지 않아요(읽을 때 OpenAI로 전송돼요).</p>`;
+}
+
+// ───────────────────────── 화면: 가계부 (하단 탭) ─────────────────────────
+function viewLedger() {
+  return `${tabHead("가계부")}
+  <main class="scroll">
+    ${moneyBody()}
+  </main>`;
 }
 
 // ───────────────────────── 화면: 나의 자산관리 (하단 탭) ─────────────────────────
@@ -1698,7 +1709,6 @@ function viewAssets() {
       <button class="card mini-card" data-act="go-my" data-focus="risk"><span class="mc-t">투자 성향 ›</span>
         <b>${riskType(p.avert)}</b><span class="hint">${p.riskTest ? "정밀 진단 결과" : "위험기피 " + p.avert + "/10"}</span></button>
     </div>
-    ${moneyBody()}
     ${(() => { const S = mySections(); return `<div class="sec-title" style="margin:10px 2px 0"><h2 style="font-size:20px">내 자산</h2><span>진단·목표·입력</span></div>${S.diag}${S.goals}${S.assets}${S.debts}`; })()}
     <div class="savebar">
       <span>${ui.savedAt ? `저장됨 · ${ui.savedAt}` : "고친 내용은 이 기기에 저장돼요"}</span>
@@ -1743,7 +1753,7 @@ async function readCaptures(files) {
   } catch (err) {
     ui.capture = { error: err.body?.error || err.message || "읽지 못했어요" };
   }
-  if (["money", "assets"].includes(route())) render();
+  if (["money", "ledger"].includes(route())) render();
 }
 
 // ───────────────────────── 화면: 경제 공부 ─────────────────────────
@@ -1927,7 +1937,7 @@ const MENU = [
 ];
 const SUGGEST = ["내 대출, 금리 오르면 이자 얼마?", "지금 환전해도 될까?", "FOMC가 뭐야?", "내 성향에 맞는 저축 방법은?"];
 
-const SEARCH_PAGES = [{ label: "내 돈 기록 (가계부·캡처 기록)", keys: ["가계부", "소비", "지출", "기록", "캡처", "영수증", "카드", "내역"], route: "money" }];
+const SEARCH_PAGES = [{ label: "내 돈 기록 (가계부·캡처 기록)", keys: ["가계부", "소비", "지출", "기록", "캡처", "영수증", "카드", "내역"], route: "ledger" }];
 function searchResults() {
   const q = ui.q.trim();
   if (!q) return `<div class="sg">이렇게 물어볼 수 있어요</div>${SUGGEST.map((s) => `<button class="si" data-act="ask" data-q="${esc(s)}"><span>${esc(s)}</span><span class="s2">질문</span></button>`).join("")}`;
@@ -2323,14 +2333,14 @@ function viewOnboard() {
 function route() {
   if (!profile) return "onboard";
   const h = location.hash.slice(1);
-  return ["my", "news", "schedule", "learn", "benefits", "risktest", "money", "assets", "layout", "watch", "letters", "etc"].includes(h) ? h : "home";
+  return ["my", "news", "schedule", "learn", "benefits", "risktest", "money", "assets", "ledger", "layout", "watch", "letters", "etc"].includes(h) ? h : "home";
 }
 function render() {
   const r = route();
   const app = document.getElementById("app");
   const y = window.scrollY;
   const focusId = document.activeElement?.id;
-  app.innerHTML = ({ onboard: viewOnboard, my: viewMy, news: viewNews, schedule: viewSchedule, learn: viewLearn, benefits: viewBenefits, risktest: viewRiskTest, money: viewAssets, assets: viewAssets, layout: viewLayout, watch: viewWatch, letters: viewLetters, etc: viewEtc }[r] || viewHome)()
+  app.innerHTML = ({ onboard: viewOnboard, my: viewMy, news: viewNews, schedule: viewSchedule, learn: viewLearn, benefits: viewBenefits, risktest: viewRiskTest, money: viewLedger, ledger: viewLedger, assets: viewAssets, layout: viewLayout, watch: viewWatch, letters: viewLetters, etc: viewEtc }[r] || viewHome)()
     + (r !== "onboard" ? tabBar(r) : "")
     + (ui.drawer && r !== "onboard" ? viewDrawer() : "");
   window.scrollTo(0, y);
@@ -2462,7 +2472,7 @@ document.addEventListener("click", async (e) => {
     }
     case "toggle-hide": ui.hideMoney = !ui.hideMoney; saveUi(); render(); break;
     case "save-my": saveMy(); break;
-    case "go-money": ui.capture = null; go("#assets"); setTimeout(() => document.getElementById("m-ledger")?.scrollIntoView({ block: "start" }), 60); break;
+    case "go-money": ui.capture = null; go("#ledger"); break;
     case "tab": ui.drawer = false; go(el.dataset.t === "home" ? "#home" : "#" + el.dataset.t); break;
     case "money-kind": ui.moneyKind = el.dataset.v; ui.moneyFb = null; render(); break;
     case "money-all": ui.moneyAll = true; render(); break;
@@ -2500,7 +2510,7 @@ document.addEventListener("click", async (e) => {
         const j = await getJson("/api/receipts", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode: "feedback", summary }) });
         ui.moneyFb = { text: j.text };
       } catch (err) { ui.moneyFb = { error: err.body?.error || "피드백을 만들지 못했어요" }; }
-      if (["money", "assets"].includes(route())) render();
+      if (["money", "ledger"].includes(route())) render();
       break;
     }
     case "go-goals": navTo("assets", "sec-goals"); break;
