@@ -1,9 +1,9 @@
-// 정부 보도자료 (문화체육관광부 '정책브리핑 보도자료' API, 공공데이터포털 무료)
+// 정부 정책뉴스·보도자료 (공공데이터포털 '문화체육관광부_정책브리핑_정책뉴스_API', 무료·자동승인)
 // 공공저작물이라 출처를 밝히면 자유롭게 이용·가공할 수 있어서(저작권법 제24조의2), AI 풀이와 화제 개념 집계에 쓴다.
 // 네이버 검색 결과는 약관상 AI 요약에 쓸 수 없어서 여기로 옮겼다.
 import { kstYmd, dataGoKey } from "./_util.js";
 
-const BASE = "https://apis.data.go.kr/1371000/pressReleaseService/pressReleaseList";
+const BASE = "https://apis.data.go.kr/1371000/policyNewsService2/policyNewsList2";
 
 // 경제와 관련 깊은 부처
 export const ECON_ORGS = ["기획재정부", "금융위원회", "국토교통부", "산업통상자원부", "공정거래위원회", "고용노동부", "국세청", "통계청",
@@ -40,6 +40,8 @@ export async function pressReleases(days = 3) {
       const b = m[1];
       const title = field(b, "Title");
       if (!title || seen.has(title)) continue;
+      // 공공누리 3·4유형(변경 금지)은 AI로 다시 쓰면 안 되니 뺀다
+      if (/[34]/.test(field(b, "KoglType"))) continue;
       seen.add(title);
       items.push({
         title, sub: field(b, "SubTitle1"), body: field(b, "DataContents").slice(0, 500),
