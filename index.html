@@ -463,6 +463,26 @@
   .amt { display: flex; gap: 6px; }
   .amt input { flex: 1; min-width: 0; text-align: right; }
   .amt select { flex: 0 0 auto; width: auto; padding-right: 8px; }
+
+  /* 내 돈 기록 */
+  .money-card { display: block; width: 100%; text-align: left; border: 1px solid #E3E8F5; cursor: pointer; font-size: inherit; }
+  .money-row { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+  .money-row b { font-family: 'Jua', sans-serif; font-weight: 400; font-size: 24px; }
+  .cat-row { display: flex; align-items: center; gap: 8px; min-height: 30px; }
+  .cat-name { width: 72px; flex-shrink: 0; font-size: 13px; }
+  .cat-bar { flex: 1; height: 10px; border-radius: 999px; background: #EEF1F8; overflow: hidden; }
+  .cat-bar i { display: block; height: 100%; border-radius: 999px; }
+  .cat-v { width: 70px; text-align: right; font-size: 13px; font-weight: 700; flex-shrink: 0; }
+  .cap-list { display: flex; flex-direction: column; }
+  .cap-row, .tx-row { display: flex; align-items: center; gap: 8px; min-height: 52px; border-top: 1px solid #EEF1F8; }
+  .cap-row input[type=checkbox] { width: 20px; height: 20px; accent-color: var(--green); flex-shrink: 0; }
+  .cap-row.off { opacity: 0.45; }
+  .cap-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .cap-main b { font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .cap-cat { width: 96px; flex: 0 0 auto; min-height: 36px; font-size: 12px; padding: 0 6px; }
+  .cap-amt { font-weight: 700; font-size: 14px; white-space: nowrap; }
+  .tx-day { font-size: 12px; font-weight: 700; color: var(--sub); padding: 10px 0 2px; }
+  .tx-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
 </style>
 </head>
 <body>
@@ -747,6 +767,8 @@ function bubbleLines() {
   else if (!profile.region?.sido) L.push({ text: "사는 지역을 알려주면 지자체·정부 혜택을 찾아드릴게요.", act: "go-benefits", label: "지역 입력" });
   const gl = goalLine();
   if (gl) L.push(gl);
+  const ml = moneyLine();
+  if (ml) L.push(ml);
   L.push({ text: "궁금한 건 맨 위 검색창에 편하게 물어보세요!", act: "focus-ask" });
   return L;
 }
@@ -939,6 +961,7 @@ function homeBlocks() {
     links: linksBlock,
     quiz: quizBlock,
     goals: goalsHome(),
+    money: moneyHome(),
     more: moreBlock,
   };
   return { blocks, html: layout().order.filter((id) => !layout().hidden.has(id)).map((id) => blocks[id] || "").join("\n") };
@@ -962,6 +985,7 @@ const SECTIONS = [
   { id: "links", label: "일정 · 우리 지역 혜택" },
   { id: "quiz", label: "오늘의 OX 퀴즈" },
   { id: "goals", label: "목표 저축" },
+  { id: "money", label: "이번 주 지출 (내 돈 기록)" },
   { id: "more", label: "맞춤 질문 카드" },
 ];
 function layout() {
@@ -975,11 +999,11 @@ function viewDrawer() {
   const hidden = layout().hidden;
   const home = [
     ["hero", "오늘의 한마디", "h-hero"], ["market", "지수", "h-market"], ["market", "주식 가격", "h-market", "stocks"],
-    ["impact", "나에게 미치는 영향", "h-impact"], ["news", "뉴스", "h-news"], ["links", "일정 · 혜택", "h-links"], ["quiz", "오늘의 퀴즈", "h-quiz"],
+    ["impact", "나에게 미치는 영향", "h-impact"], ["news", "뉴스", "h-news"], ["links", "일정 · 혜택", "h-links"], ["quiz", "오늘의 퀴즈", "h-quiz"], ["goals", "목표 저축", "h-goals"], ["money", "이번 주 지출", "h-money"],
   ].filter(([id]) => !hidden.has(id));
   const my = [["홈 화면 수정", "sec-layout"], ["내 자산", "sec-diag"], ["목표 저축", "sec-goals"], ["자산 입력", "sec-assets"], ["부채(대출)", "sec-debts"],
     ["기본 정보", "sec-basic"], ["투자 성향 · 관심사", "sec-risk"], ["투자 성향 정밀 진단", "", "risktest"], ["관심 종목", "sec-watch"], ["뉴스레터", "sec-letters"], ["개인정보", "sec-privacy"]];
-  const pages = [["뉴스 쉽게 풀이", "news"], ["나를 위한 일정", "schedule"], ["경제 공부", "learn"], ["우리 지역 혜택", "benefits"]];
+  const pages = [["내 돈 기록", "money"], ["뉴스 쉽게 풀이", "news"], ["나를 위한 일정", "schedule"], ["경제 공부", "learn"], ["우리 지역 혜택", "benefits"]];
   const item = (label, route, target, extra = "") =>
     `<button class="dr-item" data-act="nav" data-route="${route}" data-target="${target || ""}" ${extra}>${esc(label)}</button>`;
   const myItem = ([label, target, to]) => item(label, to || "my", target);
@@ -1258,6 +1282,198 @@ function quizStreak() {
   return { n, solvedToday };
 }
 
+// ───────────────────────── 내 돈 기록 (가계부) ─────────────────────────
+// 거래는 이 기기(localStorage)에만 저장. 캡처 사진은 AI가 읽는 데만 쓰고 어디에도 저장하지 않는다.
+const LEDGER_KEY = "myeco.ledger.v1";
+const MONEY_CATS = ["식비", "카페·간식", "쇼핑", "교통", "주거·통신", "구독", "의료·건강", "문화·여가", "여행", "교육", "경조사·선물", "금융·수수료", "급여·수입", "내부이체", "기타"];
+const CAT_COLOR = { 식비: "#7C96FF", "카페·간식": "#B69CFF", 쇼핑: "#FF9EBB", 교통: "#6FCFD8", "주거·통신": "#9FB3D9", 구독: "#E5A0F0", "의료·건강": "#8FD6A8",
+  "문화·여가": "#FFC48A", 여행: "#7FC4FF", 교육: "#C9B8F5", "경조사·선물": "#FFB3C7", "금융·수수료": "#AEB8CC", 기타: "#CBD3E6" };
+const CAPTURE_DAILY = 20; // 하루에 올릴 수 있는 캡처 수 (AI 비용 보호)
+function loadLedger() {
+  try { const v = JSON.parse(localStorage.getItem(LEDGER_KEY)) || {}; return { tx: v.tx || [], uploads: v.uploads || {} }; } catch { return { tx: [], uploads: {} }; }
+}
+function saveLedger() { try { localStorage.setItem(LEDGER_KEY, JSON.stringify(ledger)); } catch {} }
+const ledger = loadLedger();
+function txKey(t) { return `${t.date}|${t.amount}|${String(t.merchant).replace(/\s/g, "").slice(0, 10)}|${t.dir}`; }
+function addTx(list) {
+  const have = new Set(ledger.tx.map(txKey));
+  let n = 0;
+  for (const t of list) {
+    if (have.has(txKey(t))) continue;
+    have.add(txKey(t));
+    ledger.tx.push({ ...t, id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6) });
+    n++;
+  }
+  ledger.tx.sort((a, b) => b.date.localeCompare(a.date));
+  saveLedger();
+  return n;
+}
+function ymd(d) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; }
+// 기간: week = 이번 주(월~일), month = 이번 달. prev = 바로 전 기간
+function periodRange(kind, prev = false) {
+  const t = today0();
+  if (kind === "week") {
+    const start = new Date(t); start.setDate(t.getDate() - ((t.getDay() + 6) % 7));
+    if (prev) start.setDate(start.getDate() - 7);
+    const end = new Date(start); end.setDate(start.getDate() + 6);
+    return [ymd(start), ymd(end)];
+  }
+  const start = new Date(t.getFullYear(), t.getMonth() - (prev ? 1 : 0), 1);
+  const end = new Date(start.getFullYear(), start.getMonth() + 1, 0);
+  return [ymd(start), ymd(end)];
+}
+function spendSummary(kind, prev = false) {
+  const [a, b] = periodRange(kind, prev);
+  const list = ledger.tx.filter((t) => t.date >= a && t.date <= b && t.cat !== "내부이체");
+  const out = list.filter((t) => t.dir === "out");
+  const income = list.filter((t) => t.dir === "in" && t.cat === "급여·수입").reduce((s, t) => s + t.amount, 0);
+  const refund = list.filter((t) => t.dir === "in" && t.cat !== "급여·수입").reduce((s, t) => s + t.amount, 0);
+  const byCat = {};
+  out.forEach((t) => (byCat[t.cat] = (byCat[t.cat] || 0) + t.amount));
+  const byMerchant = {};
+  out.forEach((t) => (byMerchant[t.merchant] = (byMerchant[t.merchant] || 0) + t.amount));
+  const total = Math.max(0, out.reduce((s, t) => s + t.amount, 0) - refund);
+  return { a, b, total, income, count: out.length, byCat, top: Object.entries(byMerchant).sort((x, y) => y[1] - x[1]).slice(0, 3), list };
+}
+function pctChange(now, before) { return before ? Math.round(((now - before) / before) * 100) : null; }
+
+function moneyHome() {
+  if (!ledger.tx.length) return `<button class="card line" id="h-money" data-act="go-money"><span><b>내 돈 기록</b> <span class="hint">카드·은행 캡처 한 장으로 이번 주 소비를 정리해요</span></span><span aria-hidden="true">›</span></button>`;
+  const s = spendSummary("week"), p = spendSummary("week", true);
+  const ch = pctChange(s.total, p.total);
+  const topCat = Object.entries(s.byCat).sort((x, y) => y[1] - x[1])[0];
+  return `<button class="card money-card" id="h-money" data-act="go-money">
+      <div class="sec-title" style="margin-bottom:6px"><h2>이번 주 지출</h2><span class="plus" aria-hidden="true">기록 ›</span></div>
+      <div class="money-row"><b class="num">${won(s.total)}</b>${ch !== null ? `<span class="badge ${ch > 0 ? "b-up" : "b-down"}">지난주보다 ${ch > 0 ? "+" : ""}${ch}%</span>` : ""}</div>
+      <span class="hint">${topCat ? `가장 많이 쓴 곳: ${esc(topCat[0])} ${won(topCat[1])}` : "이번 주 기록이 아직 없어요"}</span>
+    </button>`;
+}
+function moneyLine() {
+  const last = Math.max(0, ...Object.keys(ledger.uploads).map((d) => new Date(d).getTime()), ...ledger.tx.map((t) => t.added || 0));
+  if (last && Date.now() - last < 6 * 86400e3) return null;
+  return { text: ledger.tx.length ? "이번 주 소비를 기록할 시간이에요. 카드 앱 캡처 한 장이면 돼요!" : "카드·은행 앱 캡처 한 장으로 내 소비를 정리해 볼까요?", act: "go-money", label: "기록하기" };
+}
+
+function viewMoney() {
+  const kind = ui.moneyKind || "week";
+  const s = spendSummary(kind), p = spendSummary(kind, true);
+  const ch = pctChange(s.total, p.total);
+  const cats = Object.entries(s.byCat).sort((x, y) => y[1] - x[1]);
+  const max = cats[0]?.[1] || 1;
+  const C = ui.capture;
+  const usedToday = ledger.uploads[ymd(today0())] || 0;
+
+  const captureBlock = `<section class="card form" id="m-capture">
+      <div class="sec-title"><h2>캡처로 기록하기</h2><span>오늘 ${usedToday}/${CAPTURE_DAILY}장</span></div>
+      <p class="hint" style="margin:0">카드·은행·토스·카카오페이 앱의 <b>이용내역 화면</b>을 캡처해서 올려요. 여러 장을 한 번에 골라도 돼요(최대 8장). 계좌번호·잔액은 가려도 괜찮아요.</p>
+      <label class="btn block" for="cap-files" style="display:flex;align-items:center;justify-content:center;cursor:pointer">${C?.loading ? "읽는 중… 잠시만요" : "캡처 사진 고르기"}</label>
+      <input id="cap-files" type="file" accept="image/*" multiple class="sr" ${C?.loading ? "disabled" : ""}>
+      ${C?.error ? `<p class="hint" style="margin:0;color:var(--up)">${esc(C.error)}</p>` : ""}
+      ${C?.items ? `<div class="cap-list">
+          <div class="sec-title" style="margin:6px 0"><h2>${C.items.length}건을 찾았어요</h2><span>틀린 건 고치고 체크를 빼요</span></div>
+          ${C.items.map((t, i) => `<div class="cap-row ${t.skip ? "off" : ""}">
+            <label class="sr" for="cap-c-${i}">${esc(t.merchant)} 포함</label>
+            <input type="checkbox" id="cap-c-${i}" data-cap="skip" data-i="${i}" ${t.skip ? "" : "checked"}>
+            <div class="cap-main"><b>${esc(t.merchant)}</b><span class="hint">${t.date.slice(5).replace("-", "/")}${t.src ? " · " + esc(t.src) : ""}</span></div>
+            <label class="sr" for="cap-k-${i}">분류</label>
+            <select class="field cap-cat" id="cap-k-${i}" data-cap="cat" data-i="${i}">${MONEY_CATS.map((c) => `<option ${c === t.cat ? "selected" : ""}>${c}</option>`).join("")}</select>
+            <span class="num cap-amt ${t.dir === "in" ? "down" : ""}">${t.dir === "in" ? "+" : "-"}${fmt(t.amount)}</span>
+          </div>`).join("")}
+          <p class="hint" style="margin:4px 0 0">‘내부이체’(카드대금·내 계좌 이동)는 지출로 세지 않아요. 이미 기록된 거래는 자동으로 건너뛰어요.</p>
+          <div class="inline"><button class="btn ghost" data-act="cap-cancel" style="flex:1">취소</button><button class="btn" data-act="cap-save" style="flex:2">${C.items.filter((t) => !t.skip).length}건 기록하기</button></div>
+        </div>` : ""}
+    </section>`;
+
+  const quickBlock = `<section class="card form" id="m-quick">
+      <div class="sec-title"><h2>직접 기록</h2><span>현금·이체·월급 등</span></div>
+      <div class="inline">
+        <label class="sr" for="q-dir">나간 돈/들어온 돈</label>
+        <select class="field" id="q-dir" style="flex:0 0 96px"><option value="out">나간 돈</option><option value="in">들어온 돈</option></select>
+        <div class="money" style="flex:1"><label class="sr" for="q-amt">금액</label><input class="field num" id="q-amt" inputmode="numeric" placeholder="금액"><span class="unit">원</span></div>
+      </div>
+      <div class="inline">
+        <label class="sr" for="q-memo">어디에</label><input class="field" id="q-memo" maxlength="20" placeholder="어디에 (예: 점심, 용돈)" style="flex:1">
+        <label class="sr" for="q-date">날짜</label><input class="field" id="q-date" type="date" value="${ymd(today0())}" style="flex:0 0 140px">
+      </div>
+      <div class="chips">${MONEY_CATS.filter((c) => c !== "내부이체").map((c) => `<button class="chip small ${ui.quickCat === c ? "on" : ""}" data-act="q-cat" data-v="${c}">${c}</button>`).join("")}</div>
+      <button class="btn" data-act="q-add">기록하기</button>
+    </section>`;
+
+  const recent = ledger.tx.slice(0, ui.moneyAll ? 300 : 15);
+  const byDate = {};
+  recent.forEach((t) => (byDate[t.date] = byDate[t.date] || []).push(t));
+
+  return `${pageHead("내 돈 기록")}
+  <main class="scroll">
+    <div class="sortbar" role="group" aria-label="기간">
+      <button class="${kind === "week" ? "on" : ""}" data-act="money-kind" data-v="week">이번 주</button>
+      <button class="${kind === "month" ? "on" : ""}" data-act="money-kind" data-v="month">이번 달</button>
+    </div>
+    <section class="card">
+      <div class="sec-title" style="margin-bottom:4px"><h2>${kind === "week" ? "이번 주" : "이번 달"} 쓴 돈</h2><span>${s.a.slice(5).replace("-", "/")} ~ ${s.b.slice(5).replace("-", "/")}</span></div>
+      <div class="money-row"><b class="num" style="font-size:28px">${won(s.total)}</b>${ch !== null ? `<span class="badge ${ch > 0 ? "b-up" : "b-down"}">${kind === "week" ? "지난주" : "지난달"}보다 ${ch > 0 ? "+" : ""}${ch}%</span>` : ""}</div>
+      <div class="hint" style="margin-bottom:10px">${s.count}건${s.income ? ` · 들어온 돈 ${won(s.income)}` : ""}</div>
+      ${cats.length ? cats.map(([c, v]) => `<div class="cat-row"><span class="cat-name">${esc(c)}</span><div class="cat-bar"><i style="width:${Math.max(4, (v / max) * 100)}%;background:${CAT_COLOR[c] || "#CBD3E6"}"></i></div><span class="num cat-v">${won(v)}</span></div>`).join("")
+        : `<p class="hint" style="margin:0">아직 기록이 없어요. 아래에서 캡처를 올려보세요.</p>`}
+      ${s.top.length ? `<div class="hint" style="margin-top:10px">많이 쓴 곳: ${s.top.map(([m, v]) => `${esc(m)} ${won(v)}`).join(" · ")}</div>` : ""}
+      ${s.count ? `<button class="btn ghost" style="margin-top:12px;width:100%" data-act="money-feedback" ${ui.moneyFb?.loading ? "disabled" : ""}>${ui.moneyFb?.loading ? "생각하는 중…" : "캐릭터에게 피드백 받기"}</button>` : ""}
+      ${ui.moneyFb?.text ? `<div class="ans" style="display:flex;gap:10px;margin-top:10px">${mascot(36)}<p style="margin:0;font-size:14px;line-height:1.7;background:var(--soft);border-radius:6px 16px 16px 16px;padding:10px 12px;flex:1">${esc(ui.moneyFb.text)}</p></div>` : ""}
+      ${ui.moneyFb?.error ? `<p class="hint" style="color:var(--up)">${esc(ui.moneyFb.error)}</p>` : ""}
+    </section>
+    ${captureBlock}
+    ${quickBlock}
+    <section class="card" style="padding:8px 16px">
+      <div class="sec-title" style="margin:6px 0"><h2>최근 기록</h2><span>${ledger.tx.length}건</span></div>
+      ${Object.entries(byDate).map(([d, list]) => `<div class="tx-day">${Number(d.slice(5, 7))}월 ${Number(d.slice(8))}일</div>
+        ${list.map((t) => `<div class="tx-row"><span class="tx-dot" style="background:${CAT_COLOR[t.cat] || "#CBD3E6"}"></span><div class="cap-main"><b>${esc(t.merchant)}</b><span class="hint">${esc(t.cat)}${t.src ? " · " + esc(t.src) : ""}</span></div>
+          <span class="num cap-amt ${t.dir === "in" ? "down" : ""} ${t.cat === "내부이체" ? "flat" : ""}">${t.dir === "in" ? "+" : "-"}${fmt(t.amount)}</span>
+          <button class="icon-btn" data-act="tx-rm" data-id="${t.id}" aria-label="${esc(t.merchant)} 기록 삭제">${ICON.x}</button></div>`).join("")}`).join("")
+        || `<p class="hint">기록이 없어요</p>`}
+      ${ledger.tx.length > 15 && !ui.moneyAll ? `<button class="more-btn" data-act="money-all">전체 기록 보기</button>` : ""}
+    </section>
+    <p class="foot">기록은 이 기기에만 저장돼요. 캡처 사진은 AI가 읽는 데만 쓰고 저장하지 않아요(읽을 때 OpenAI로 전송돼요).</p>
+  </main>`;
+}
+
+// 사진을 폰에서 줄여서(긴 변 1400px, JPEG) 보내기 → AI 비용·전송량 절약
+function shrinkImage(file) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      const scale = Math.min(1, 1400 / Math.max(img.width, img.height));
+      const c = document.createElement("canvas");
+      c.width = Math.round(img.width * scale); c.height = Math.round(img.height * scale);
+      c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(url);
+      resolve(c.toDataURL("image/jpeg", 0.72));
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("사진을 열 수 없어요")); };
+    img.src = url;
+  });
+}
+async function readCaptures(files) {
+  const day = ymd(today0());
+  const used = ledger.uploads[day] || 0;
+  files = [...files].slice(0, 8);
+  if (!files.length) return;
+  if (used + files.length > CAPTURE_DAILY) { ui.capture = { error: `오늘은 ${CAPTURE_DAILY - used}장만 더 올릴 수 있어요` }; render(); return; }
+  ui.capture = { loading: true };
+  render();
+  try {
+    const images = await Promise.all(files.map(shrinkImage));
+    const j = await getJson("/api/receipts", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ images }) });
+    ledger.uploads[day] = used + files.length;
+    saveLedger();
+    const have = new Set(ledger.tx.map(txKey));
+    const items = (j.transactions || []).map((t) => ({ ...t, skip: have.has(txKey(t)) }));
+    ui.capture = items.length ? { items } : { error: "거래를 찾지 못했어요. 이용내역 화면이 잘 보이게 캡처해 주세요" };
+  } catch (err) {
+    ui.capture = { error: err.body?.error || err.message || "읽지 못했어요" };
+  }
+  if (route() === "money") render();
+}
+
 // ───────────────────────── 화면: 경제 공부 ─────────────────────────
 const LEARN_SORTS = [["hot", "화제순"], ["new", "최신순"], ["wrong", "오답순"], ["abc", "가나다순"]];
 function ensureTrending() {
@@ -1435,6 +1651,7 @@ const MENU = [
 ];
 const SUGGEST = ["내 대출, 금리 오르면 이자 얼마?", "지금 환전해도 될까?", "FOMC가 뭐야?", "내 성향에 맞는 저축 방법은?"];
 
+const SEARCH_PAGES = [{ label: "내 돈 기록 (가계부·캡처 기록)", keys: ["가계부", "소비", "지출", "기록", "캡처", "영수증", "카드", "내역"], route: "money" }];
 function searchResults() {
   const q = ui.q.trim();
   if (!q) return `<div class="sg">이렇게 물어볼 수 있어요</div>${SUGGEST.map((s) => `<button class="si" data-act="ask" data-q="${esc(s)}"><span>${esc(s)}</span><span class="s2">질문</span></button>`).join("")}`;
@@ -1473,6 +1690,7 @@ function searchResults() {
   group("우리 지역 혜택", (data.benefitsApi?.items || []).filter((b) => has(b.name) || has(b.summary) || has(b.org)).slice(0, 3)
     .map((b) => `<a class="si" href="${esc(b.url || "https://www.gov.kr")}" target="_blank" rel="noopener"><span>${esc(b.name)}</span><span class="s2">${b.local ? "지역" : "정부"} ${ICON.out}</span></a>`));
 
+  group("화면", SEARCH_PAGES.filter((x) => x.keys.some((k) => k.includes(q) || q.includes(k))).map((x) => `<button class="si" data-act="nav" data-route="${x.route}" data-target=""><span>${esc(x.label)}</span><span class="s2">›</span></button>`));
   group("메뉴", MENU.filter((x) => has(x.label) || x.keys.some((k) => k.includes(q) || q.includes(k))).slice(0, 3)
     .map((x) => `<button class="si" data-act="go-my" data-focus="${x.focus}"><span>${esc(x.label)}</span><span class="s2">마이페이지 ›</span></button>`));
 
@@ -1772,14 +1990,14 @@ function viewOnboard() {
 function route() {
   if (!profile) return "onboard";
   const h = location.hash.slice(1);
-  return ["my", "news", "schedule", "learn", "benefits", "risktest"].includes(h) ? h : "home";
+  return ["my", "news", "schedule", "learn", "benefits", "risktest", "money"].includes(h) ? h : "home";
 }
 function render() {
   const r = route();
   const app = document.getElementById("app");
   const y = window.scrollY;
   const focusId = document.activeElement?.id;
-  app.innerHTML = ({ onboard: viewOnboard, my: viewMy, news: viewNews, schedule: viewSchedule, learn: viewLearn, benefits: viewBenefits, risktest: viewRiskTest }[r] || viewHome)()
+  app.innerHTML = ({ onboard: viewOnboard, my: viewMy, news: viewNews, schedule: viewSchedule, learn: viewLearn, benefits: viewBenefits, risktest: viewRiskTest, money: viewMoney }[r] || viewHome)()
     + (ui.drawer && r !== "onboard" ? viewDrawer() : "");
   window.scrollTo(0, y);
   if (focusId) document.getElementById(focusId)?.focus();
@@ -1907,6 +2125,46 @@ document.addEventListener("click", async (e) => {
     }
     case "toggle-hide": ui.hideMoney = !ui.hideMoney; saveUi(); render(); break;
     case "save-my": saveMy(); break;
+    case "go-money": ui.capture = null; go("#money"); break;
+    case "money-kind": ui.moneyKind = el.dataset.v; ui.moneyFb = null; render(); break;
+    case "money-all": ui.moneyAll = true; render(); break;
+    case "cap-cancel": ui.capture = null; render(); break;
+    case "cap-save": {
+      const n = addTx(ui.capture.items.filter((t) => !t.skip).map(({ skip, ...t }) => ({ ...t, added: Date.now() })));
+      ui.capture = null; render(); toast(n ? `${n}건을 기록했어요` : "새로 기록할 거래가 없었어요");
+      break;
+    }
+    case "q-cat": // 화면을 다시 그리면 적어둔 금액이 지워져서, 칩 모양만 바꾼다
+      ui.quickCat = ui.quickCat === el.dataset.v ? null : el.dataset.v;
+      document.querySelectorAll('[data-act="q-cat"]').forEach((b) => b.classList.toggle("on", b.dataset.v === ui.quickCat));
+      break;
+    case "q-add": {
+      const amount = parseInt(document.getElementById("q-amt").value.replace(/[^0-9]/g, ""), 10);
+      if (!(amount > 0)) { toast("금액을 적어주세요"); break; }
+      const dir = document.getElementById("q-dir").value;
+      const cat = ui.quickCat || (dir === "in" ? "급여·수입" : "기타");
+      addTx([{ date: document.getElementById("q-date").value || ymd(today0()), merchant: document.getElementById("q-memo").value.trim().slice(0, 20) || cat, amount, dir, cat, src: "직접 기록", added: Date.now() }]);
+      ui.quickCat = null; render(); toast("기록했어요");
+      break;
+    }
+    case "tx-rm": ledger.tx = ledger.tx.filter((t) => t.id !== el.dataset.id); saveLedger(); render(); break;
+    case "money-feedback": {
+      const kind = ui.moneyKind || "week";
+      const s = spendSummary(kind), pv = spendSummary(kind, true);
+      const summary = {
+        period: kind === "week" ? "이번 주" : "이번 달", total: s.total, previousTotal: pv.total, income: s.income,
+        byCategory: s.byCat, previousByCategory: pv.byCat, topPlaces: s.top,
+        values: profile.prefs, riskType: riskType(profile.avert),
+        goals: (profile.goals || []).map((g) => ({ name: g.name, leftMan: goalCalc(g).left, monthlyMan: goalCalc(g).monthly })),
+      };
+      ui.moneyFb = { loading: true }; render();
+      try {
+        const j = await getJson("/api/receipts", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode: "feedback", summary }) });
+        ui.moneyFb = { text: j.text };
+      } catch (err) { ui.moneyFb = { error: err.body?.error || "피드백을 만들지 못했어요" }; }
+      if (route() === "money") render();
+      break;
+    }
     case "go-goals": go("#my"); setTimeout(() => document.getElementById("sec-goals")?.scrollIntoView({ block: "start" }), 60); break;
     case "goal-add": {
       const name = document.getElementById("g-name").value.trim().slice(0, 20);
@@ -1983,6 +2241,16 @@ document.addEventListener("click", async (e) => {
 });
 
 // 값 입력 (바꾼 뒤 칸을 벗어날 때 저장)
+document.addEventListener("change", (e) => {
+  if (e.target.id === "cap-files") { readCaptures(e.target.files); e.target.value = ""; return; }
+  if (e.target.dataset.cap && ui.capture?.items) {
+    const t = ui.capture.items[Number(e.target.dataset.i)];
+    if (e.target.dataset.cap === "skip") t.skip = !e.target.checked;
+    if (e.target.dataset.cap === "cat") t.cat = e.target.value;
+    render();
+    return;
+  }
+});
 document.addEventListener("change", (e) => {
   const el = e.target;
   const f = el.dataset.field;
