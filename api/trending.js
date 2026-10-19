@@ -53,7 +53,7 @@ export default async function handler(req, res) {
     const ranked = words.map((w) => ({ word: w, count: texts.filter((t) => t.includes(w)).length })).filter((k) => k.count > 0).sort((a, b) => b.count - a.count);
     const hotWords = ranked.slice(0, 15).map((k) => k.word);
     // 언론 보도 설명·해명 자료는 '무슨 일이 있었는지'가 아니라서 빼고, 경제 관련 자료만 쓴다
-    const eventDocs = docs.filter((d) => isEcon(d) && !/^.{0,6}(설명|해명|정정|반박)/.test(decode(d.title)) && !/아닙니다|사실이 아닙|사실과 다릅/.test(decode(d.title)));
+    const eventDocs = docs.filter((d) => isEcon(d) && !/설명|해명|정정|반박/.test(decode(d.title).replace(/[^가-힣]/g, "").slice(0, 6)) && !/아닙니다|사실이 아닙|사실과 다릅/.test(decode(d.title)));
     const used = new Set();
     const events = [];
     for (const k of ranked) {
