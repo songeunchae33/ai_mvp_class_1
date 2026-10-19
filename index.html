@@ -738,6 +738,18 @@
   .solved-row .d { font-size: 13px; color: var(--sub); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .modal .c-quiz { display: flex; flex-direction: column; gap: 10px; }
   .quiz-done { align-self: flex-end; font-weight: 700; }
+
+  /* ═════ 가계부: 달력 글씨 색 · 고정 · + 버튼 ═════ */
+  .cal-d span { font-size: 11px; font-weight: 700; line-height: 1.25; margin-top: 1px; }
+  .c-in { color: var(--up) !important; }
+  .c-out { color: var(--down) !important; }
+  .c-fix { color: var(--ink) !important; }
+  .cal-legend { display: flex; gap: 12px; justify-content: flex-end; font-size: 11px; font-weight: 600; margin-top: 8px; }
+  .line-plus { display: inline-flex; align-items: center; justify-content: center; width: 36px; min-width: 36px; height: 36px; min-height: 36px; padding: 0; border-radius: 50% !important; font-size: 22px; font-weight: 500; line-height: 1; flex-shrink: 0; }
+  .hot-item .hot-t { display: flex; flex-direction: column; gap: 2px; white-space: normal; line-height: 1.35; }
+  .hot-item .hot-t small { font-size: 12px; }
+  a.hot-item { color: inherit; text-decoration: none; padding: 8px 0; }
+  a.hot-item .hot-t { flex: 1; min-width: 0; }
 </style>
 </head>
 <body>
@@ -1659,10 +1671,32 @@ const CAT_COLOR = { 식비: "#7C96FF", "카페·간식": "#B69CFF", 쇼핑: "#FF
   "문화·여가": "#FFC48A", 여행: "#7FC4FF", 교육: "#C9B8F5", "경조사·선물": "#FFB3C7", "금융·수수료": "#AEB8CC", 기타: "#CBD3E6" };
 const CAPTURE_DAILY = 20; // 하루에 올릴 수 있는 캡처 수 (AI 비용 보호)
 function loadLedger() {
-  try { const v = JSON.parse(localStorage.getItem(LEDGER_KEY)) || {}; return { tx: v.tx || [], uploads: v.uploads || {} }; } catch { return { tx: [], uploads: {} }; }
+  try { const v = JSON.parse(localStorage.getItem(LEDGER_KEY)) || {}; return { tx: v.tx || [], uploads: v.uploads || {}, fixed: v.fixed || [] }; } catch { return { tx: [], uploads: {}, fixed: [] }; }
 }
 function saveLedger() { try { localStorage.setItem(LEDGER_KEY, JSON.stringify(ledger)); } catch {} }
 const ledger = loadLedger();
+// 고정 수입·지출: 규칙(이름·금액·매월 며칠)마다, 등록한 달부터 이번 달까지 그날이 지났으면 기록을 하나씩 만든다.
+// 만든 기록은 보통 기록처럼 고치거나 지울 수 있고, 지워도 다시 만들지 않는다(made에 표시).
+function applyFixed() {
+  const t = today0(), today = ymd(t);
+  let n = 0;
+  for (const f of ledger.fixed) {
+    const [sy, sm] = f.start.split("-").map(Number);
+    for (let y = sy, m = sm; y < t.getFullYear() || (y === t.getFullYear() && m <= t.getMonth() + 1); m === 12 ? (y++, m = 1) : m++) {
+      const key = `${y}-${String(m).padStart(2, "0")}`;
+      if (f.made[key]) continue;
+      const day = Math.min(f.day, new Date(y, m, 0).getDate());
+      const date = `${key}-${String(day).padStart(2, "0")}`;
+      if (date > today) continue;
+      const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+      ledger.tx.push({ id, date, merchant: f.name, amount: f.amount, dir: f.dir, cat: f.cat, src: "고정", fixed: f.id, added: Date.now() });
+      f.made[key] = id;
+      n++;
+    }
+  }
+  if (n) { ledger.tx.sort((a, b) => b.date.localeCompare(a.date)); saveLedger(); }
+}
+applyFixed();
 function txKey(t) { return `${t.date}|${t.amount}|${String(t.merchant).replace(/\s/g, "").slice(0, 10)}|${t.dir}`; }
 function addTx(list) {
   const have = new Set(ledger.tx.map(txKey));
@@ -1751,7 +1785,7 @@ function openModal(kind, extra = {}) { ui.modal = { kind, route: routeKey(), ...
 function viewModal() {
   const m = ui.modal;
   if (!m) return "";
-  const body = { "tx-edit": modalTxEdit, "tx-add": modalTxAdd, assets: modalAssets, goal: modalGoal, quiz: modalQuiz }[m.kind]?.(m);
+  const body = { "tx-edit": modalTxEdit, "tx-add": modalTxAdd, fixed: modalFixed, assets: modalAssets, goal: modalGoal, quiz: modalQuiz }[m.kind]?.(m);
   if (!body) { ui.modal = null; return ""; }
   return `<div class="modal-back"><div class="modal form" role="dialog" aria-modal="true">${body}</div></div>`;
 }
@@ -1772,6 +1806,25 @@ function modalTxEdit(m) {
       <select class="field" id="e-cat">${MONEY_CATS.map((c) => `<option ${c === t.cat ? "selected" : ""}>${c}</option>`).join("")}</select>
       <div class="inline"><button class="btn ghost" data-act="tx-rm" data-id="${t.id}" style="flex:1;color:var(--up)">삭제</button><button class="btn ghost" data-act="modal-close" style="flex:1">취소</button><button class="btn" data-act="tx-save" data-id="${t.id}" style="flex:2">저장</button></div>
     `;
+}
+function modalFixed(m) {
+  const f = m.id ? ledger.fixed.find((x) => x.id === m.id) : null;
+  if (m.id && !f) return "";
+  const dir = f?.dir || "out";
+  return `<div class="sec-title" style="margin:0"><h2>${f ? "고정 수입·지출 고치기" : "고정 수입·지출 추가"}</h2><span>매달 자동으로 기록돼요</span></div>
+      <div class="inline">
+        <label class="sr" for="fx-dir">나간 돈/들어온 돈</label>
+        <select class="field" id="fx-dir" style="flex:0 0 96px"><option value="out" ${dir === "out" ? "selected" : ""}>나간 돈</option><option value="in" ${dir === "in" ? "selected" : ""}>들어온 돈</option></select>
+        <div class="money" style="flex:1"><label class="sr" for="fx-amt">금액</label><input class="field num" id="fx-amt" inputmode="numeric" placeholder="금액" value="${f?.amount ?? ""}"><span class="unit">원</span></div>
+      </div>
+      <div class="inline">
+        <label class="sr" for="fx-name">이름</label><input class="field" id="fx-name" maxlength="20" placeholder="이름 (예: 월급, 월세, 통신비)" value="${esc(f?.name || "")}" style="flex:1">
+        <div class="money" style="flex:0 0 110px"><label class="sr" for="fx-day">매월 며칠</label><span class="unit" style="position:static;padding-right:6px">매월</span><input class="field num" id="fx-day" inputmode="numeric" placeholder="25" value="${f?.day ?? ""}"><span class="unit">일</span></div>
+      </div>
+      <label class="sr" for="fx-cat">분류</label>
+      <select class="field" id="fx-cat">${MONEY_CATS.filter((c) => c !== "내부이체").map((c) => `<option ${c === (f?.cat || "주거·통신") ? "selected" : ""}>${c}</option>`).join("")}</select>
+      ${f ? `<p class="hint" style="margin:0">고친 내용은 다음 기록부터 적용돼요. 이미 기록된 달의 금액은 그 기록을 눌러 고쳐요.</p>` : ""}
+      <div class="inline">${f ? `<button class="btn ghost" data-act="fixed-rm" data-id="${f.id}" style="flex:1;color:var(--up)">삭제</button>` : ""}<button class="btn ghost" data-act="modal-close" style="flex:1">취소</button><button class="btn" data-act="fixed-save" style="flex:2">저장</button></div>`;
 }
 function modalTxAdd() {
   return `<div class="sec-title" style="margin:0"><h2>직접 기록하기</h2><span>현금·이체·월급 등</span></div>
@@ -1808,33 +1861,49 @@ function txListHtml() {
 // 달력 칸용: 항상 '만' 단위 (1,000원 → 0.1만)
 function manShort(n) { const v = n / 1e4; return `${v >= 100 ? fmt(Math.round(v)) : v >= 0.1 ? v.toFixed(1) : v.toFixed(2)}만`; }
 function shortWon(n) { return n >= 1e4 ? `${fmt(n / 1e4, n < 1e5 ? 1 : 0)}만` : fmt(n); }
-function calBlock() {
+function calBlock(kind = "month") {
   const t = today0();
-  const first = new Date(t.getFullYear(), t.getMonth() + (ui.calOff || 0), 1);
-  const last = new Date(first.getFullYear(), first.getMonth() + 1, 0);
-  const pre = ymd(first).slice(0, 8);
+  const week = kind === "week";
+  // 보여줄 날짜들: 이번 주(월~일) 또는 이번 달
+  let days, title, lead = 0;
+  if (week) {
+    const mon = new Date(t); mon.setDate(t.getDate() - ((t.getDay() + 6) % 7) + 7 * (ui.calWOff || 0));
+    days = Array.from({ length: 7 }, (_, i) => { const d = new Date(mon); d.setDate(mon.getDate() + i); return d; });
+    title = `${days[0].getMonth() + 1}/${days[0].getDate()} ~ ${days[6].getMonth() + 1}/${days[6].getDate()}`;
+  } else {
+    const first = new Date(t.getFullYear(), t.getMonth() + (ui.calOff || 0), 1);
+    const last = new Date(first.getFullYear(), first.getMonth() + 1, 0);
+    days = Array.from({ length: last.getDate() }, (_, i) => new Date(first.getFullYear(), first.getMonth(), i + 1));
+    title = `${first.getFullYear()}년 ${first.getMonth() + 1}월`;
+    lead = first.getDay();
+  }
+  const keys = new Set(days.map(ymd));
   const perDay = {};
   ledger.tx.forEach((x) => {
-    if (!x.date.startsWith(pre) || x.cat === "내부이체") return;
-    const d = (perDay[x.date] = perDay[x.date] || { out: 0, in: 0 });
-    d[x.dir] += x.amount;
+    if (!keys.has(x.date) || x.cat === "내부이체") return;
+    const d = (perDay[x.date] = perDay[x.date] || { out: 0, in: 0, fout: 0, fin: 0 });
+    d[(x.fixed ? "f" : "") + x.dir] += x.amount;
   });
-  const max = Math.max(1, ...Object.values(perDay).map((d) => d.out));
-  const monthOut = Object.values(perDay).reduce((a, d) => a + d.out, 0);
-  const monthIn = Object.values(perDay).reduce((a, d) => a + d.in, 0);
+  const vals = Object.values(perDay);
+  const max = Math.max(1, ...vals.map((d) => d.out + d.fout));
+  const sumOut = vals.reduce((a, d) => a + d.out + d.fout, 0);
+  const sumIn = vals.reduce((a, d) => a + d.in + d.fin, 0);
   const cells = [];
-  for (let i = 0; i < first.getDay(); i++) cells.push(`<span></span>`);
-  for (let d = 1; d <= last.getDate(); d++) {
-    const key = pre + String(d).padStart(2, "0");
-    const v = perDay[key];
-    const heat = v?.out ? 0.12 + 0.5 * (v.out / max) : 0;
-    cells.push(`<button class="cal-d ${ui.calDay === key ? "on" : ""} ${key === ymd(t) ? "today" : ""}" data-act="cal-day" data-d="${key}" style="${heat ? `background:rgba(124,150,255,${heat.toFixed(2)})` : ""}" aria-label="${d}일${v?.in ? ` 들어온 돈 ${won(v.in)}` : ""}${v?.out ? ` 쓴 돈 ${won(v.out)}` : ""}"><b>${d}</b>${v?.in ? `<span class="num down">+${manShort(v.in)}</span>` : ""}${v?.out ? `<span class="num">-${manShort(v.out)}</span>` : ""}</button>`);
+  for (let i = 0; i < lead; i++) cells.push(`<span></span>`);
+  for (const dt of days) {
+    const key = ymd(dt), v = perDay[key];
+    const heat = v?.out + v?.fout ? 0.08 + 0.27 * ((v.out + v.fout) / max) : 0;
+    const lines = v ? [v.in && `<span class="num c-in">+${manShort(v.in)}</span>`, v.out && `<span class="num c-out">-${manShort(v.out)}</span>`,
+      v.fin && `<span class="num c-fix">+${manShort(v.fin)}</span>`, v.fout && `<span class="num c-fix">-${manShort(v.fout)}</span>`].filter(Boolean).join("") : "";
+    cells.push(`<button class="cal-d ${ui.calDay === key ? "on" : ""} ${key === ymd(t) ? "today" : ""}" data-act="cal-day" data-d="${key}" style="${heat ? `background:rgba(124,150,255,${heat.toFixed(2)})` : ""}" aria-label="${dt.getDate()}일${v?.in + v?.fin ? ` 들어온 돈 ${won(v.in + v.fin)}` : ""}${v?.out + v?.fout ? ` 쓴 돈 ${won(v.out + v.fout)}` : ""}"><b>${dt.getDate()}</b>${lines}</button>`);
   }
-  const dayList = ui.calDay?.startsWith(pre) ? ledger.tx.filter((x) => x.date === ui.calDay) : null;
+  const dayList = ui.calDay && keys.has(ui.calDay) ? ledger.tx.filter((x) => x.date === ui.calDay) : null;
+  const off = week ? ui.calWOff || 0 : ui.calOff || 0;
   return `<section class="card" id="m-cal">
-      <div class="sec-title"><h2>달력으로 보기</h2><span>${monthIn ? `+${won(monthIn)} · ` : ""}-${won(monthOut)}</span></div>
-      <div class="cal-nav"><button class="icon-btn" data-act="cal-move" data-v="-1" aria-label="이전 달">‹</button><b>${first.getFullYear()}년 ${first.getMonth() + 1}월</b><button class="icon-btn" data-act="cal-move" data-v="1" aria-label="다음 달" ${(ui.calOff || 0) >= 0 ? "disabled" : ""}>›</button></div>
-      <div class="cal-grid">${["일", "월", "화", "수", "목", "금", "토"].map((w) => `<i>${w}</i>`).join("")}${cells.join("")}</div>
+      <div class="sec-title"><h2>달력으로 보기</h2><span>${sumIn ? `<b class="c-in">+${won(sumIn)}</b> · ` : ""}<b class="c-out">-${won(sumOut)}</b></span></div>
+      <div class="cal-nav"><button class="icon-btn" data-act="cal-move" data-v="-1" aria-label="${week ? "이전 주" : "이전 달"}">‹</button><b>${title}</b><button class="icon-btn" data-act="cal-move" data-v="1" aria-label="${week ? "다음 주" : "다음 달"}" ${off >= 0 ? "disabled" : ""}>›</button></div>
+      <div class="cal-grid">${(week ? ["월", "화", "수", "목", "금", "토", "일"] : ["일", "월", "화", "수", "목", "금", "토"]).map((w) => `<i>${w}</i>`).join("")}${cells.join("")}</div>
+      <div class="cal-legend"><span class="c-in">+ 들어온 돈</span><span class="c-out">- 나간 돈</span><span class="c-fix">고정 수입·지출</span></div>
       ${dayList ? `<div class="cal-list"><div class="tx-day">${Number(ui.calDay.slice(5, 7))}월 ${Number(ui.calDay.slice(8))}일 기록 ${dayList.length}건</div>${dayList.map(txRow).join("") || `<p class="hint" style="margin:6px 0">이날은 기록이 없어요</p>`}</div>` : `<p class="hint" style="margin:8px 0 0">날짜를 누르면 그날 기록이 나와요.</p>`}
     </section>`;
 }
@@ -1877,7 +1946,13 @@ function moneyBody() {
     </div>`;
   if (tab === "rec") return `${seg}
     ${captureBlock}
-    <button class="card line" id="m-quick" data-act="tx-add"><span><b>직접 기록하기</b> <span class="hint">현금·이체·월급 등</span></span><span class="plus" aria-hidden="true">+</span></button>
+    <button class="card line" id="m-quick" data-act="tx-add"><span><b>직접 기록하기</b> <span class="hint">현금·이체·월급 등</span></span><span class="plus line-plus" aria-hidden="true">+</span></button>
+    <section class="card" id="m-fixed" style="padding:8px 16px">
+      <div class="sec-title" style="margin:6px 0"><h2>고정 수입·지출</h2><button class="plus" data-act="fixed-new">+ 추가</button></div>
+      ${ledger.fixed.map((f) => `<button class="tx-row" data-act="fixed-edit" data-id="${f.id}" aria-label="${esc(f.name)} 고치기"><span class="tx-dot" style="background:${CAT_COLOR[f.cat] || "#CBD3E6"}"></span><span class="cap-main"><b>${esc(f.name)}</b><span class="hint">매월 ${f.day}일 · ${esc(f.cat)}</span></span>
+          <span class="num cap-amt">${f.dir === "in" ? "+" : "-"}${fmt(f.amount)}</span><span class="tx-pen" aria-hidden="true">›</span></button>`).join("")
+        || `<p class="hint" style="margin:0 0 8px">월급·용돈·월세·통신비·교통비처럼 매달 들어오고 나가는 돈을 넣으면, 매달 그날 자동으로 기록돼요. 달마다 금액이 다르면 그 달 기록을 눌러 고치면 돼요.</p>`}
+    </section>
     <section class="card" id="m-recent" style="padding:8px 16px">
       <div class="sec-title" style="margin:6px 0"><h2>최근 기록</h2><span>${ledger.tx.length}건 · 누르면 고칠 수 있어요</span></div>
       ${ledger.tx.length ? `<label class="sr" for="tx-q">기록 검색</label><input class="field" id="tx-q" type="search" placeholder="가게 이름이나 분류로 찾기 (예: 편의점, 식비)" value="${esc(ui.txQ || "")}" style="margin-bottom:4px">` : ""}
@@ -1902,7 +1977,7 @@ function moneyBody() {
       ${ui.moneyFb?.text ? `<div class="ans" style="display:flex;gap:10px;margin-top:10px">${mascot(36)}<p style="margin:0;font-size:14px;line-height:1.7;background:var(--soft);border-radius:6px 16px 16px 16px;padding:10px 12px;flex:1">${esc(ui.moneyFb.text)}</p></div>` : ""}
       ${ui.moneyFb?.error ? `<p class="hint" style="color:var(--up)">${esc(ui.moneyFb.error)}</p>` : ""}
     </section>
-    ${calBlock()}
+    ${calBlock(kind)}
     <p class="foot">기록은 이 기기에만 저장돼요. 캡처 사진은 AI가 읽는 데만 쓰고 저장하지 않아요(읽을 때 OpenAI로 전송돼요).</p>`;
 }
 
@@ -2216,11 +2291,11 @@ function viewLearn() {
   const tq = todayQuiz();
   const T = data.trending;
 
-  // 이번 주 화제 키워드 TOP 5 (최근 7일 정부 보도자료)
-  const kws = T?.available ? T.keywords || [] : [];
-  const hotBlock = kws.length ? `<section class="card">
-      <div class="sec-title"><h2>이번 주 화제 키워드 TOP 5</h2><span>최근 7일 정부 보도자료</span></div>
-      <div class="hot-list">${kws.map((k, i) => `<button class="hot-item" ${k.concept ? `data-act="open-concept" data-id="${esc(k.concept)}"` : `data-act="kw" data-k="${esc(k.word)}"`}><span class="hot-rank">${i + 1}</span><span class="hot-t">${esc(k.word)}${k.concept ? ` <span class="tagc">개념</span>` : ""}</span><span class="hint">${k.count}건</span></button>`).join("")}</div>
+  // 이번 주 화제 TOP 5: 많이 나온 낱말마다 대표 보도자료 제목 (최근 7일 정부 보도자료)
+  const evs = T?.available ? T.events || [] : [];
+  const hotBlock = evs.length ? `<section class="card">
+      <div class="sec-title"><h2>이번 주 화제 TOP 5</h2><span>최근 7일 정부 보도자료</span></div>
+      <div class="hot-list">${evs.map((e, i) => `<a class="hot-item" href="${esc(e.url)}" target="_blank" rel="noopener"><span class="hot-rank">${i + 1}</span><span class="hot-t">${esc(e.title)}<small class="hint">#${esc(e.word)} · 관련 보도자료 ${e.count}건</small></span>${ICON.out}</a>`).join("")}</div>
     </section>` : "";
 
   // 목록: 전체는 다 맞힌 개념을 빼고 주제별로(주제마다 3개 + 더보기), 주제 탭은 그 주제 전부
@@ -2960,6 +3035,26 @@ document.addEventListener("click", async (e) => {
     case "tx-rm": if (!confirm("이 기록을 지울까요?")) break; ledger.tx = ledger.tx.filter((t) => t.id !== el.dataset.id); saveLedger(); render(); break;
     case "tx-edit": openModal("tx-edit", { id: el.dataset.id }); break;
     case "tx-add": openModal("tx-add"); break;
+    case "fixed-new": openModal("fixed"); break;
+    case "fixed-edit": openModal("fixed", { id: el.dataset.id }); break;
+    case "fixed-save": {
+      const amount = parseInt(document.getElementById("fx-amt").value.replace(/[^0-9]/g, ""), 10);
+      const day = parseInt(document.getElementById("fx-day").value.replace(/[^0-9]/g, ""), 10);
+      const name = document.getElementById("fx-name").value.trim().slice(0, 20);
+      if (!name || !(amount > 0)) { toast("이름과 금액을 적어주세요"); break; }
+      if (!(day >= 1 && day <= 31)) { toast("매월 며칠인지 1~31 사이로 적어주세요"); break; }
+      const v = { name, amount, day, dir: document.getElementById("fx-dir").value, cat: document.getElementById("fx-cat").value };
+      const f = ui.modal.id && ledger.fixed.find((x) => x.id === ui.modal.id);
+      if (f) Object.assign(f, v);
+      else ledger.fixed.push({ id: "f" + Date.now().toString(36), ...v, start: ymd(today0()).slice(0, 7), made: {} });
+      saveLedger(); applyFixed();
+      ui.modal = null; render(); toast(f ? "고쳤어요" : "추가했어요. 매달 자동으로 기록돼요");
+      break;
+    }
+    case "fixed-rm":
+      if (!confirm("이 고정 수입·지출을 지울까요? 이미 기록된 내역은 남아요.")) break;
+      ledger.fixed = ledger.fixed.filter((x) => x.id !== el.dataset.id); saveLedger(); ui.modal = null; render();
+      break;
     case "modal-close": ui.modal = null; render(); break;
     case "tx-save": {
       const t = ledger.tx.find((x) => x.id === el.dataset.id);
@@ -2972,7 +3067,10 @@ document.addEventListener("click", async (e) => {
       saveLedger(); render(); toast("고쳤어요");
       break;
     }
-    case "cal-move": ui.calOff = Math.min(0, (ui.calOff || 0) + Number(el.dataset.v)); ui.calDay = null; render(); break;
+    case "cal-move":
+      if ((ui.moneyKind || "week") === "week") ui.calWOff = Math.min(0, (ui.calWOff || 0) + Number(el.dataset.v));
+      else ui.calOff = Math.min(0, (ui.calOff || 0) + Number(el.dataset.v));
+      ui.calDay = null; render(); break;
     case "cal-day": ui.calDay = ui.calDay === el.dataset.d ? null : el.dataset.d; render(); break;
     case "money-feedback": {
       const kind = ui.moneyKind || "week";
@@ -2982,6 +3080,15 @@ document.addEventListener("click", async (e) => {
         byCategory: s.byCat, previousByCategory: pv.byCat, topPlaces: s.top,
         values: profile.prefs, riskType: riskType(profile.avert),
         goals: (profile.goals || []).map((g) => ({ name: g.name, leftMan: goalCalc(g).left, monthlyMan: goalCalc(g).monthly })),
+        // 이번 주(월~일) 쓴 돈·번 돈
+        thisWeek: (() => { const w = spendSummary("week"); return { spent: w.total, earned: w.list.filter((x) => x.dir === "in" && x.cat === "급여·수입").reduce((a, x) => a + x.amount, 0) }; })(),
+        // 매달 고정으로 들어오고 나가는 돈
+        fixedMonthly: ledger.fixed.map((f) => ({ name: f.name, dir: f.dir === "in" ? "수입" : "지출", amount: f.amount, day: f.day, cat: f.cat })),
+        // 나이대·자산·부채 요약 (닉네임은 보내지 않음, 금액은 만원)
+        ageGroup: profile.age ? `${Math.floor(profile.age / 10) * 10}대` : undefined,
+        incomeYear: INCOME[profile.income] || undefined,
+        assetsMan: { cash: profile.assets.cash, invest: profile.assets.invest, other: profile.assets.other },
+        debts: (profile.debts || []).map((d) => ({ amountMan: d.amount, rate: d.rate, kind: d.kind })),
       };
       ui.moneyFb = { loading: true }; render();
       try {
@@ -3046,7 +3153,7 @@ document.addEventListener("click", async (e) => {
     case "wipe":
       if (confirm("이 기기에 저장된 내 정보를 모두 지울까요? 되돌릴 수 없어요.")) {
         try { [STORE_KEY, UI_KEY, LEARN_KEY, LEDGER_KEY, AI_KEY].forEach((k) => localStorage.removeItem(k)); } catch {}
-        ledger.tx = []; ledger.uploads = {}; learnState.answers = {}; learnState.notes = {}; learnState.days = {}; learnState.today = null;
+        ledger.tx = []; ledger.uploads = {}; ledger.fixed = []; learnState.answers = {}; learnState.notes = {}; learnState.days = {}; learnState.today = null;
         profile = null; ui.onb = { step: 0, draft: null }; location.hash = ""; render();
       }
       break;

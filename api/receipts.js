@@ -37,8 +37,9 @@ const READ_RULES = `너는 한국 은행·카드·간편결제 앱의 '이용내
 - 계좌번호, 카드번호, 잔액, 이름 같은 개인정보는 어떤 칸에도 쓰지 마.`;
 
 const FEEDBACK_RULES = `너는 '나만의 경제' 앱의 금융 길잡이 캐릭터 '루미'(이루미)야. 2030 사용자의 소비 요약을 보고 쉬운 존댓말(~요)로 피드백해.
-- 4~5문장. ① 이번 기간 소비의 특징 한 가지 ② 지난 기간과 달라진 점 ③ 사용자의 선호·목표와 연결한 한 가지 실천 팁.
-- 숫자는 주어진 값만 쓰고, 혼내지 말고 응원하는 말투로. 투자 상품 추천은 하지 마.`;
+- 5~6문장. ① 이번 기간 소비의 특징 한 가지 ② 지난 기간과 달라진 점 ③ 이번 주(thisWeek) 쓴 돈·번 돈 흐름
+  ④ 고정 수입·지출(fixedMonthly)을 빼고 나면 매달 자유롭게 쓸 수 있는 돈이 어느 정도인지 ⑤ 나이대·자산(assetsMan, 만원)·부채(debts)에 비춰 지금 소비가 괜찮은지와 선호·목표에 연결한 실천 팁 한 가지.
+- 주어지지 않은 항목은 언급하지 마. 숫자는 주어진 값만 쓰고, 혼내지 말고 응원하는 말투로. 투자 상품 추천은 하지 마.`;
 
 // 아주 단순한 남용 방지 (서버 인스턴스마다 IP별 하루 사진 수 제한)
 const hits = new Map();
@@ -63,7 +64,7 @@ export default async function handler(req, res) {
       const summary = JSON.stringify(body.summary || {}).slice(0, 3000);
       if (!allow(ip, 1)) return res.status(429).json({ error: "오늘은 더 이상 요청할 수 없어요. 내일 다시 해주세요" });
       const r = await client.responses.create({
-        model: MODEL, reasoning: { effort: "low" }, max_output_tokens: 600,
+        model: MODEL, reasoning: { effort: "low" }, max_output_tokens: 800,
         input: [{ role: "system", content: FEEDBACK_RULES }, { role: "user", content: summary }],
       });
       return res.status(200).json({ text: r.output_text, usage: r.usage });
