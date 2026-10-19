@@ -3,7 +3,7 @@
 // (네이버 검색 결과는 약관상 '그대로 보여주기'에만 쓸 수 있어서 집계에 쓰지 않는다)
 // GET /api/trending → { available, counts: { 개념id: 언급 횟수 }, keywords: [{ word, count, concept }] 화제 키워드 5개, events: [{ title, word, count, url, org }] 화제 TOP 5(대표 보도자료 제목), total: 본 보도자료 수, at }
 import { cache } from "./_util.js";
-import { pressReleases } from "./_policy.js";
+import { pressReleases, isEcon } from "./_policy.js";
 
 // "토큰증권 (STO)" → "토큰증권", "양적완화 / 양적긴축" → "양적완화", "고정금리 vs 변동금리" → "고정금리"
 function searchWord(term) {
@@ -14,7 +14,7 @@ function searchWord(term) {
 const WORDS = ["금리", "물가", "환율", "수출", "수입", "반도체", "AI", "배터리", "전기차", "부동산", "전세", "청약", "가계부채", "대출",
   "관세", "무역", "공급망", "일자리", "고용", "청년", "소상공인", "중소기업", "스타트업", "벤처", "예산", "세제", "세금", "추경",
   "국채", "외환", "증시", "코스피", "밸류업", "배당", "연금", "건강보험", "최저임금", "저출생", "에너지", "원전", "유가", "농산물",
-  "관광", "디지털", "플랫폼", "가상자산", "스테이블코인", "물류", "조선", "방산", "바이오", "자동차", "철강", "석유화학", "소비", "내수"];
+  "관광", "디지털", "플랫폼", "가상자산", "스테이블코인", "물류", "조선업", "방산", "바이오", "자동차", "철강", "석유화학", "소비", "내수"];
 
 // 보도자료 제목을 짧게: 앞의 [말머리]·따옴표 정리, 부제(— , ·· 뒤)는 자르기
 function shortTitle(t) {
@@ -47,11 +47,13 @@ export default async function handler(req, res) {
     // 대표 = 제목에 다른 화제 낱말이 많이 들어간 것 → 같으면 최신. 같은 자료는 두 번 쓰지 않는다
     const ranked = words.map((w) => ({ word: w, count: texts.filter((t) => t.includes(w)).length })).filter((k) => k.count > 0).sort((a, b) => b.count - a.count);
     const hotWords = ranked.slice(0, 15).map((k) => k.word);
+    // 언론 보도 설명·해명 자료는 '무슨 일이 있었는지'가 아니라서 빼고, 경제 관련 자료만 쓴다
+    const eventDocs = docs.filter((d) => isEcon(d) && !/^\s*[(\[]\s*(설명|해명|정정|반박)/.test(d.title) && !/아닙니다|사실이 아닙|사실과 다릅/.test(d.title));
     const used = new Set();
     const events = [];
     for (const k of ranked) {
       if (events.length >= 5) break;
-      const pick = docs.filter((d) => d.title.includes(k.word) && !used.has(d.title))
+      const pick = eventDocs.filter((d) => d.title.includes(k.word) && !used.has(d.title))
         .map((d) => ({ d, score: hotWords.filter((w) => d.title.includes(w)).length }))
         .sort((a, b) => b.score - a.score || String(b.d.at).localeCompare(String(a.d.at)))[0];
       if (!pick) continue;
