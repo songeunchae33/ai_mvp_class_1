@@ -9,7 +9,7 @@
 - 홈 (index.html · viewHome, homeBlocks / api/market.js, api/news.js): 루미의 한마디, 주가, 나에게 미치는 영향, 뉴스, 일정·혜택, 오늘의 OX 퀴즈, 자산·소득을 하나씩 묻는 맞춤 질문 카드를 한눈에 보여준다.
 - 공부 (index.html · viewLearn / data/learn.json, api/trending.js): 경제 개념 40개와 OX 퀴즈를 주제별로 정렬·복습하고, 내 노트와 연속 기록을 남긴다.
 - 나의 자산관리 (index.html · viewAssets): 순자산·자산 진단, 목표 저축, 자산·대출 입력을 한다.
-- 가계부 (index.html · viewLedger, moneyBody / api/receipts.js): 카드·은행 캡처나 직접 입력으로 소비를 기록하고 주간·월간 요약과 루미 피드백을 준다.
+- 가계부 (index.html · viewLedger, moneyBody / api/receipts.js): 카드·은행 캡처나 직접 입력으로 소비를 기록하고, 주간·월간 요약(분류별 도넛 차트·지난 기간 비교), 달력, 기록 고치기·검색, 루미 피드백을 준다.
 - 마이페이지 (index.html · viewMy): 기본 정보와 투자 성향을 고친다.
 - 투자 성향 진단 (index.html · viewRiskTest): 7문항으로 투자 성향을 알려준다.
 - 뉴스 (index.html · viewNews, viewBrief / api/news.js, api/brief.js): 오늘의 경제 쉽게 풀이, 오늘의 이슈, 나를 위한 뉴스, 뉴스레터 붙여넣기 풀이를 본다.
