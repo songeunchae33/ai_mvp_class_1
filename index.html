@@ -713,7 +713,9 @@
   .cat-v small.flat { color: var(--sub); }
   button.tx-row { width: 100%; background: none; border-left: none; border-right: none; border-bottom: none; padding: 0; text-align: left; font: inherit; color: inherit; cursor: pointer; }
   .tx-pen { color: var(--sub); padding: 0 2px 0 4px; }
-  .tx-edit { border-top: 1px solid #EEF1F8; padding: 10px 0; }
+  .modal-back { position: fixed; inset: 0; z-index: 60; background: rgba(25, 31, 40, 0.5); display: flex; align-items: center; justify-content: center; padding: 16px; }
+  .modal { width: 100%; max-width: 400px; background: #fff; border-radius: 20px; padding: 20px 16px 16px; box-shadow: 0 12px 40px rgba(0, 0, 0, 0.18); }
+  .modal .sec-title span { max-width: 55%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 </style>
 </head>
 <body>
@@ -1635,9 +1637,18 @@ function moneyLine() {
   return { text: ledger.tx.length ? "이번 주 소비를 기록할 시간이에요. 카드 앱 캡처 한 장이면 돼요!" : "카드·은행 앱 캡처 한 장으로 내 소비를 정리해 볼까요?", act: "go-money", label: "기록하기" };
 }
 
-// 거래 한 줄: 누르면 그 자리에서 고칠 수 있다
+// 거래 한 줄: 누르면 고치기 팝업이 뜬다
 function txRow(t) {
-  if (ui.txEdit === t.id) return `<div class="tx-edit form">
+  return `<button class="tx-row" data-act="tx-edit" data-id="${t.id}" aria-label="${esc(t.merchant)} 기록 고치기"><span class="tx-dot" style="background:${CAT_COLOR[t.cat] || "#CBD3E6"}"></span><span class="cap-main"><b>${esc(t.merchant)}</b><span class="hint">${esc(t.cat)}${t.src ? " · " + esc(t.src) : ""}</span></span>
+      <span class="num cap-amt ${t.dir === "in" ? "down" : ""} ${t.cat === "내부이체" ? "flat" : ""}">${t.dir === "in" ? "+" : "-"}${fmt(t.amount)}</span><span class="tx-pen" aria-hidden="true">›</span></button>`;
+}
+// 기록 고치기 팝업: 취소나 저장을 눌러야만 닫힌다 (바깥을 눌러도 닫히지 않음)
+function txEditModal() {
+  const t = ledger.tx.find((x) => x.id === ui.txEdit);
+  if (!t) return "";
+  return `<div class="modal-back">
+    <div class="modal form" role="dialog" aria-modal="true" aria-labelledby="tx-edit-title">
+      <div class="sec-title" style="margin:0"><h2 id="tx-edit-title">기록 고치기</h2><span>${Number(t.date.slice(5, 7))}월 ${Number(t.date.slice(8))}일 · ${esc(t.merchant)}</span></div>
       <div class="inline">
         <label class="sr" for="e-dir">나간 돈/들어온 돈</label>
         <select class="field" id="e-dir" style="flex:0 0 96px"><option value="out" ${t.dir === "out" ? "selected" : ""}>나간 돈</option><option value="in" ${t.dir === "in" ? "selected" : ""}>들어온 돈</option></select>
@@ -1649,10 +1660,9 @@ function txRow(t) {
       </div>
       <label class="sr" for="e-cat">분류</label>
       <select class="field" id="e-cat">${MONEY_CATS.map((c) => `<option ${c === t.cat ? "selected" : ""}>${c}</option>`).join("")}</select>
-      <div class="inline"><button class="btn ghost" data-act="tx-rm" data-id="${t.id}" style="flex:1;color:var(--up)">삭제</button><button class="btn ghost" data-act="tx-edit" data-id="" style="flex:1">취소</button><button class="btn" data-act="tx-save" data-id="${t.id}" style="flex:2">저장</button></div>
-    </div>`;
-  return `<button class="tx-row" data-act="tx-edit" data-id="${t.id}" aria-label="${esc(t.merchant)} 기록 고치기"><span class="tx-dot" style="background:${CAT_COLOR[t.cat] || "#CBD3E6"}"></span><span class="cap-main"><b>${esc(t.merchant)}</b><span class="hint">${esc(t.cat)}${t.src ? " · " + esc(t.src) : ""}</span></span>
-      <span class="num cap-amt ${t.dir === "in" ? "down" : ""} ${t.cat === "내부이체" ? "flat" : ""}">${t.dir === "in" ? "+" : "-"}${fmt(t.amount)}</span><span class="tx-pen" aria-hidden="true">›</span></button>`;
+      <div class="inline"><button class="btn ghost" data-act="tx-rm" data-id="${t.id}" style="flex:1;color:var(--up)">삭제</button><button class="btn ghost" data-act="tx-cancel" style="flex:1">취소</button><button class="btn" data-act="tx-save" data-id="${t.id}" style="flex:2">저장</button></div>
+    
+    </div></div>`;
 }
 // 최근 기록 / 검색 결과 목록 (검색할 땐 이 부분만 다시 그린다)
 function txListHtml() {
@@ -2466,7 +2476,9 @@ function render() {
   const focusId = document.activeElement?.id;
   app.innerHTML = ({ onboard: viewOnboard, my: viewMy, news: viewNews, schedule: viewSchedule, learn: viewLearn, benefits: viewBenefits, risktest: viewRiskTest, money: viewLedger, ledger: viewLedger, assets: viewAssets, layout: viewLayout, watch: viewWatch, letters: viewLetters, etc: viewEtc }[r] || viewHome)()
     + (r !== "onboard" ? tabBar(r) : "")
-    + (ui.drawer && r !== "onboard" ? viewDrawer() : "");
+    + (ui.drawer && r !== "onboard" ? viewDrawer() : "")
+    + (ui.txEdit && ["ledger", "money"].includes(r) ? txEditModal() : "");
+  document.body.style.overflow = ui.txEdit && ["ledger", "money"].includes(r) ? "hidden" : "";
   window.scrollTo(0, y);
   if (focusId) document.getElementById(focusId)?.focus();
 }
@@ -2474,7 +2486,8 @@ function go(hash) {
   if (location.hash === hash || (!location.hash && hash === "#home")) { render(); window.scrollTo(0, 0); }
   else location.hash = hash;
 }
-window.addEventListener("hashchange", () => { ui.search = { q: "", results: [], sample: false }; ui.searchOpen = false; render(); window.scrollTo(0, 0); });
+window.addEventListener("hashchange", () => {
+  if (ui.txEdit && !["ledger", "money"].includes(route())) { location.hash = "#ledger"; toast("취소나 저장을 먼저 눌러주세요"); return; } ui.search = { q: "", results: [], sample: false }; ui.searchOpen = false; render(); window.scrollTo(0, 0); });
 
 // 지금 편집 중인 프로필 (첫 설문 중이면 초안)
 function target() { return profile || ui.onb.draft; }
@@ -2623,7 +2636,8 @@ document.addEventListener("click", async (e) => {
       break;
     }
     case "tx-rm": if (!confirm("이 기록을 지울까요?")) break; ledger.tx = ledger.tx.filter((t) => t.id !== el.dataset.id); ui.txEdit = null; saveLedger(); render(); break;
-    case "tx-edit": ui.txEdit = el.dataset.id || null; render(); break;
+    case "tx-edit": ui.txEdit = el.dataset.id; render(); break;
+    case "tx-cancel": ui.txEdit = null; render(); break;
     case "tx-save": {
       const t = ledger.tx.find((x) => x.id === el.dataset.id);
       if (!t) break;
