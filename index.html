@@ -716,6 +716,27 @@
   .modal-back { position: fixed; inset: 0; z-index: 60; background: rgba(25, 31, 40, 0.5); display: flex; align-items: center; justify-content: center; padding: 16px; }
   .modal { width: 100%; max-width: 400px; background: #fff; border-radius: 20px; padding: 20px 16px 16px; box-shadow: 0 12px 40px rgba(0, 0, 0, 0.18); }
   .modal .sec-title span { max-width: 55%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  /* ═════ 탭 나누기 · 팝업 · 분석 ═════ */
+  .sortbar.seg2 { align-self: stretch; display: flex; }
+  .sortbar.seg2 button { flex: 1; font-size: 15px; min-height: 40px; }
+  .modal { max-height: calc(100dvh - 32px); overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
+  .modal .lb { display: block; }
+  .flow3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; text-align: center; }
+  .flow3 > div { background: var(--soft); border-radius: 12px; padding: 10px 4px; display: flex; flex-direction: column; gap: 2px; }
+  .flow3 span { font-size: 12px; color: var(--sub); }
+  .flow3 b { font-size: 15px; }
+  .flow3 b.up { color: var(--up); }
+  .flow3 b.down { color: var(--down); }
+  .goal-btn { width: 100%; background: none; border-left: none; border-right: none; border-bottom: none; text-align: left; font: inherit; color: inherit; cursor: pointer; padding: 10px 0; }
+  .cal-d { min-height: 52px; }
+
+  /* ═════ 공부: 푼 문제 목록 ═════ */
+  .solved-row { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 56px; padding: 10px 0; border: none; border-top: 1px solid #EEF1F8; background: none; text-align: left; font: inherit; color: inherit; cursor: pointer; }
+  .solved-row:first-child { border-top: none; }
+  .solved-row .t { font-size: 15px; font-weight: 700; }
+  .solved-row .d { font-size: 13px; color: var(--sub); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .modal .c-quiz { display: flex; flex-direction: column; gap: 10px; }
 </style>
 </head>
 <body>
@@ -746,7 +767,12 @@ function saveUi() {
 }
 const LEARN_KEY = "myeco.learn.v1";
 function loadLearn() {
-  try { const v = JSON.parse(localStorage.getItem(LEARN_KEY)) || {}; return { answers: v.answers || {}, notes: v.notes || {} }; } catch { return { answers: {}, notes: {} }; }
+  try {
+    const v = JSON.parse(localStorage.getItem(LEARN_KEY)) || {};
+    const answers = {};
+    Object.entries(v.answers || {}).forEach(([k, a]) => (answers[k.includes(":") ? k : k + ":0"] = a)); // 예전 기록은 1단계 답으로
+    return { answers, notes: v.notes || {}, days: v.days || {}, today: v.today || null };
+  } catch { return { answers: {}, notes: {}, days: {}, today: null }; }
 }
 function saveLearn() {
   try { localStorage.setItem(LEARN_KEY, JSON.stringify(learnState)); } catch {}
@@ -1123,19 +1149,60 @@ function calRow(e) {
 }
 
 // OX 퀴즈 (홈·경제 공부 공용). 답은 이 기기에 기록돼서 복습에 쓰인다
-function quizBox(c, dark, mini = false) {
-  const ans = learnState.answers[c.id];
-  const cls = (o) => (!ans ? "" : o === c.quiz.a ? "right" : o === ans.pick ? "wrong" : "dim");
-  return `${mini ? `<div class="qrow">` : ""}<p class="q">${esc(c.quiz.q)}</p>
-    <div class="ox ${dark ? "" : "light"} ${mini ? "mini" : ""}">${["O", "X"].map((o) => `<button class="${cls(o)}" data-act="answer" data-id="${c.id}" data-o="${o}" ${ans ? "disabled" : ""} aria-label="${o === "O" ? "맞다" : "아니다"}">${o}</button>`).join("")}</div>${mini ? "</div>" : ""}
-    ${ans ? `<div class="ex-row">${mascot(34, ans.ok ? "happy" : "reassure")}<p class="ex"><b>${ans.ok ? "정답이에요!" : `정답은 ${c.quiz.a}예요.`}</b> ${esc(c.quiz.ex)}</p></div>
-      ${!ans.ok ? `<button class="link-btn" style="padding-left:0;align-self:flex-start" data-act="retry" data-id="${c.id}">다시 풀기 ›</button>` : ""}` : ""}`;
+const LV_NAME = ["1단계 기본", "2단계 심화", "3단계 도전"];
+function quizzesOf(c) { return [c.quiz, ...(c.more || [])]; }
+function qa(c, lv) { return learnState.answers[`${c.id}:${lv}`]; }
+// 지금 풀 단계: 맞힌 단계 다음. 다 맞히면 단계 수와 같아진다(완료)
+function curLv(c) { const n = quizzesOf(c).length; let lv = 0; while (lv < n && qa(c, lv)?.ok) lv++; return lv; }
+function mastered(c) { return curLv(c) >= quizzesOf(c).length; }
+function isWrong(c) { const a = qa(c, curLv(c)); return !!a && !a.ok; }
+function conceptById(id) { return data.learn?.concepts.find((x) => x.id === id); }
+function markAttend() { const k = ymd(today0()); if (!learnState.days[k]) { learnState.days[k] = 1; saveLearn(); } }
+function attendRate() {
+  const t = today0(), pre = ymd(t).slice(0, 8);
+  const n = Object.keys(learnState.days).filter((k) => k.startsWith(pre)).length;
+  return { n, of: t.getDate(), pct: Math.round((n / t.getDate()) * 100) };
 }
-function todayConcept() {
+// OX 퀴즈 (오늘의 퀴즈·팝업 공용). today면 답한 뒤 5초 있다가 사라진다
+function quizBox(c, lv, dark, mini = false, today = false) {
+  const q = quizzesOf(c)[lv];
+  const ans = qa(c, lv);
+  const cls = (o) => (!ans ? "" : o === q.a ? "right" : o === ans.pick ? "wrong" : "dim");
+  const hasNext = lv + 1 < quizzesOf(c).length;
+  return `${mini ? `<div class="qrow">` : ""}<p class="q">${esc(q.q)}</p>
+    <div class="ox ${dark ? "" : "light"} ${mini ? "mini" : ""}">${["O", "X"].map((o) => `<button class="${cls(o)}" data-act="answer" data-id="${c.id}" data-lv="${lv}" data-o="${o}" ${today ? 'data-today="1"' : ""} ${ans ? "disabled" : ""} aria-label="${o === "O" ? "맞다" : "아니다"}">${o}</button>`).join("")}</div>${mini ? "</div>" : ""}
+    ${ans ? `<div class="ex-row">${mascot(34, ans.ok ? "happy" : "reassure")}<p class="ex"><b>${ans.ok ? "정답이에요!" : `정답은 ${q.a}예요.`}</b> ${esc(q.ex)}</p></div>
+      ${today ? `<p class="hint" style="margin:0">${ans.ok ? "‘푼 문제’로 옮겨둘게요." : "‘복습할 문제’에 담아둘게요."}</p>`
+        : !ans.ok ? `<button class="link-btn" style="padding-left:0;align-self:flex-start" data-act="retry" data-id="${c.id}" data-lv="${lv}">다시 풀기 ›</button>`
+        : hasNext && curLv(c) === lv + 1 ? `<button class="btn" data-act="quiz-next" data-id="${c.id}">더 어려운 ${LV_NAME[lv + 1]} 풀기 ›</button>` : ""}` : ""}`;
+}
+// 오늘의 퀴즈: 하루에 한 문제를 정해두고(아직 다 못 푼 개념의 지금 단계), 답하면 5초 뒤 사라진다
+function todayQuiz() {
   const list = data.learn?.concepts || [];
   if (!list.length) return null;
-  const dayIdx = Math.floor((today0() - new Date(2026, 0, 1)) / 86400e3);
-  return list[((dayIdx % list.length) + list.length) % list.length];
+  const day = ymd(today0());
+  let T = learnState.today;
+  if (!T || T.day !== day || !conceptById(T.id)) {
+    const pool = list.filter((c) => !mastered(c));
+    if (!pool.length) return null;
+    const dayIdx = Math.floor((today0() - new Date(2026, 0, 1)) / 86400e3);
+    const c = pool[((dayIdx % pool.length) + pool.length) % pool.length];
+    T = learnState.today = { day, id: c.id, lv: curLv(c) };
+    saveLearn();
+  }
+  return { c: conceptById(T.id), lv: T.lv };
+}
+function todayQuizShown(t) {
+  if (!t) return false;
+  if (!qa(t.c, t.lv)) return true;
+  return ui.quizJust === `${t.c.id}:${t.lv}` && Date.now() < ui.quizJustUntil;
+}
+function modalQuiz(m) {
+  const c = conceptById(m.id);
+  if (!c) return "";
+  return `<div class="sec-title" style="margin:0"><h2>${esc(c.term)}</h2><span class="tagc">${LV_NAME[m.lv]}</span></div>
+    <div class="c-quiz">${quizBox(c, m.lv, false)}</div>
+    <button class="btn ghost" data-act="modal-close">닫기</button>`;
 }
 function catName(id) { return data.learn?.categories.find((c) => c.id === id)?.name || ""; }
 
@@ -1186,10 +1253,10 @@ function homeBlocks() {
       <button class="lrow" data-act="go-benefits"><span class="lk">혜택</span><span class="lv">${reg.sido ? `우리 지역 <b>${esc(reg.sigungu || reg.sido)}</b>${bcount ? ` · ${bcount}개` : ""}` : "사는 곳을 알려주면 지자체·정부 혜택을 찾아드려요"}</span><span aria-hidden="true">›</span></button>
     </section>`;
 
-  const c = todayConcept();
-  const quizBlock = c ? `<section class="quiz" id="h-quiz">
-      <button class="quiz-head" data-act="go-learn"><span class="hand">오늘의 OX 퀴즈 · ${esc(catName(c.cat))}${quizStreak().n ? ` <span class="streak">연속 ${quizStreak().n}일</span>` : ""}</span><span>경제 공부 ›</span></button>
-      ${quizBox(c, true, true)}
+  const tq = todayQuiz();
+  const quizBlock = todayQuizShown(tq) ? `<section class="quiz" id="h-quiz">
+      <button class="quiz-head" data-act="go-learn"><span class="hand">오늘의 OX 퀴즈 · ${esc(catName(tq.c.cat))}</span><span>경제 공부 ›</span></button>
+      ${quizBox(tq.c, tq.lv, true, true, true)}
     </section>` : "";
 
   const nq = nextQuestion();
@@ -1258,8 +1325,8 @@ function viewDrawer() {
     ["impact", "나에게 미치는 영향", "h-impact"], ["news", "뉴스", "h-news"], ["quiz", "오늘의 퀴즈", "h-quiz"],
   ].filter(([id]) => !hidden.has(id));
   const homeMore = [["나를 위한 일정", "schedule", ""], ["우리 지역 혜택", "benefits", ""], ["홈 화면 꾸미기", "layout", ""]];
-  const assets = [["순자산·자산 진단", "assets", "sec-diag"], ["목표 저축", "assets", "sec-goals"], ["자산·대출 입력", "assets", "sec-assets"]];
-  const ledgerItems = [["이번 주·이번 달 지출", "ledger", "m-summary"], ["달력으로 보기", "ledger", "m-cal"], ["캡처로 기록하기", "ledger", "m-capture"], ["직접 기록", "ledger", "m-quick"], ["최근 기록", "ledger", "m-recent"]];
+  const assets = [["순자산·자산 진단", "assets", "sec-diag"], ["목표 저축", "assets", "sec-goals"], ["자산·대출 입력", "assets", "sec-assets"], ["소비 분석", "assets", "sec-analysis"]];
+  const ledgerItems = [["캡처로 기록하기", "ledger", "m-capture"], ["직접 기록", "ledger", "m-quick"], ["최근 기록", "ledger", "m-recent"], ["지출 통계", "ledger", "m-summary"], ["달력으로 보기", "ledger", "m-cal"]];
   const study = [["경제 개념·퀴즈", "learn", ""], ["뉴스 쉽게 풀이", "news", ""], ["뉴스레터", "letters", ""], ["관심 종목", "watch", ""]];
   const my = [["기본 정보", "my", "sec-basic"], ["투자 성향 · 관심사", "my", "sec-risk"], ["투자 성향 정밀 진단", "risktest", ""]];
   const etc = [["개인정보·데이터 지우기", "etc", "sec-privacy"], ["앱 정보", "etc", ""]];
@@ -1283,8 +1350,13 @@ function viewDrawer() {
         ${etc.map(([l, r, t]) => item(l, r, t)).join("")}</div>
     </nav></div>`;
 }
+const TARGET_TAB = { "m-capture": ["ledgerTab", "rec"], "m-quick": ["ledgerTab", "rec"], "m-recent": ["ledgerTab", "rec"], "m-summary": ["ledgerTab", "stat"], "m-cal": ["ledgerTab", "stat"],
+  "sec-diag": ["assetTab", "invest"], "sec-goals": ["assetTab", "invest"], "sec-assets": ["assetTab", "invest"], "sec-debts": ["assetTab", "invest"], "sec-analysis": ["assetTab", "analysis"] };
 function navTo(to, target, sub) {
   ui.drawer = false;
+  if (TARGET_TAB[target]) ui[TARGET_TAB[target][0]] = TARGET_TAB[target][1];
+  if (target === "m-quick") ui.modal = { kind: "tx-add", route: "ledger" };
+  if (["sec-assets", "sec-debts"].includes(target) && profile) ui.modal = { kind: "assets", route: "assets", draft: assetDraft() };
   const hash = to === "home" ? "" : "#" + to;
   const same = route() === to;
   if (!same) location.hash = hash; else render();
@@ -1456,26 +1528,16 @@ function readDue(id) {
 
 function goalsMy(p) {
   const goals = p.goals || [];
-  return `<section class="card form" id="sec-goals">
-      <div class="sec-title"><h2>목표 저축</h2><span>모은 돈을 고치면 진행률이 바뀌어요</span></div>
+  return `<section class="card" id="sec-goals">
+      <div class="sec-title"><h2>목표 저축</h2><button class="plus" data-act="goal-new" aria-label="새 목표 만들기">+ 새 목표</button></div>
       ${goals.map((g, i) => {
         const c = goalCalc(g);
-        return `<div class="debt">
-          <div class="goal-top"><b>${esc(g.name)}</b><span class="num">${c.pct}%</span><button class="icon-btn" data-act="goal-rm" data-i="${i}" aria-label="${esc(g.name)} 목표 삭제">${ICON.x}</button></div>
+        return `<button class="goal goal-btn" data-act="goal-edit" data-i="${i}" aria-label="${esc(g.name)} 목표 고치기">
+          <div class="goal-top"><b>${esc(g.name)}</b><span class="num">${c.pct}%</span><span class="tx-pen" aria-hidden="true">›</span></div>
           ${goalBar(c.pct)}
-          ${amountField(`gs-${i}`, "지금까지 모은 돈", g.saved ?? 0, "goal-saved", i)}
-          ${amountField(`gt-${i}`, "목표 금액", g.target, "goal-target", i)}
-          ${dueFields(`gd-${i}`, g.due, "goal-due", i)}
-          <p class="hint" style="margin:0">${c.done ? "목표 달성! 새 목표를 만들어 보세요." : `${g.due ? `${g.due.split("-")[0]}년 ${Number(g.due.split("-")[1])}월까지 ` : ""}${man(c.left)} 남았어요${c.monthly ? ` · 매달 ${man(c.monthly)}씩` : ""}`}</p>
-        </div>`;
-      }).join("")}
-      <div class="debt">
-        <span class="lb" style="margin:0">새 목표 만들기</span>
-        <div><label class="sr" for="g-name">목표 이름</label><input class="field" id="g-name" maxlength="20" placeholder="예: 제주 여행, 새 노트북"></div>
-        ${amountField("g-target", "목표 금액", "", "", "")}
-        ${dueFields("g-due", "", "", "")}
-        <button class="btn" data-act="goal-add">목표 추가</button>
-      </div>
+          <span class="hint">${c.done ? "목표 달성! 🎉" : `${man(g.saved || 0)} / ${man(g.target)} · ${g.due ? `${g.due.split("-")[0]}년 ${Number(g.due.split("-")[1])}월까지 ` : ""}${c.monthly ? `매달 ${man(c.monthly)}씩` : `${man(c.left)} 남음`}`}</span>
+        </button>`;
+      }).join("") || `<p class="hint" style="margin:0">아직 목표가 없어요. 오른쪽 위 ‘+ 새 목표’로 만들어 보세요.</p>`}
     </section>`;
 }
 function goalLine() {
@@ -1538,15 +1600,6 @@ function viewRiskTest() {
 
 // ───────────────────────── 퀴즈 기록 ─────────────────────────
 function dayKey(t) { const d = new Date(t); return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`; }
-function quizStreak() {
-  const days = new Set(Object.values(learnState.answers).map((a) => a.at && dayKey(a.at)).filter(Boolean));
-  const d = today0();
-  const solvedToday = days.has(dayKey(d));
-  if (!solvedToday) d.setDate(d.getDate() - 1); // 오늘 아직 안 풀었으면 어제까지 이어진 기록
-  let n = 0;
-  while (days.has(dayKey(d))) { n++; d.setDate(d.getDate() - 1); }
-  return { n, solvedToday };
-}
 
 // ───────────────────────── 내 돈 기록 (가계부) ─────────────────────────
 // 거래는 이 기기(localStorage)에만 저장. 캡처 사진은 AI가 읽는 데만 쓰고 어디에도 저장하지 않는다.
@@ -1642,13 +1695,20 @@ function txRow(t) {
   return `<button class="tx-row" data-act="tx-edit" data-id="${t.id}" aria-label="${esc(t.merchant)} 기록 고치기"><span class="tx-dot" style="background:${CAT_COLOR[t.cat] || "#CBD3E6"}"></span><span class="cap-main"><b>${esc(t.merchant)}</b><span class="hint">${esc(t.cat)}${t.src ? " · " + esc(t.src) : ""}</span></span>
       <span class="num cap-amt ${t.dir === "in" ? "down" : ""} ${t.cat === "내부이체" ? "flat" : ""}">${t.dir === "in" ? "+" : "-"}${fmt(t.amount)}</span><span class="tx-pen" aria-hidden="true">›</span></button>`;
 }
-// 기록 고치기 팝업: 취소나 저장을 눌러야만 닫힌다 (바깥을 눌러도 닫히지 않음)
-function txEditModal() {
-  const t = ledger.tx.find((x) => x.id === ui.txEdit);
+// 팝업: 취소·저장·닫기를 눌러야만 닫힌다 (바깥을 눌러도, 탭·뒤로가기로도 안 닫힘)
+function routeKey() { const r = route(); return r === "money" ? "ledger" : r; }
+function openModal(kind, extra = {}) { ui.modal = { kind, route: routeKey(), ...extra }; render(); }
+function viewModal() {
+  const m = ui.modal;
+  if (!m) return "";
+  const body = { "tx-edit": modalTxEdit, "tx-add": modalTxAdd, assets: modalAssets, goal: modalGoal, quiz: modalQuiz }[m.kind]?.(m);
+  if (!body) { ui.modal = null; return ""; }
+  return `<div class="modal-back"><div class="modal form" role="dialog" aria-modal="true">${body}</div></div>`;
+}
+function modalTxEdit(m) {
+  const t = ledger.tx.find((x) => x.id === m.id);
   if (!t) return "";
-  return `<div class="modal-back">
-    <div class="modal form" role="dialog" aria-modal="true" aria-labelledby="tx-edit-title">
-      <div class="sec-title" style="margin:0"><h2 id="tx-edit-title">기록 고치기</h2><span>${Number(t.date.slice(5, 7))}월 ${Number(t.date.slice(8))}일 · ${esc(t.merchant)}</span></div>
+  return `<div class="sec-title" style="margin:0"><h2>기록 고치기</h2><span>${Number(t.date.slice(5, 7))}월 ${Number(t.date.slice(8))}일 · ${esc(t.merchant)}</span></div>
       <div class="inline">
         <label class="sr" for="e-dir">나간 돈/들어온 돈</label>
         <select class="field" id="e-dir" style="flex:0 0 96px"><option value="out" ${t.dir === "out" ? "selected" : ""}>나간 돈</option><option value="in" ${t.dir === "in" ? "selected" : ""}>들어온 돈</option></select>
@@ -1660,9 +1720,23 @@ function txEditModal() {
       </div>
       <label class="sr" for="e-cat">분류</label>
       <select class="field" id="e-cat">${MONEY_CATS.map((c) => `<option ${c === t.cat ? "selected" : ""}>${c}</option>`).join("")}</select>
-      <div class="inline"><button class="btn ghost" data-act="tx-rm" data-id="${t.id}" style="flex:1;color:var(--up)">삭제</button><button class="btn ghost" data-act="tx-cancel" style="flex:1">취소</button><button class="btn" data-act="tx-save" data-id="${t.id}" style="flex:2">저장</button></div>
-    
-    </div></div>`;
+      <div class="inline"><button class="btn ghost" data-act="tx-rm" data-id="${t.id}" style="flex:1;color:var(--up)">삭제</button><button class="btn ghost" data-act="modal-close" style="flex:1">취소</button><button class="btn" data-act="tx-save" data-id="${t.id}" style="flex:2">저장</button></div>
+    `;
+}
+function modalTxAdd() {
+  return `<div class="sec-title" style="margin:0"><h2>직접 기록하기</h2><span>현금·이체·월급 등</span></div>
+      <div class="inline">
+        <label class="sr" for="q-dir">나간 돈/들어온 돈</label>
+        <select class="field" id="q-dir" style="flex:0 0 96px"><option value="out">나간 돈</option><option value="in">들어온 돈</option></select>
+        <div class="money" style="flex:1"><label class="sr" for="q-amt">금액</label><input class="field num" id="q-amt" inputmode="numeric" placeholder="금액"><span class="unit">원</span></div>
+      </div>
+      <div class="inline">
+        <label class="sr" for="q-memo">어디에</label><input class="field" id="q-memo" maxlength="20" placeholder="어디에 (예: 점심, 용돈)" style="flex:1">
+        <label class="sr" for="q-date">날짜</label><input class="field" id="q-date" type="date" value="${ymd(today0())}" style="flex:0 0 140px">
+      </div>
+      <label class="sr" for="q-cat">분류</label>
+      <select class="field" id="q-cat">${MONEY_CATS.filter((c) => c !== "내부이체").map((c) => `<option ${c === "식비" ? "selected" : ""}>${c}</option>`).join("")}</select>
+      <div class="inline"><button class="btn ghost" data-act="modal-close" style="flex:1">취소</button><button class="btn" data-act="q-add" style="flex:2">기록하기</button></div>`;
 }
 // 최근 기록 / 검색 결과 목록 (검색할 땐 이 부분만 다시 그린다)
 function txListHtml() {
@@ -1681,6 +1755,8 @@ function txListHtml() {
     + (ledger.tx.length > 15 && !ui.moneyAll ? `<button class="more-btn" data-act="money-all">전체 기록 보기</button>` : "");
 }
 // 달력: 날짜마다 쓴 돈, 누르면 그날 기록
+// 달력 칸용: 항상 '만' 단위 (1,000원 → 0.1만)
+function manShort(n) { const v = n / 1e4; return `${v >= 100 ? fmt(Math.round(v)) : v >= 0.1 ? v.toFixed(1) : v.toFixed(2)}만`; }
 function shortWon(n) { return n >= 1e4 ? `${fmt(n / 1e4, n < 1e5 ? 1 : 0)}만` : fmt(n); }
 function calBlock() {
   const t = today0();
@@ -1695,17 +1771,18 @@ function calBlock() {
   });
   const max = Math.max(1, ...Object.values(perDay).map((d) => d.out));
   const monthOut = Object.values(perDay).reduce((a, d) => a + d.out, 0);
+  const monthIn = Object.values(perDay).reduce((a, d) => a + d.in, 0);
   const cells = [];
   for (let i = 0; i < first.getDay(); i++) cells.push(`<span></span>`);
   for (let d = 1; d <= last.getDate(); d++) {
     const key = pre + String(d).padStart(2, "0");
     const v = perDay[key];
     const heat = v?.out ? 0.12 + 0.5 * (v.out / max) : 0;
-    cells.push(`<button class="cal-d ${ui.calDay === key ? "on" : ""} ${key === ymd(t) ? "today" : ""}" data-act="cal-day" data-d="${key}" style="${heat ? `background:rgba(124,150,255,${heat.toFixed(2)})` : ""}" aria-label="${d}일${v?.out ? ` ${won(v.out)} 씀` : ""}"><b>${d}</b>${v?.out ? `<span class="num">${shortWon(v.out)}</span>` : v?.in ? `<span class="num down">+${shortWon(v.in)}</span>` : ""}</button>`);
+    cells.push(`<button class="cal-d ${ui.calDay === key ? "on" : ""} ${key === ymd(t) ? "today" : ""}" data-act="cal-day" data-d="${key}" style="${heat ? `background:rgba(124,150,255,${heat.toFixed(2)})` : ""}" aria-label="${d}일${v?.in ? ` 들어온 돈 ${won(v.in)}` : ""}${v?.out ? ` 쓴 돈 ${won(v.out)}` : ""}"><b>${d}</b>${v?.in ? `<span class="num down">+${manShort(v.in)}</span>` : ""}${v?.out ? `<span class="num">-${manShort(v.out)}</span>` : ""}</button>`);
   }
   const dayList = ui.calDay?.startsWith(pre) ? ledger.tx.filter((x) => x.date === ui.calDay) : null;
   return `<section class="card" id="m-cal">
-      <div class="sec-title"><h2>달력으로 보기</h2><span>${won(monthOut)} 씀</span></div>
+      <div class="sec-title"><h2>달력으로 보기</h2><span>${monthIn ? `+${won(monthIn)} · ` : ""}-${won(monthOut)}</span></div>
       <div class="cal-nav"><button class="icon-btn" data-act="cal-move" data-v="-1" aria-label="이전 달">‹</button><b>${first.getFullYear()}년 ${first.getMonth() + 1}월</b><button class="icon-btn" data-act="cal-move" data-v="1" aria-label="다음 달" ${(ui.calOff || 0) >= 0 ? "disabled" : ""}>›</button></div>
       <div class="cal-grid">${["일", "월", "화", "수", "목", "금", "토"].map((w) => `<i>${w}</i>`).join("")}${cells.join("")}</div>
       ${dayList ? `<div class="cal-list"><div class="tx-day">${Number(ui.calDay.slice(5, 7))}월 ${Number(ui.calDay.slice(8))}일 기록 ${dayList.length}건</div>${dayList.map(txRow).join("") || `<p class="hint" style="margin:6px 0">이날은 기록이 없어요</p>`}</div>` : `<p class="hint" style="margin:8px 0 0">날짜를 누르면 그날 기록이 나와요.</p>`}
@@ -1743,26 +1820,26 @@ function moneyBody() {
         </div>` : ""}
     </section>`;
 
-  const quickBlock = `<section class="card form" id="m-quick">
-      <div class="sec-title"><h2>직접 기록</h2><span>현금·이체·월급 등</span></div>
-      <div class="inline">
-        <label class="sr" for="q-dir">나간 돈/들어온 돈</label>
-        <select class="field" id="q-dir" style="flex:0 0 96px"><option value="out">나간 돈</option><option value="in">들어온 돈</option></select>
-        <div class="money" style="flex:1"><label class="sr" for="q-amt">금액</label><input class="field num" id="q-amt" inputmode="numeric" placeholder="금액"><span class="unit">원</span></div>
-      </div>
-      <div class="inline">
-        <label class="sr" for="q-memo">어디에</label><input class="field" id="q-memo" maxlength="20" placeholder="어디에 (예: 점심, 용돈)" style="flex:1">
-        <label class="sr" for="q-date">날짜</label><input class="field" id="q-date" type="date" value="${ymd(today0())}" style="flex:0 0 140px">
-      </div>
-      <div class="chips">${MONEY_CATS.filter((c) => c !== "내부이체").map((c) => `<button class="chip small ${ui.quickCat === c ? "on" : ""}" data-act="q-cat" data-v="${c}">${c}</button>`).join("")}</div>
-      <button class="btn" data-act="q-add">기록하기</button>
-    </section>`;
-
-  return `<div class="sortbar" id="m-summary" role="group" aria-label="기간">
+  const tab = ui.ledgerTab || "rec";
+  const seg = `<div class="sortbar seg2" role="tablist" aria-label="가계부 보기">
+      <button class="${tab === "rec" ? "on" : ""}" role="tab" aria-selected="${tab === "rec"}" data-act="ledger-tab" data-v="rec">기록</button>
+      <button class="${tab === "stat" ? "on" : ""}" role="tab" aria-selected="${tab === "stat"}" data-act="ledger-tab" data-v="stat">통계</button>
+    </div>`;
+  if (tab === "rec") return `${seg}
+    ${captureBlock}
+    <button class="card line" id="m-quick" data-act="tx-add"><span><b>직접 기록하기</b> <span class="hint">현금·이체·월급 등</span></span><span class="plus" aria-hidden="true">+</span></button>
+    <section class="card" id="m-recent" style="padding:8px 16px">
+      <div class="sec-title" style="margin:6px 0"><h2>최근 기록</h2><span>${ledger.tx.length}건 · 누르면 고칠 수 있어요</span></div>
+      ${ledger.tx.length ? `<label class="sr" for="tx-q">기록 검색</label><input class="field" id="tx-q" type="search" placeholder="가게 이름이나 분류로 찾기 (예: 편의점, 식비)" value="${esc(ui.txQ || "")}" style="margin-bottom:4px">` : ""}
+      <div id="m-list">${txListHtml()}</div>
+    </section>
+        <p class="foot">기록은 이 기기에만 저장돼요. 캡처 사진은 AI가 읽는 데만 쓰고 저장하지 않아요(읽을 때 OpenAI로 전송돼요).</p>`;
+  return `${seg}
+    <div class="sortbar" role="group" aria-label="기간">
       <button class="${kind === "week" ? "on" : ""}" data-act="money-kind" data-v="week">이번 주</button>
       <button class="${kind === "month" ? "on" : ""}" data-act="money-kind" data-v="month">이번 달</button>
     </div>
-    <section class="card">
+    <section class="card" id="m-summary">
       <div class="sec-title" style="margin-bottom:4px"><h2>${kind === "week" ? "이번 주" : "이번 달"} 쓴 돈</h2><span>${s.a.slice(5).replace("-", "/")} ~ ${s.b.slice(5).replace("-", "/")}</span></div>
       <div class="money-row"><b class="num" style="font-size:28px">${won(s.total)}</b>${ch !== null ? `<span class="badge ${ch > 0 ? "b-up" : "b-down"}">${kind === "week" ? "지난주" : "지난달"}보다 ${ch > 0 ? "+" : ""}${ch}%</span>` : ""}</div>
       <div class="hint" style="margin-bottom:10px">${s.count}건${s.income ? ` · 들어온 돈 ${won(s.income)}` : ""}</div>
@@ -1776,13 +1853,6 @@ function moneyBody() {
       ${ui.moneyFb?.error ? `<p class="hint" style="color:var(--up)">${esc(ui.moneyFb.error)}</p>` : ""}
     </section>
     ${calBlock()}
-    ${captureBlock}
-    ${quickBlock}
-    <section class="card" id="m-recent" style="padding:8px 16px">
-      <div class="sec-title" style="margin:6px 0"><h2>최근 기록</h2><span>${ledger.tx.length}건 · 누르면 고칠 수 있어요</span></div>
-      ${ledger.tx.length ? `<label class="sr" for="tx-q">기록 검색</label><input class="field" id="tx-q" type="search" placeholder="가게 이름이나 분류로 찾기 (예: 편의점, 식비)" value="${esc(ui.txQ || "")}" style="margin-bottom:4px">` : ""}
-      <div id="m-list">${txListHtml()}</div>
-    </section>
     <p class="foot">기록은 이 기기에만 저장돼요. 캡처 사진은 AI가 읽는 데만 쓰고 저장하지 않아요(읽을 때 OpenAI로 전송돼요).</p>`;
 }
 
@@ -1795,7 +1865,7 @@ function viewLedger() {
 }
 
 // ───────────────────────── 화면: 나의 자산관리 (하단 탭) ─────────────────────────
-function viewAssets() {
+function investHtml() {
   const p = profile, a = p.assets, hide = ui.hideMoney;
   const debtSum = (p.debts || []).reduce((s, d) => s + (Number(d.amount) || 0), 0);
   const parts = [["예금·현금", Number(a.cash) || 0, "#12B5A2"], ["투자", Number(a.invest) || 0, "#2DB4E0"], ["기타 자산", Number(a.other) || 0, "#8B7CF6"]];
@@ -1804,18 +1874,16 @@ function viewAssets() {
   const has = a.cash !== null || a.invest !== null || a.other !== null;
   const g = (p.goals || [])[0];
   const gc = g ? goalCalc(g) : null;
-  return `${tabHead("나의 자산관리")}
-  <main class="scroll">
-    <section class="card asset-card">
+  return `    <section class="card asset-card">
       <div class="ac-top">
         <div><span class="hint">${esc(p.nickname || "나")}님의 순자산</span><b class="big num">${has ? (hide ? "••••••원" : fmt(net * 10000) + "원") : "-"}</b></div>
-        <button class="btn ghost sm" data-act="go-my" data-focus="assets">편집</button>
+        <button class="btn ghost sm" data-act="assets-edit">편집</button>
       </div>
       ${has ? `<div class="bar thick" aria-hidden="true">${parts.filter((x) => x[1]).map(([, v, c]) => `<div style="width:${(v / (total || 1)) * 100}%;background:${c}"></div>`).join("")}</div>
       <div class="legend2">${parts.map(([n, v, c]) => `<div><i style="background:${c}"></i><span>${n}</span><b class="num">${total ? Math.round((v / total) * 100) : 0}%</b></div>`).join("")}
         <div><i style="background:#D1D6DB"></i><span>부채</span><b class="num">${hide ? "••••" : man(debtSum)}</b></div></div>
       <div class="ac-links"><button class="link-btn" data-act="go-my" data-focus="diag">자산 진단 보기 ›</button><button class="link-btn" style="color:var(--sub)" data-act="toggle-hide">${hide ? "금액 보이기" : "금액 숨기기"}</button></div>`
-      : `<p class="hint" style="margin:8px 0 0">예금·투자·대출을 입력하면 순자산과 진단을 보여드려요.</p><button class="btn" style="margin-top:12px" data-act="go-my" data-focus="assets">자산 입력하기</button>`}
+      : `<p class="hint" style="margin:8px 0 0">예금·투자·대출을 입력하면 순자산과 진단을 보여드려요.</p><button class="btn" style="margin-top:12px" data-act="assets-edit">자산 입력하기</button>`}
     </section>
     <div class="grid2">
       <button class="card mini-card" data-act="go-goals"><span class="mc-t">목표 저축 ›</span>
@@ -1823,12 +1891,179 @@ function viewAssets() {
       <button class="card mini-card" data-act="go-my" data-focus="risk"><span class="mc-t">투자 성향 ›</span>
         <b>${riskType(p.avert)}</b><span class="hint">${p.riskTest ? "정밀 진단 결과" : "위험기피 " + p.avert + "/10"}</span></button>
     </div>
-    ${(() => { const S = mySections(); return `<div class="sec-title" style="margin:10px 2px 0"><h2 style="font-size:20px">내 자산</h2><span>진단·목표·입력</span></div>${S.diag}${S.goals}${S.assets}${S.debts}`; })()}
-    <div class="savebar">
-      <span>${ui.savedAt ? `저장됨 · ${ui.savedAt}` : "고친 내용은 이 기기에 저장돼요"}</span>
-      <button class="btn" data-act="save-my">저장하기</button>
+    ${mySections().diag}
+    ${goalsMy(p)}`;
+}
+function viewAssets() {
+  const tab = ui.assetTab || "invest";
+  return `${tabHead("나의 자산관리")}
+  <main class="scroll">
+    <div class="sortbar seg2" role="tablist" aria-label="자산관리 보기">
+      <button class="${tab === "invest" ? "on" : ""}" role="tab" aria-selected="${tab === "invest"}" data-act="asset-tab" data-v="invest">투자</button>
+      <button class="${tab === "analysis" ? "on" : ""}" role="tab" aria-selected="${tab === "analysis"}" data-act="asset-tab" data-v="analysis">분석</button>
     </div>
+    ${tab === "analysis" ? analysisHtml() : investHtml()}
   </main>`;
+}
+
+// 자산·부채 고치기 팝업 (저장을 누를 때만 반영)
+function assetDraft() {
+  const p = profile, a = p.assets;
+  return { cash: a.cash, invest: a.invest, other: a.other, payday: p.payday ?? null, debts: (p.debts || []).map((d) => ({ ...d })) };
+}
+function syncAssetDraft() {
+  const D = ui.modal?.draft;
+  if (!D) return;
+  const int = (id) => { const n = parseInt(String(document.getElementById(id)?.value ?? "").replace(/[^0-9]/g, ""), 10); return Number.isFinite(n) ? n : null; };
+  D.cash = int("a-cash"); D.invest = int("a-invest"); D.other = int("a-other");
+  const pd = int("a-payday"); D.payday = pd >= 1 && pd <= 31 ? pd : null;
+  D.debts.forEach((d, i) => {
+    d.name = (document.getElementById(`md-n-${i}`)?.value || "").trim().slice(0, 20);
+    d.amount = int(`md-a-${i}`);
+    const r = parseFloat(document.getElementById(`md-r-${i}`)?.value); d.rate = Number.isFinite(r) ? r : null;
+    d.kind = document.getElementById(`md-k-${i}`)?.value || "변동";
+    const dd = int(`md-d-${i}`); d.day = dd >= 1 && dd <= 31 ? dd : null;
+  });
+}
+function modalAssets(m) {
+  const D = m.draft;
+  const f = (id, label, v, unit) => `<div><label class="lb" for="${id}">${label}</label><div class="money"><input class="field num" id="${id}" inputmode="numeric" value="${v ?? ""}"><span class="unit">${unit}</span></div></div>`;
+  return `<div class="sec-title" style="margin:0"><h2>내 자산·부채</h2><span>대략적인 금액도 괜찮아요</span></div>
+    <div class="modal-scroll">
+      <div class="grid2">${f("a-cash", "예금·현금", D.cash, "만원")}${f("a-invest", "주식·펀드 등 투자", D.invest, "만원")}${f("a-other", "기타 (보증금 등)", D.other, "만원")}${f("a-payday", "월급날", D.payday, "일")}</div>
+      <span class="lb" style="margin-top:6px">부채</span>
+      ${D.debts.map((d, i) => `<div class="debt">
+        <div class="inline"><label for="md-n-${i}" class="sr">대출 이름</label><input class="field" id="md-n-${i}" placeholder="대출 이름 (예: 신용대출)" value="${esc(d.name || "")}">
+          <button class="icon-btn" data-act="asset-debt-rm" data-i="${i}" aria-label="대출 삭제">${ICON.x}</button></div>
+        <div class="grid2">
+          <div class="money"><label for="md-a-${i}" class="sr">대출 잔액 (만원)</label><input class="field num" id="md-a-${i}" inputmode="numeric" placeholder="잔액" value="${d.amount ?? ""}"><span class="unit">만원</span></div>
+          <div class="money"><label for="md-r-${i}" class="sr">금리 (%)</label><input class="field num" id="md-r-${i}" inputmode="decimal" placeholder="금리" value="${d.rate ?? ""}"><span class="unit">%</span></div>
+          <div><label for="md-k-${i}" class="sr">금리 종류</label><select class="field" id="md-k-${i}">${["변동", "고정"].map((k) => `<option ${d.kind === k ? "selected" : ""}>${k}</option>`).join("")}</select></div>
+          <div class="money"><label for="md-d-${i}" class="sr">이자 납부일</label><input class="field num" id="md-d-${i}" inputmode="numeric" placeholder="이자일" value="${d.day ?? ""}"><span class="unit">일</span></div>
+        </div></div>`).join("") || `<p class="hint" style="margin:0">대출이 없으면 비워두고 저장하세요.</p>`}
+      <button class="btn ghost" data-act="asset-debt-add">+ 대출 추가</button>
+    </div>
+    <div class="inline"><button class="btn ghost" data-act="modal-close" style="flex:1">취소</button><button class="btn" data-act="assets-save" style="flex:2">저장</button></div>`;
+}
+function modalGoal(m) {
+  const g = m.i !== undefined ? profile.goals?.[m.i] : null;
+  if (m.i !== undefined && !g) return "";
+  return `<div class="sec-title" style="margin:0"><h2>${g ? "목표 고치기" : "새 목표 만들기"}</h2></div>
+    <div><label class="lb" for="g-name">목표 이름</label><input class="field" id="g-name" maxlength="20" placeholder="예: 제주 여행, 새 노트북" value="${esc(g?.name || "")}"></div>
+    ${g ? amountField("g-saved", "지금까지 모은 돈", g.saved ?? 0, "", "") : ""}
+    ${amountField("g-target", "목표 금액", g?.target ?? "", "", "")}
+    ${dueFields("g-due", g?.due || "", "", "")}
+    <div class="inline">${g ? `<button class="btn ghost" data-act="goal-rm" data-i="${m.i}" style="flex:1;color:var(--up)">삭제</button>` : ""}<button class="btn ghost" data-act="modal-close" style="flex:1">취소</button><button class="btn" data-act="goal-save" style="flex:2">저장</button></div>`;
+}
+
+// ───────── 소비 분석: 입력한 자산 + 가계부(최근 30일)로 소비가 합리적인지 본다 ─────────
+// 기준은 흔히 쓰는 생활 재무 참고값이에요. 수입이 있으면 수입 대비, 없으면 전체 지출 대비로 본다.
+const GUIDE_INCOME = { 식비: 15, "카페·간식": 5, 쇼핑: 10, "문화·여가": 8, 여행: 10, 교통: 8, 구독: 3 };
+const GUIDE_SPEND = { 식비: 30, "카페·간식": 10, 쇼핑: 20, "문화·여가": 15, 여행: 20, 교통: 15, 구독: 5 };
+function analysisHtml() {
+  const p = profile, a = p.assets;
+  const t = today0();
+  const from = new Date(t); from.setDate(t.getDate() - 29);
+  const A = ymd(from), B = ymd(t);
+  const list = ledger.tx.filter((x) => x.date >= A && x.date <= B && x.cat !== "내부이체");
+  const foot = `<p class="foot">가계부 기록과 입력한 자산으로 계산한 일반적인 참고 기준이에요. 투자 권유가 아니에요.</p>`;
+  if (!list.length) return `<section class="card" id="sec-analysis">
+      <div class="sec-title"><h2>소비 분석</h2><span>최근 30일</span></div>
+      <div class="ans" style="display:flex;gap:10px">${mascot(40, "curious")}<p style="margin:0;font-size:14px;line-height:1.7">최근 30일 가계부 기록이 없어요. 가계부에 쓴 돈과 들어온 돈을 기록하면, 내 자산에 비해 소비가 괜찮은지 분석해 드릴게요.</p></div>
+      <button class="btn" style="margin-top:12px" data-act="nav" data-route="ledger" data-target="m-capture">가계부에 기록하러 가기</button>
+    </section>${foot}`;
+  const sum = (arr) => arr.reduce((s2, x) => s2 + x.amount, 0);
+  const outs = list.filter((x) => x.dir === "out");
+  const refund = sum(list.filter((x) => x.dir === "in" && x.cat !== "급여·수입"));
+  const spend = Math.max(0, sum(outs) - refund);
+  const incomeRec = sum(list.filter((x) => x.dir === "in" && x.cat === "급여·수입"));
+  const incomeEst = p.income ? INCOME_MONTHLY[p.income] * 1e4 : 0;
+  const income = incomeRec || incomeEst;
+  const first = list.reduce((m, x) => (x.date < m ? x.date : m), B);
+  const span = Math.round((t - new Date(first + "T00:00:00")) / 86400e3) + 1;
+  const byCat = {};
+  outs.forEach((x) => (byCat[x.cat] = (byCat[x.cat] || 0) + x.amount));
+  const items = [];
+
+  // 1) 남는 돈(저축률)
+  if (income) {
+    const left = income - spend, r = Math.round((left / income) * 100);
+    items.push(r >= 20 ? ["good", "남는 돈", `수입의 ${r}%(${won(left)})를 남기고 있어요. 흔히 권하는 20% 이상이라 잘하고 있어요.`]
+      : r >= 10 ? ["ok", "남는 돈", `수입의 ${r}%(${won(left)})를 남기고 있어요. 20%까지 올리면 목표 저축이 훨씬 쉬워져요.`]
+      : r >= 0 ? ["warn", "남는 돈", `수입의 ${r}%(${won(left)})만 남아요. 아래 '점검' 항목부터 줄여 보세요.`]
+      : ["warn", "남는 돈", `쓴 돈이 수입보다 ${won(-left)} 많아요. 모아둔 돈을 꺼내 쓰고 있는 상태예요.`]);
+  } else items.push(["ok", "남는 돈", "가계부에 월급·용돈 같은 수입을 기록하거나 마이페이지에 연 소득을 넣으면 저축률을 알려드려요."]);
+
+  // 2) 비상금으로 버틸 수 있는 기간
+  if (a.cash !== null && a.cash !== undefined && spend > 0) {
+    const mo = (a.cash * 1e4) / spend;
+    items.push(mo >= 6 ? ["good", "비상금", `지금처럼 쓰면 예금·현금만으로 약 ${fmt(mo, 1)}개월을 버틸 수 있어요. 비상금은 충분해요.`]
+      : mo >= 3 ? ["ok", "비상금", `지금처럼 쓰면 약 ${fmt(mo, 1)}개월을 버틸 수 있어요. 보통 3~6개월 치를 권해요.`]
+      : ["warn", "비상금", `지금처럼 쓰면 예금·현금으로 약 ${fmt(mo, 1)}개월밖에 못 버텨요. 먼저 3개월 치(${won(spend * 3)})를 모아 보세요.`]);
+  } else if (a.cash === null || a.cash === undefined) items.push(["ok", "비상금", "‘투자’ 탭에서 예금·현금을 입력하면 지금 소비로 몇 달을 버틸 수 있는지 알려드려요."]);
+
+  // 3) 내 자산에 비해 1년 소비가 어느 정도인지
+  const total = (Number(a.cash) || 0) + (Number(a.invest) || 0) + (Number(a.other) || 0);
+  if (total > 0 && spend > 0) {
+    const r = ((spend * 12) / (total * 1e4)) * 100;
+    items.push(r <= 30 ? ["good", "자산 대비", `1년 동안 지금처럼 써도 내 자산의 ${Math.round(r)}% 정도예요. 자산에 비해 여유 있게 쓰고 있어요.`]
+      : r <= 100 ? ["ok", "자산 대비", `1년 동안 지금처럼 쓰면 내 자산의 ${Math.round(r)}%에 해당해요. 수입이 끊기면 1년 안쪽으로 버틸 수 있는 수준이에요.`]
+      : ["warn", "자산 대비", `1년 소비(${won(spend * 12)})가 모은 자산보다 커요. 수입이 끊기면 1년을 버티기 어려워요.`]);
+  }
+
+  // 4) 분류별로 많이 쓴 곳 / 적정한 곳
+  const base = income || spend, guide = income ? GUIDE_INCOME : GUIDE_SPEND, baseName = income ? "수입" : "전체 지출";
+  const over = [], fine = [];
+  Object.entries(guide).forEach(([c, lim]) => {
+    const v = byCat[c] || 0;
+    if (!v) return;
+    if ((v / base) * 100 > lim) over.push([c, v, lim, v - (base * lim) / 100]); else fine.push(c);
+  });
+  over.sort((x, y) => y[3] - x[3]).forEach(([c, v, lim, cut]) =>
+    items.push(["warn", c, `${c}에 ${won(v)}, ${baseName}의 ${Math.round((v / base) * 100)}%를 썼어요. 보통 ${lim}% 안쪽을 권해요. 한 달 ${won(cut)}쯤 줄이면 기준에 맞아요.`]));
+  if (fine.length) items.push(["good", "적정 소비", `${fine.join(", ")}${josa(fine[fine.length - 1], "은", "는")} ${baseName}에 비해 적정한 범위로 쓰고 있어요.`]);
+
+  // 5) 작은 지출이 모인 정도
+  const small = outs.filter((x) => x.amount < 10000);
+  if (small.length >= 5 && spend) {
+    const ss = sum(small);
+    items.push([ss > spend * 0.15 ? "warn" : "ok", "작은 지출", `1만원 미만 결제가 ${small.length}건, 합계 ${won(ss)}이에요. 커피·편의점 같은 작은 지출이 모여 지출의 ${Math.round((ss / spend) * 100)}%가 됐어요.`]);
+  }
+
+  // 6) 목표 저축을 지금 남는 돈으로 감당할 수 있는지
+  const need = (p.goals || []).filter((g) => !goalCalc(g).done).reduce((s2, g) => s2 + (goalCalc(g).monthly || 0), 0) * 1e4;
+  if (need && income) {
+    const left = income - spend;
+    items.push(left >= need ? ["good", "목표 저축", `목표 저축에 매달 ${won(need)}이 필요한데, 지금 남는 돈(${won(left)})으로 충분해요.`]
+      : ["warn", "목표 저축", `목표 저축에 매달 ${won(need)}이 필요한데 지금 남는 돈은 ${won(Math.max(0, left))}이에요. 지출을 ${won(need - Math.max(0, left))} 줄이거나 기한을 늘려 보세요.`]);
+  }
+
+  // 7) 대출 이자 부담
+  const interest = (p.debts || []).reduce((s2, d) => s2 + ((Number(d.amount) || 0) * 1e4 * (Number(d.rate) || 0)) / 100 / 12, 0);
+  if (interest && income) {
+    const r = (interest / income) * 100;
+    items.push([r < 10 ? "good" : r < 20 ? "ok" : "warn", "대출 이자", `대출 이자가 한 달 약 ${won(interest)}, 수입의 ${fmt(r, 1)}%예요.${r >= 20 ? " 금리가 높은 대출부터 줄이는 걸 고민해 보세요." : ""}`]);
+  }
+
+  const cnt = (lv) => items.filter((x) => x[0] === lv).length;
+  const BADGE = { good: "b-green", ok: "b-flat", warn: "b-up" };
+  const order = { warn: 0, ok: 1, good: 2 };
+  return `<section class="card" id="sec-analysis">
+      <div class="sec-title"><h2>최근 30일 돈 흐름</h2><span>${Number(A.slice(5, 7))}/${Number(A.slice(8))} ~ ${Number(B.slice(5, 7))}/${Number(B.slice(8))}</span></div>
+      <div class="flow3">
+        <div><span>들어온 돈</span><b class="num down">${income ? won(income) : "-"}</b></div>
+        <div><span>쓴 돈</span><b class="num">${won(spend)}</b></div>
+        <div><span>남은 돈</span><b class="num ${income && income - spend < 0 ? "up" : ""}">${income ? won(income - spend) : "-"}</b></div>
+      </div>
+      ${!incomeRec && incomeEst ? `<p class="hint" style="margin:6px 0 0">가계부에 수입 기록이 없어서, 입력한 연 소득으로 한 달 수입을 추정했어요.</p>` : ""}
+      ${span < 21 ? `<p class="hint" style="margin:6px 0 0">기록이 ${span}일치라 실제 한 달 지출보다 적게 잡혔을 수 있어요.</p>` : ""}
+      <div class="ans" style="display:flex;gap:10px;margin-top:10px">${mascot(36, cnt("warn") ? "reassure" : "happy")}<p style="margin:0;font-size:14px;line-height:1.7;background:var(--soft);border-radius:6px 16px 16px 16px;padding:10px 12px;flex:1">잘하고 있는 점 <b>${cnt("good")}개</b>, 점검할 점 <b>${cnt("warn")}개</b>예요.${cnt("warn") ? " 점검할 곳부터 위에 모아뒀어요." : " 지금처럼만 하면 돼요!"}</p></div>
+    </section>
+    <section class="card">
+      <div class="sec-title"><h2>소비 점검</h2><span>좋아요 · 보통 · 점검</span></div>
+      <div class="diag">${items.sort((x, y) => order[x[0]] - order[y[0]]).map(([lv, title, text]) => `<div class="diag-line"><span class="badge ${BADGE[lv]}">${esc(title)}</span><span>${esc(text)}</span></div>`).join("")}</div>
+    </section>
+    ${foot}`;
 }
 
 // 사진을 폰에서 줄여서(긴 변 1400px, JPEG) 보내기 → AI 비용·전송량 절약
@@ -1882,7 +2117,7 @@ function ensureTrending() {
 }
 function hotCount(c) { return data.trending?.available ? data.trending.counts?.[c.id] ?? 0 : null; }
 function sortConcepts(list) {
-  const L = data.learn, ans = learnState.answers;
+  const L = data.learn;
   const idx = (c) => L.concepts.indexOf(c);
   const sorts = {
     // 화제순: 최근 7일 정부 보도자료에 많이 나온 순 (데이터가 없으면 '요즘 뜨는' 먼저, 원래 순서)
@@ -1891,23 +2126,26 @@ function sortConcepts(list) {
     new: (a, b) => String(b.added || "").localeCompare(String(a.added || "")) || idx(b) - idx(a),
     // 오답순: 틀린 문제(최근에 틀린 것) → 안 푼 문제 → 맞힌 문제
     wrong: (a, b) => {
-      const r = (c) => (!ans[c.id] ? 1 : ans[c.id].ok ? 2 : 0);
-      return r(a) - r(b) || (ans[b.id]?.at || 0) - (ans[a.id]?.at || 0) || idx(a) - idx(b);
+      const r = (c) => (isWrong(c) ? 0 : mastered(c) ? 2 : 1);
+      const at = (c) => qa(c, Math.min(curLv(c), quizzesOf(c).length - 1))?.at || 0;
+      return r(a) - r(b) || at(b) - at(a) || idx(a) - idx(b);
     },
     abc: (a, b) => a.term.localeCompare(b.term, "ko"),
   };
   return [...list].sort(sorts[ui.learnSort] || sorts.hot);
 }
 function conceptRow(c, showCat) {
-  const a = learnState.answers[c.id];
   const open = ui.learnOpen === c.id;
-  const st = a ? (a.ok ? `<span class="badge b-green">정답</span>` : `<span class="badge b-up">오답</span>`) : `<span class="badge b-flat">안 풂</span>`;
+  const lv = curLv(c), done = mastered(c);
+  const st = done ? `<span class="badge b-green">완료</span>` : isWrong(c) ? `<span class="badge b-up">오답</span>` : lv ? `<span class="badge b-down">${lv + 1}단계</span>` : `<span class="badge b-flat">안 풂</span>`;
   const hc = ui.learnSort === "hot" ? hotCount(c) : null;
   return `<div class="concept">
     <button class="c-head" data-act="toggle-concept" data-id="${c.id}" aria-expanded="${open}">
       <div style="flex:1;min-width:0"><div class="t">${esc(c.term)} ${showCat ? `<span class="tagc">${esc(catName(c.cat))}</span>` : ""}${hc ? `<span class="hot">언급 ${hc}</span>` : ""}</div><div class="d">${esc(c.short)}</div></div>${st}
     </button>
-    ${open ? `<div class="c-body"><p>${esc(c.body)}</p><p class="me"><b>나와 연결하면</b> ${esc(c.me)}</p><div class="c-quiz">${quizBox(c, false)}</div><button class="link-btn" style="align-self:flex-start;padding-left:0" data-act="note-toggle" data-id="${c.id}">${learnState.notes[c.id] ? "★ 노트에서 빼기" : "☆ 내 노트에 담기"}</button></div>` : ""}
+    ${open ? `<div class="c-body"><p>${esc(c.body)}</p><p class="me"><b>나와 연결하면</b> ${esc(c.me)}</p>
+      <button class="btn ${done ? "ghost" : ""}" data-act="quiz-open" data-id="${c.id}" data-lv="${done ? quizzesOf(c).length - 1 : lv}">${done ? "3단계 모두 맞혔어요 · 다시 보기" : `OX 퀴즈 풀기 · ${LV_NAME[lv]}`}</button>
+      <button class="link-btn" style="align-self:flex-start;padding-left:0" data-act="note-toggle" data-id="${c.id}">${learnState.notes[c.id] ? "★ 노트에서 빼기" : "☆ 내 노트에 담기"}</button></div>` : ""}
   </div>`;
 }
 
@@ -1915,45 +2153,55 @@ function viewLearn() {
   const L = data.learn;
   if (!L) return `${tabHead("공부")}<main class="scroll"><p class="hint">불러오는 중…</p></main>`;
   ensureTrending();
+  markAttend();
   const ans = learnState.answers;
-  const done = L.concepts.filter((c) => ans[c.id]);
-  const wrong = done.filter((c) => !ans[c.id].ok);
-  const rate = done.length ? Math.round(((done.length - wrong.length) / done.length) * 100) : 0;
+  // 푼 문제: 답한 문제(개념·단계) 하나하나
+  const solved = Object.entries(ans).map(([k, a]) => {
+    const [id, lv] = k.split(":");
+    const c = conceptById(id);
+    return c && quizzesOf(c)[Number(lv)] ? { c, lv: Number(lv), a } : null;
+  }).filter(Boolean).sort((x, y) => (y.a.at || 0) - (x.a.at || 0));
+  const totalQ = L.concepts.reduce((n, c) => n + quizzesOf(c).length, 0);
+  const wrong = L.concepts.filter(isWrong);
+  const att = attendRate();
   const tab = ui.learnTab;
-  const tabs = [["all", "전체"], ...L.categories.map((c) => [c.id, c.name]), ["review", `복습 ${wrong.length}`], ["notes", `내 노트 ${Object.keys(learnState.notes).length}`], ["done", "푼 문제"]];
-  const t = todayConcept();
+  const tabs = [["all", "전체"], ...L.categories.map((c) => [c.id, c.name]), ["review", `복습 ${wrong.length}`], ["notes", `내 노트 ${Object.keys(learnState.notes).length}`], ["done", `푼 문제 ${solved.length}`]];
+  const tq = todayQuiz();
   const T = data.trending;
 
-  // 이번 주 화제 TOP 5 (뉴스 언급량)
-  const top5 = T?.available ? [...L.concepts].sort((a, b) => hotCount(b) - hotCount(a)).filter((c) => hotCount(c) > 0).slice(0, 5) : [];
-  const hotBlock = top5.length ? `<section class="card">
-      <div class="sec-title"><h2>이번 주 화제 개념 TOP 5</h2><span>최근 7일 정부 보도자료 기준</span></div>
-      <div class="hot-list">${top5.map((c, i) => `<button class="hot-item" data-act="open-concept" data-id="${c.id}"><span class="hot-rank">${i + 1}</span><span class="hot-t">${esc(c.term)}</span><span class="hint">언급 ${hotCount(c)}</span></button>`).join("")}</div>
+  // 이번 주 화제 키워드 TOP 5 (최근 7일 정부 보도자료)
+  const kws = T?.available ? T.keywords || [] : [];
+  const hotBlock = kws.length ? `<section class="card">
+      <div class="sec-title"><h2>이번 주 화제 키워드 TOP 5</h2><span>최근 7일 정부 보도자료</span></div>
+      <div class="hot-list">${kws.map((k, i) => `<button class="hot-item" ${k.concept ? `data-act="open-concept" data-id="${esc(k.concept)}"` : `data-act="kw" data-k="${esc(k.word)}"`}><span class="hot-rank">${i + 1}</span><span class="hot-t">${esc(k.word)}${k.concept ? ` <span class="tagc">개념</span>` : ""}</span><span class="hint">${k.count}건</span></button>`).join("")}</div>
     </section>` : "";
 
-  // 목록: 전체는 주제별로 묶어서(주제마다 4개 + 더보기), 주제 탭은 그 주제만, 복습·푼 문제는 그대로
+  // 목록: 전체는 다 맞힌 개념을 빼고 주제별로(주제마다 3개 + 더보기), 주제 탭은 그 주제 전부
   let listHtml;
   if (tab === "all") {
     listHtml = L.categories.map((cat) => {
-      const items = sortConcepts(L.concepts.filter((c) => c.cat === cat.id));
-      // 펼친 개념이 4번째 뒤에 있으면 그 주제는 다 보여줌 (검색·TOP5에서 바로 열 때)
-      const openAll = ui.learnExpand?.[cat.id] || items.findIndex((c) => c.id === ui.learnOpen) >= 4;
-      const shown = openAll ? items : items.slice(0, 4);
+      const items = sortConcepts(L.concepts.filter((c) => c.cat === cat.id && !mastered(c)));
+      const openAll = ui.learnExpand?.[cat.id] || items.findIndex((c) => c.id === ui.learnOpen) >= 3;
+      const shown = openAll ? items : items.slice(0, 3);
       return `<section class="card" style="padding:12px 16px 4px">
           <div class="sec-title" style="margin-bottom:0"><h2>${esc(cat.name)} <span class="hint" style="font-family:inherit">${items.length}</span></h2>
             <button class="link-btn" data-act="learn-tab" data-t="${cat.id}">이 주제만 ›</button></div>
-          ${shown.map((c) => conceptRow(c, false)).join("")}
-          ${items.length > 4 ? `<button class="more-btn" data-act="learn-expand" data-c="${cat.id}">${openAll ? "접기" : `${items.length - 4}개 더 보기`}</button>` : ""}
+          ${shown.map((c) => conceptRow(c, false)).join("") || `<p class="hint" style="margin:8px 0 12px">이 주제는 3단계까지 모두 맞혔어요! ‘푼 문제’에서 다시 볼 수 있어요.</p>`}
+          ${items.length > 3 ? `<button class="more-btn" data-act="learn-expand" data-c="${cat.id}">${openAll ? "접기" : `${items.length - 3}개 더 보기`}</button>` : ""}
         </section>`;
     }).join("");
+  } else if (tab === "done") {
+    listHtml = `<section class="card" style="padding:4px 16px">${solved.map(({ c, lv, a }) => `<button class="solved-row" data-act="quiz-open" data-id="${c.id}" data-lv="${lv}">
+        <div style="flex:1;min-width:0"><div class="t">${esc(c.term)} <span class="tagc">${LV_NAME[lv]}</span></div><div class="d">${esc(quizzesOf(c)[lv].q)}</div></div>
+        ${a.ok ? `<span class="badge b-green">정답</span>` : `<span class="badge b-up">오답</span>`}</button>`).join("")
+      || `<p class="hint">아직 푼 문제가 없어요.</p>`}</section>`;
   } else {
     let list;
     if (tab === "review") list = sortConcepts(wrong);
-    else if (tab === "done") list = [...done].sort((a, b) => (ans[b.id].at || 0) - (ans[a.id].at || 0));
     else if (tab === "notes") list = sortConcepts(L.concepts.filter((c) => learnState.notes[c.id]));
     else list = sortConcepts(L.concepts.filter((c) => c.cat === tab));
-    listHtml = `<section class="card" style="padding:4px 16px">${list.map((c) => conceptRow(c, tab === "review" || tab === "done" || tab === "notes")).join("")
-      || `<p class="hint">${tab === "review" ? "틀린 문제가 없어요. 잘하고 있어요!" : tab === "notes" ? "개념을 펼쳐서 ‘내 노트에 담기’를 누르면 여기 모여요." : "아직 푼 문제가 없어요."}</p>`}</section>`;
+    listHtml = `<section class="card" style="padding:4px 16px">${list.map((c) => conceptRow(c, tab === "review" || tab === "notes")).join("")
+      || `<p class="hint">${tab === "review" ? "틀린 문제가 없어요. 잘하고 있어요!" : "개념을 펼쳐서 ‘내 노트에 담기’를 누르면 여기 모여요."}</p>`}</section>`;
   }
 
   return `${tabHead("공부")}
@@ -1963,15 +2211,11 @@ function viewLearn() {
         .map(([r, t, n, d]) => `<button class="hub-item" data-act="nav" data-route="${r}" data-target="${t}"><b>${n}</b><span>${d}</span></button>`).join("")}
     </section>
     <section class="card stats">
-      <div><b class="num">${done.length}<small>/${L.concepts.length}</small></b><span>푼 문제</span></div>
-      <div><b class="num">${done.length ? rate + "%" : "-"}</b><span>정답률</span></div>
+      <button data-act="learn-tab" data-t="done"><b class="num">${solved.length}<small>/${totalQ}</small></b><span>푼 문제 ›</span></button>
+      <div><b class="num">${att.pct}%</b><span>출석률 · ${att.n}/${att.of}일</span></div>
       <button data-act="learn-tab" data-t="review"><b class="num" style="color:${wrong.length ? "var(--up)" : "inherit"}">${wrong.length}</b><span>복습할 문제 ›</span></button>
     </section>
-    <section class="card streak-card">
-      <div><b class="num">${quizStreak().n}일</b><span>연속으로 풀었어요</span></div>
-      <p>${quizStreak().solvedToday ? "오늘도 풀었어요! 내일 또 만나요." : quizStreak().n ? "오늘 한 문제 풀면 기록이 이어져요." : "오늘 한 문제로 기록을 시작해 보세요."}</p>
-    </section>
-    ${t ? `<section class="quiz"><span class="hand" style="font-size:14px;color:var(--sub)">오늘의 OX 퀴즈 · ${esc(t.term)}</span>${quizBox(t, true)}</section>` : ""}
+    ${todayQuizShown(tq) ? `<section class="quiz"><span class="hand" style="font-size:14px;color:var(--sub)">오늘의 OX 퀴즈 · ${esc(tq.c.term)} · ${LV_NAME[tq.lv]}</span>${quizBox(tq.c, tq.lv, true, false, true)}</section>` : ""}
     ${hotBlock}
     <div class="tabs" role="tablist">${tabs.map(([id, label]) => `<button class="chip ${tab === id ? "on" : ""}" role="tab" aria-selected="${tab === id}" data-act="learn-tab" data-t="${id}">${esc(label)}</button>`).join("")}</div>
     ${tab !== "done" ? `<div class="sortbar" role="group" aria-label="정렬">
@@ -1979,7 +2223,7 @@ function viewLearn() {
     </div>
     ${ui.learnSort === "hot" && T && !T.available ? `<p class="hint" style="margin:-6px 4px 0">공공데이터포털 키를 연결하면 최근 7일 정부 보도자료에 많이 나온 순으로 정렬돼요. 지금은 ‘요즘 뜨는’ 개념이 먼저 보여요.</p>` : ""}` : ""}
     ${listHtml}
-    <p class="foot">‘화제순’은 최근 7일 정부 보도자료(정책브리핑)에 많이 나온 순서예요. 푼 기록은 이 기기에만 저장돼요.</p>
+    <p class="foot">‘화제순’과 화제 키워드는 최근 7일 정부 보도자료(정책브리핑)를 기준으로 해요. 푼 기록은 이 기기에만 저장돼요.</p>
   </main>`;
 }
 
@@ -2272,7 +2516,7 @@ function mySections() {
         <div class="legend" style="margin:8px 0 12px"><span><i style="background:#5B7CFA"></i>예금·현금 ${money(a.cash || 0)}</span><span><i style="background:#FF9EBB"></i>투자 ${money(a.invest || 0)}</span><span><i style="background:#C9B8F5"></i>기타 ${money(a.other || 0)}</span><span>부채 ${money(debtSum)}</span></div>
         <div class="diag">${diag.map(([c, t, s]) => `<div class="diag-line"><span class="badge ${c}">${t}</span><span>${esc(s)}</span></div>`).join("")}</div>
         <p class="hint" style="margin:12px 0 0">입력한 값으로 계산한 일반적인 참고 기준이에요. 투자 권유가 아니에요.</p>`
-      : `<p class="hint" style="margin:0">아래에 자산을 입력하면 진단해드려요.</p>`}
+      : `<p class="hint" style="margin:0">위의 ‘편집’에서 자산을 입력하면 진단해드려요.</p>`}
     </section>
     `,
     basic: `
@@ -2477,8 +2721,8 @@ function render() {
   app.innerHTML = ({ onboard: viewOnboard, my: viewMy, news: viewNews, schedule: viewSchedule, learn: viewLearn, benefits: viewBenefits, risktest: viewRiskTest, money: viewLedger, ledger: viewLedger, assets: viewAssets, layout: viewLayout, watch: viewWatch, letters: viewLetters, etc: viewEtc }[r] || viewHome)()
     + (r !== "onboard" ? tabBar(r) : "")
     + (ui.drawer && r !== "onboard" ? viewDrawer() : "")
-    + (ui.txEdit && ["ledger", "money"].includes(r) ? txEditModal() : "");
-  document.body.style.overflow = ui.txEdit && ["ledger", "money"].includes(r) ? "hidden" : "";
+    + (r !== "onboard" ? viewModal() : "");
+  document.body.style.overflow = ui.modal && r !== "onboard" ? "hidden" : "";
   window.scrollTo(0, y);
   if (focusId) document.getElementById(focusId)?.focus();
 }
@@ -2487,7 +2731,7 @@ function go(hash) {
   else location.hash = hash;
 }
 window.addEventListener("hashchange", () => {
-  if (ui.txEdit && !["ledger", "money"].includes(route())) { location.hash = "#ledger"; toast("취소나 저장을 먼저 눌러주세요"); return; } ui.search = { q: "", results: [], sample: false }; ui.searchOpen = false; render(); window.scrollTo(0, 0); });
+  if (ui.modal && routeKey() !== ui.modal.route) { location.hash = ui.modal.route === "home" ? "" : "#" + ui.modal.route; toast("팝업에서 취소나 저장을 먼저 눌러주세요"); return; } ui.search = { q: "", results: [], sample: false }; ui.searchOpen = false; render(); window.scrollTo(0, 0); });
 
 // 지금 편집 중인 프로필 (첫 설문 중이면 초안)
 function target() { return profile || ui.onb.draft; }
@@ -2542,12 +2786,50 @@ document.addEventListener("click", async (e) => {
     }
     case "kw": ui.q = ""; ui.searchOpen = false; openNews("kw:" + el.dataset.k); break;
     case "answer": {
-      const c = data.learn?.concepts.find((x) => x.id === el.dataset.id);
-      if (c) { learnState.answers[c.id] = { pick: el.dataset.o, ok: el.dataset.o === c.quiz.a, at: Date.now() }; saveLearn(); render(); }
+      const c = conceptById(el.dataset.id), lv = Number(el.dataset.lv || 0);
+      const q = c && quizzesOf(c)[lv];
+      if (!q) break;
+      const key = `${c.id}:${lv}`;
+      learnState.answers[key] = { pick: el.dataset.o, ok: el.dataset.o === q.a, at: Date.now() };
+      saveLearn(); markAttend();
+      if (el.dataset.today) { // 오늘의 퀴즈: 결과를 5초 보여주고 사라짐
+        ui.quizJust = key; ui.quizJustUntil = Date.now() + 5000;
+        setTimeout(() => { if (["home", "learn"].includes(route())) render(); }, 5100);
+      }
+      render();
       break;
     }
-    case "retry": delete learnState.answers[el.dataset.id]; saveLearn(); render(); break;
+    case "retry": delete learnState.answers[`${el.dataset.id}:${el.dataset.lv || 0}`]; saveLearn(); render(); break;
+    case "quiz-open": openModal("quiz", { id: el.dataset.id, lv: Number(el.dataset.lv || 0) }); break;
+    case "quiz-next": { const c = conceptById(el.dataset.id); if (c && ui.modal && !mastered(c)) ui.modal.lv = curLv(c); render(); break; }
     case "go-learn": go("#learn"); break;
+    case "ledger-tab": ui.ledgerTab = el.dataset.v; render(); window.scrollTo(0, 0); break;
+    case "asset-tab": ui.assetTab = el.dataset.v; render(); window.scrollTo(0, 0); break;
+    case "assets-edit": openModal("assets", { draft: assetDraft() }); break;
+    case "asset-debt-add": syncAssetDraft(); ui.modal.draft.debts.push({ name: "", amount: null, rate: null, kind: "변동", day: null }); render(); break;
+    case "asset-debt-rm": syncAssetDraft(); ui.modal.draft.debts.splice(Number(el.dataset.i), 1); render(); break;
+    case "assets-save": {
+      syncAssetDraft();
+      const D = ui.modal.draft;
+      profile.assets = { ...profile.assets, cash: D.cash, invest: D.invest, other: D.other };
+      profile.payday = D.payday;
+      profile.debts = D.debts.filter((d) => d.name || d.amount);
+      saveProfile(); ui.modal = null; render(); toast("저장했어요");
+      break;
+    }
+    case "goal-new": openModal("goal"); break;
+    case "goal-edit": openModal("goal", { i: Number(el.dataset.i) }); break;
+    case "goal-save": {
+      const i = ui.modal.i;
+      const name = document.getElementById("g-name").value.trim().slice(0, 20);
+      const target = readAmount("g-target");
+      if (!name || !(target > 0)) { toast("목표 이름과 금액을 적어주세요"); break; }
+      const g = { name, target, due: readDue("g-due"), saved: i !== undefined ? readAmount("g-saved") ?? 0 : 0 };
+      if (i !== undefined) profile.goals[i] = { ...profile.goals[i], ...g };
+      else profile.goals = [...(profile.goals || []), g];
+      saveProfile(); ui.modal = null; render(); toast(i !== undefined ? "목표를 고쳤어요" : "목표를 만들었어요");
+      break;
+    }
     case "lumi-move": ui.lumiStill = !ui.lumiStill; saveUi(); render(); toast(ui.lumiStill ? "루미가 멈췄어요" : "루미가 다시 움직여요"); break;
     case "open-drawer": ui.drawer = true; ui.searchOpen = false; render(); document.querySelector(".drawer .dr-item")?.focus(); break;
     case "close-drawer": ui.drawer = false; render(); break;
@@ -2578,7 +2860,9 @@ document.addEventListener("click", async (e) => {
     case "learn-expand": ui.learnExpand = { ...ui.learnExpand, [el.dataset.c]: !ui.learnExpand[el.dataset.c] }; render(); break;
     case "toggle-concept": ui.learnOpen = ui.learnOpen === el.dataset.id ? null : el.dataset.id; render(); break;
     case "open-concept": {
-      ui.learnTab = "all"; ui.learnOpen = el.dataset.id; ui.q = ""; ui.searchOpen = false;
+      const oc = conceptById(el.dataset.id);
+      ui.learnTab = oc && mastered(oc) ? oc.cat : "all"; // 다 맞힌 개념은 '전체'에 없어서 그 주제 탭으로
+      ui.learnOpen = el.dataset.id; ui.q = ""; ui.searchOpen = false;
       go("#learn");
       setTimeout(() => document.querySelector(`.c-head[data-id="${el.dataset.id}"]`)?.scrollIntoView({ block: "center" }), 60);
       break;
@@ -2630,14 +2914,15 @@ document.addEventListener("click", async (e) => {
       const amount = parseInt(document.getElementById("q-amt").value.replace(/[^0-9]/g, ""), 10);
       if (!(amount > 0)) { toast("금액을 적어주세요"); break; }
       const dir = document.getElementById("q-dir").value;
-      const cat = ui.quickCat || (dir === "in" ? "급여·수입" : "기타");
+      const cat = document.getElementById("q-cat").value || (dir === "in" ? "급여·수입" : "기타");
       addTx([{ date: document.getElementById("q-date").value || ymd(today0()), merchant: document.getElementById("q-memo").value.trim().slice(0, 20) || cat, amount, dir, cat, src: "직접 기록", added: Date.now() }]);
-      ui.quickCat = null; render(); toast("기록했어요");
+      ui.modal = null; render(); toast("기록했어요");
       break;
     }
-    case "tx-rm": if (!confirm("이 기록을 지울까요?")) break; ledger.tx = ledger.tx.filter((t) => t.id !== el.dataset.id); ui.txEdit = null; saveLedger(); render(); break;
-    case "tx-edit": ui.txEdit = el.dataset.id; render(); break;
-    case "tx-cancel": ui.txEdit = null; render(); break;
+    case "tx-rm": if (!confirm("이 기록을 지울까요?")) break; ledger.tx = ledger.tx.filter((t) => t.id !== el.dataset.id); saveLedger(); render(); break;
+    case "tx-edit": openModal("tx-edit", { id: el.dataset.id }); break;
+    case "tx-add": openModal("tx-add"); break;
+    case "modal-close": ui.modal = null; render(); break;
     case "tx-save": {
       const t = ledger.tx.find((x) => x.id === el.dataset.id);
       if (!t) break;
@@ -2646,11 +2931,11 @@ document.addEventListener("click", async (e) => {
       Object.assign(t, { amount, dir: document.getElementById("e-dir").value, cat: document.getElementById("e-cat").value,
         merchant: document.getElementById("e-merch").value.trim().slice(0, 20) || t.merchant, date: document.getElementById("e-date").value || t.date });
       ledger.tx.sort((a, b) => b.date.localeCompare(a.date));
-      ui.txEdit = null; saveLedger(); render(); toast("고쳤어요");
+      saveLedger(); render(); toast("고쳤어요");
       break;
     }
     case "cal-move": ui.calOff = Math.min(0, (ui.calOff || 0) + Number(el.dataset.v)); ui.calDay = null; render(); break;
-    case "cal-day": ui.calDay = ui.calDay === el.dataset.d ? null : el.dataset.d; ui.txEdit = null; render(); break;
+    case "cal-day": ui.calDay = ui.calDay === el.dataset.d ? null : el.dataset.d; render(); break;
     case "money-feedback": {
       const kind = ui.moneyKind || "week";
       const s = spendSummary(kind), pv = spendSummary(kind, true);
@@ -2669,15 +2954,7 @@ document.addEventListener("click", async (e) => {
       break;
     }
     case "go-goals": navTo("assets", "sec-goals"); break;
-    case "goal-add": {
-      const name = document.getElementById("g-name").value.trim().slice(0, 20);
-      const target = readAmount("g-target");
-      if (!name || !(target > 0)) { toast("목표 이름과 금액을 적어주세요"); break; }
-      profile.goals = [...(profile.goals || []), { name, target, saved: 0, due: readDue("g-due") }];
-      saveProfile(); render(); toast("목표를 만들었어요");
-      break;
-    }
-    case "goal-rm": profile.goals.splice(Number(el.dataset.i), 1); saveProfile(); render(); break;
+    case "goal-rm": if (!confirm("이 목표를 지울까요?")) break; profile.goals.splice(Number(el.dataset.i), 1); ui.modal = null; saveProfile(); render(); break;
     case "go-risktest": ui.rt = { step: 0, picks: [] }; go("#risktest"); break;
     case "rt-pick": ui.rt.picks[ui.rt.step] = Number(el.dataset.v); ui.rt.step++; render(); window.scrollTo(0, 0); break;
     case "rt-back": ui.rt.step = Math.max(0, ui.rt.step - 1); render(); break;
@@ -2731,7 +3008,7 @@ document.addEventListener("click", async (e) => {
     case "wipe":
       if (confirm("이 기기에 저장된 내 정보를 모두 지울까요? 되돌릴 수 없어요.")) {
         try { [STORE_KEY, UI_KEY, LEARN_KEY, LEDGER_KEY, AI_KEY].forEach((k) => localStorage.removeItem(k)); } catch {}
-        ledger.tx = []; ledger.uploads = {}; learnState.answers = {}; learnState.notes = {};
+        ledger.tx = []; ledger.uploads = {}; learnState.answers = {}; learnState.notes = {}; learnState.days = {}; learnState.today = null;
         profile = null; ui.onb = { step: 0, draft: null }; location.hash = ""; render();
       }
       break;
@@ -2832,7 +3109,7 @@ document.addEventListener("input", (e) => {
     return;
   }
   if (el.id === "letter-text") { ui.letter.text = el.value; return; }
-  if (el.id === "tx-q") { ui.txQ = el.value; ui.txEdit = null; const box = document.getElementById("m-list"); if (box) box.innerHTML = txListHtml(); return; }
+  if (el.id === "tx-q") { ui.txQ = el.value; const box = document.getElementById("m-list"); if (box) box.innerHTML = txListHtml(); return; }
   if (el.dataset.o) { // 첫 설문 입력
     const d = ui.onb.draft;
     if (el.dataset.o === "nickname") d.nickname = el.value.slice(0, 12);
