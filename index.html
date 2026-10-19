@@ -1092,9 +1092,9 @@ function tile(name, v, c, dec) {
   return `<div><span class="k">${esc(name)}</span><span class="v num">${v === undefined || v === null ? "-" : fmt(v, dec)}</span><span class="c num ${tone(c)}">${pct(c)}</span></div>`;
 }
 const SEARCH_ICON = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" style="flex-shrink:0;color:#7C8DF5"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>`;
-function pageHead(title, extra = "") {
+function pageHead(title, extra = "", back = "go-home") {
   return `<header class="page-head">
-    <button class="icon-btn" data-act="go-home" aria-label="홈으로">${ICON.back}</button>
+    <button class="icon-btn" data-act="${back}" aria-label="${back === "go-learn" ? "공부로" : "홈으로"}">${ICON.back}</button>
     <h1>${title}</h1>${extra}
     <button class="icon-btn menu-btn" data-act="open-drawer" aria-label="목차 열기">${ICON.menu}</button>
   </header>`;
@@ -1135,7 +1135,7 @@ const TABS = [
   ["ledger", "가계부", `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" aria-hidden="true"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6M9 16h3"/></svg>`],
 ];
 function tabBar(r) {
-  const cur = r === "money" ? "ledger" : ["schedule", "benefits", "layout"].includes(r) ? "home" : ["news", "watch", "letters"].includes(r) ? "learn" : r;
+  const cur = r === "money" ? "ledger" : ["schedule", "benefits", "layout"].includes(r) ? "home" : ["news", "watch", "letters", "solved", "review"].includes(r) ? "learn" : r;
   return `<nav class="tabbar" aria-label="주요 메뉴">${TABS.map(([id, label, icon]) =>
     `<button class="${cur === id ? "on" : ""}" data-act="tab" data-t="${id}" ${cur === id ? 'aria-current="page"' : ""}>${icon}<span>${label}</span></button>`).join("")}</nav>`;
 }
@@ -1196,6 +1196,56 @@ function todayQuiz() {
 function todayQuizShown(t) {
   if (!t) return false;
   return !learnState.today?.dismissed;
+}
+// 답한 문제(개념·단계) 하나하나, 최근 순
+function solvedEntries() {
+  return Object.entries(learnState.answers).map(([k, a]) => {
+    const [id, lv] = k.split(":");
+    const c = conceptById(id);
+    return c && quizzesOf(c)[Number(lv)] ? { c, lv: Number(lv), a } : null;
+  }).filter(Boolean).sort((x, y) => (y.a.at || 0) - (x.a.at || 0));
+}
+// 날짜별로 묶은 문제 목록 (푼 문제·복습할 문제 화면 공용)
+function quizDayList(entries, empty) {
+  if (!entries.length) return `<section class="card"><p class="hint" style="margin:0">${empty}</p></section>`;
+  const groups = {};
+  entries.forEach((e) => (groups[ymd(new Date(e.a.at || 0))] = groups[ymd(new Date(e.a.at || 0))] || []).push(e));
+  return Object.entries(groups).map(([d, list]) => {
+    const dt = new Date(d + "T00:00:00");
+    const ok = list.filter((e) => e.a.ok).length;
+    return `<section class="card" style="padding:8px 16px">
+      <div class="tx-day" style="display:flex;justify-content:space-between"><span>${dt.getMonth() + 1}월 ${dt.getDate()}일 (${"일월화수목금토"[dt.getDay()]})</span><span>${list.length}문제${ok && ok < list.length ? ` · 정답 ${ok}` : ""}</span></div>
+      ${list.map(({ c, lv, a }) => `<button class="solved-row" data-act="quiz-open" data-id="${c.id}" data-lv="${lv}">
+        <div style="flex:1;min-width:0"><div class="t">${esc(c.term)} <span class="tagc">${LV_NAME[lv]}</span></div><div class="d">${esc(quizzesOf(c)[lv].q)}</div></div>
+        ${a.ok ? `<span class="badge b-green">정답</span>` : `<span class="badge b-up">오답</span>`}</button>`).join("")}
+    </section>`;
+  }).join("");
+}
+function viewSolved() {
+  if (!data.learn) return `${pageHead("푼 문제", "", "go-learn")}<main class="scroll"><p class="hint">불러오는 중…</p></main>`;
+  const list = solvedEntries();
+  const ok = list.filter((e) => e.a.ok).length;
+  const totalQ = data.learn.concepts.reduce((n, c) => n + quizzesOf(c).length, 0);
+  return `${pageHead("푼 문제", "", "go-learn")}
+  <main class="scroll">
+    <section class="card stats">
+      <div><b class="num">${list.length}<small>/${totalQ}</small></b><span>푼 문제</span></div>
+      <div><b class="num" style="color:var(--green)">${ok}</b><span>정답</span></div>
+      <div><b class="num" style="color:${list.length - ok ? "var(--up)" : "inherit"}">${list.length - ok}</b><span>오답</span></div>
+    </section>
+    ${quizDayList(list, "아직 푼 문제가 없어요. 공부 탭에서 OX 퀴즈를 풀어보세요.")}
+    <p class="foot">문제를 누르면 해설을 다시 볼 수 있어요.</p>
+  </main>`;
+}
+function viewReview() {
+  if (!data.learn) return `${pageHead("복습할 문제", "", "go-learn")}<main class="scroll"><p class="hint">불러오는 중…</p></main>`;
+  // 지금 단계에서 틀린 문제 (다시 풀어서 맞히면 여기서 빠진다)
+  const list = data.learn.concepts.filter(isWrong).map((c) => ({ c, lv: curLv(c), a: qa(c, curLv(c)) })).sort((x, y) => (y.a.at || 0) - (x.a.at || 0));
+  return `${pageHead("복습할 문제", "", "go-learn")}
+  <main class="scroll">
+    ${quizDayList(list, "틀린 문제가 없어요. 잘하고 있어요!")}
+    <p class="foot">문제를 누르고 ‘다시 풀기’로 맞히면 목록에서 빠져요.</p>
+  </main>`;
 }
 function modalQuiz(m) {
   const c = conceptById(m.id);
@@ -2156,16 +2206,13 @@ function viewLearn() {
   markAttend();
   const ans = learnState.answers;
   // 푼 문제: 답한 문제(개념·단계) 하나하나
-  const solved = Object.entries(ans).map(([k, a]) => {
-    const [id, lv] = k.split(":");
-    const c = conceptById(id);
-    return c && quizzesOf(c)[Number(lv)] ? { c, lv: Number(lv), a } : null;
-  }).filter(Boolean).sort((x, y) => (y.a.at || 0) - (x.a.at || 0));
+  const solved = solvedEntries();
   const totalQ = L.concepts.reduce((n, c) => n + quizzesOf(c).length, 0);
   const wrong = L.concepts.filter(isWrong);
   const att = attendRate();
+  if (["review", "done"].includes(ui.learnTab)) ui.learnTab = "all"; // 따로 화면으로 옮겨진 탭
   const tab = ui.learnTab;
-  const tabs = [["all", "전체"], ...L.categories.map((c) => [c.id, c.name]), ["review", `복습 ${wrong.length}`], ["notes", `내 노트 ${Object.keys(learnState.notes).length}`], ["done", `푼 문제 ${solved.length}`]];
+  const tabs = [["all", "전체"], ...L.categories.map((c) => [c.id, c.name]), ["notes", `내 노트 ${Object.keys(learnState.notes).length}`]];
   const tq = todayQuiz();
   const T = data.trending;
 
@@ -2190,18 +2237,12 @@ function viewLearn() {
           ${items.length > 3 ? `<button class="more-btn" data-act="learn-expand" data-c="${cat.id}">${openAll ? "접기" : `${items.length - 3}개 더 보기`}</button>` : ""}
         </section>`;
     }).join("");
-  } else if (tab === "done") {
-    listHtml = `<section class="card" style="padding:4px 16px">${solved.map(({ c, lv, a }) => `<button class="solved-row" data-act="quiz-open" data-id="${c.id}" data-lv="${lv}">
-        <div style="flex:1;min-width:0"><div class="t">${esc(c.term)} <span class="tagc">${LV_NAME[lv]}</span></div><div class="d">${esc(quizzesOf(c)[lv].q)}</div></div>
-        ${a.ok ? `<span class="badge b-green">정답</span>` : `<span class="badge b-up">오답</span>`}</button>`).join("")
-      || `<p class="hint">아직 푼 문제가 없어요.</p>`}</section>`;
   } else {
     let list;
-    if (tab === "review") list = sortConcepts(wrong);
-    else if (tab === "notes") list = sortConcepts(L.concepts.filter((c) => learnState.notes[c.id]));
+    if (tab === "notes") list = sortConcepts(L.concepts.filter((c) => learnState.notes[c.id]));
     else list = sortConcepts(L.concepts.filter((c) => c.cat === tab));
-    listHtml = `<section class="card" style="padding:4px 16px">${list.map((c) => conceptRow(c, tab === "review" || tab === "notes")).join("")
-      || `<p class="hint">${tab === "review" ? "틀린 문제가 없어요. 잘하고 있어요!" : "개념을 펼쳐서 ‘내 노트에 담기’를 누르면 여기 모여요."}</p>`}</section>`;
+    listHtml = `<section class="card" style="padding:4px 16px">${list.map((c) => conceptRow(c, tab === "notes")).join("")
+      || `<p class="hint">${tab === "notes" ? "개념을 펼쳐서 ‘내 노트에 담기’를 누르면 여기 모여요." : "이 주제는 아직 개념이 없어요."}</p>`}</section>`;
   }
 
   return `${tabHead("공부")}
@@ -2211,17 +2252,17 @@ function viewLearn() {
         .map(([r, t, n, d]) => `<button class="hub-item" data-act="nav" data-route="${r}" data-target="${t}"><b>${n}</b><span>${d}</span></button>`).join("")}
     </section>
     <section class="card stats">
-      <button data-act="learn-tab" data-t="done"><b class="num">${solved.length}<small>/${totalQ}</small></b><span>푼 문제 ›</span></button>
+      <button data-act="nav" data-route="solved"><b class="num">${solved.length}<small>/${totalQ}</small></b><span>푼 문제 ›</span></button>
       <div><b class="num">${att.pct}%</b><span>출석률 · ${att.n}/${att.of}일</span></div>
-      <button data-act="learn-tab" data-t="review"><b class="num" style="color:${wrong.length ? "var(--up)" : "inherit"}">${wrong.length}</b><span>복습할 문제 ›</span></button>
+      <button data-act="nav" data-route="review"><b class="num" style="color:${wrong.length ? "var(--up)" : "inherit"}">${wrong.length}</b><span>복습할 문제 ›</span></button>
     </section>
     ${todayQuizShown(tq) ? `<section class="quiz"><span class="hand" style="font-size:14px;color:var(--sub)">오늘의 OX 퀴즈 · ${esc(tq.c.term)} · ${LV_NAME[tq.lv]}</span>${quizBox(tq.c, tq.lv, true, false, true)}</section>` : ""}
     ${hotBlock}
     <div class="tabs" role="tablist">${tabs.map(([id, label]) => `<button class="chip ${tab === id ? "on" : ""}" role="tab" aria-selected="${tab === id}" data-act="learn-tab" data-t="${id}">${esc(label)}</button>`).join("")}</div>
-    ${tab !== "done" ? `<div class="sortbar" role="group" aria-label="정렬">
+    <div class="sortbar" role="group" aria-label="정렬">
       ${LEARN_SORTS.map(([id, label]) => `<button class="${ui.learnSort === id ? "on" : ""}" data-act="learn-sort" data-s="${id}" aria-pressed="${ui.learnSort === id}">${label}</button>`).join("")}
     </div>
-    ${ui.learnSort === "hot" && T && !T.available ? `<p class="hint" style="margin:-6px 4px 0">공공데이터포털 키를 연결하면 최근 7일 정부 보도자료에 많이 나온 순으로 정렬돼요. 지금은 ‘요즘 뜨는’ 개념이 먼저 보여요.</p>` : ""}` : ""}
+    ${ui.learnSort === "hot" && T && !T.available ? `<p class="hint" style="margin:-6px 4px 0">공공데이터포털 키를 연결하면 최근 7일 정부 보도자료에 많이 나온 순으로 정렬돼요. 지금은 ‘요즘 뜨는’ 개념이 먼저 보여요.</p>` : ""}
     ${listHtml}
     <p class="foot">‘화제순’과 화제 키워드는 최근 7일 정부 보도자료(정책브리핑)를 기준으로 해요. 푼 기록은 이 기기에만 저장돼요.</p>
   </main>`;
@@ -2711,14 +2752,14 @@ function viewOnboard() {
 function route() {
   if (!profile) return "onboard";
   const h = location.hash.slice(1);
-  return ["my", "news", "schedule", "learn", "benefits", "risktest", "money", "assets", "ledger", "layout", "watch", "letters", "etc"].includes(h) ? h : "home";
+  return ["my", "news", "schedule", "learn", "benefits", "risktest", "money", "assets", "ledger", "layout", "watch", "letters", "etc", "solved", "review"].includes(h) ? h : "home";
 }
 function render() {
   const r = route();
   const app = document.getElementById("app");
   const y = window.scrollY;
   const focusId = document.activeElement?.id;
-  app.innerHTML = ({ onboard: viewOnboard, my: viewMy, news: viewNews, schedule: viewSchedule, learn: viewLearn, benefits: viewBenefits, risktest: viewRiskTest, money: viewLedger, ledger: viewLedger, assets: viewAssets, layout: viewLayout, watch: viewWatch, letters: viewLetters, etc: viewEtc }[r] || viewHome)()
+  app.innerHTML = ({ onboard: viewOnboard, my: viewMy, news: viewNews, schedule: viewSchedule, learn: viewLearn, benefits: viewBenefits, risktest: viewRiskTest, money: viewLedger, ledger: viewLedger, assets: viewAssets, layout: viewLayout, watch: viewWatch, letters: viewLetters, etc: viewEtc, solved: viewSolved, review: viewReview }[r] || viewHome)()
     + (r !== "onboard" ? tabBar(r) : "")
     + (ui.drawer && r !== "onboard" ? viewDrawer() : "")
     + (r !== "onboard" ? viewModal() : "");

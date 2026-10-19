@@ -7,7 +7,8 @@
 - 로딩 화면 (index.html 맨 위 splash, img/lumi/ 그림 9장): 앱을 열 때 루미가 손 흔들며 0.7초 인사한다.
 - 첫 설문 (index.html · viewOnboard): 루미와 함께 닉네임·나이, 관심 종목, 투자 성향·선호·구독 뉴스레터를 3단계로 받는다.
 - 홈 (index.html · viewHome, homeBlocks / api/market.js, api/news.js): 루미의 한마디, 주가, 나에게 미치는 영향, 뉴스, 일정·혜택, 오늘의 OX 퀴즈, 자산·소득을 하나씩 묻는 맞춤 질문 카드를 한눈에 보여준다.
-- 공부 (index.html · viewLearn / data/learn.json, api/trending.js): 경제 개념 40개와 개념마다 3단계 OX 퀴즈(맞히면 더 어려운 단계, 문제는 팝업)를 주제별로 정렬·복습하고, 푼 문제·출석률·내 노트·이번 주 화제 키워드를 본다.
+- 공부 (index.html · viewLearn / data/learn.json, api/trending.js): 경제 개념 40개와 개념마다 3단계 OX 퀴즈(맞히면 더 어려운 단계, 문제는 팝업)를 주제별로 정렬·복습하고, 출석률·내 노트·이번 주 화제 키워드를 본다.
+- 푼 문제 · 복습할 문제 (index.html · viewSolved, viewReview): 공부의 '푼 문제 ›', '복습할 문제 ›'를 누르면 열리는 화면. 문제를 날짜별로 모아 보여주고, 누르면 팝업으로 해설을 보거나 다시 푼다.
 - 나의 자산관리 (index.html · viewAssets, investHtml, analysisHtml): '투자' 탭에서 순자산·투자 성향·자산 진단·목표 저축을 보고(자산·대출·목표 입력은 팝업), '분석' 탭에서 입력한 자산과 가계부 최근 30일로 소비가 합리적인지 점검한다.
 - 가계부 (index.html · viewLedger, moneyBody / api/receipts.js): '기록' 탭에서 카드·은행 캡처나 직접 입력(팝업)으로 소비를 기록하고 최근 기록을 고치기·검색하며, '통계' 탭에서 주간·월간 요약(분류별 도넛 차트·지난 기간 비교), 날짜별 들어온 돈·나간 돈 달력, 루미 피드백을 본다.
 - 마이페이지 (index.html · viewMy): 기본 정보와 투자 성향을 고친다.
