@@ -17,8 +17,13 @@ const WORDS = ["금리", "물가", "환율", "수출", "수입", "반도체", "A
   "관광", "디지털", "플랫폼", "가상자산", "스테이블코인", "물류", "조선업", "방산", "바이오", "자동차", "철강", "석유화학", "소비", "내수"];
 
 // 보도자료 제목을 짧게: 앞의 [말머리]·따옴표 정리, 부제(— , ·· 뒤)는 자르기
+// 보도자료 제목에 섞여 오는 HTML 문자(&middot; 등)를 글자로
+function decode(t) {
+  const N = { middot: "·", quot: '"', amp: "&", lt: "<", gt: ">", lsquo: "‘", rsquo: "’", ldquo: "“", rdquo: "”", nbsp: " ", hellip: "…" };
+  return String(t || "").replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n))).replace(/&([a-z]+);/g, (m, k) => N[k] ?? m);
+}
 function shortTitle(t) {
-  let s = String(t).replace(/^\s*[\[(【<][^\])】>]{1,12}[\])】>]\s*/, "").replace(/\s+/g, " ").trim();
+  let s = decode(t).replace(/^\s*[\[(【<][^\])】>]{1,12}[\])】>]\s*/, "").replace(/\s+/g, " ").trim();
   s = s.split(/\s[-–—]\s|\s?…\s?|\s?\.\.\.\s?/)[0].trim();
   return s.length > 34 ? s.slice(0, 33).trim() + "…" : s;
 }
@@ -48,7 +53,7 @@ export default async function handler(req, res) {
     const ranked = words.map((w) => ({ word: w, count: texts.filter((t) => t.includes(w)).length })).filter((k) => k.count > 0).sort((a, b) => b.count - a.count);
     const hotWords = ranked.slice(0, 15).map((k) => k.word);
     // 언론 보도 설명·해명 자료는 '무슨 일이 있었는지'가 아니라서 빼고, 경제 관련 자료만 쓴다
-    const eventDocs = docs.filter((d) => isEcon(d) && !/^\s*[(\[]\s*(설명|해명|정정|반박)/.test(d.title) && !/아닙니다|사실이 아닙|사실과 다릅/.test(d.title));
+    const eventDocs = docs.filter((d) => isEcon(d) && !/^.{0,6}(설명|해명|정정|반박)/.test(decode(d.title)) && !/아닙니다|사실이 아닙|사실과 다릅/.test(decode(d.title)));
     const used = new Set();
     const events = [];
     for (const k of ranked) {
