@@ -737,6 +737,7 @@
   .solved-row .t { font-size: 15px; font-weight: 700; }
   .solved-row .d { font-size: 13px; color: var(--sub); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .modal .c-quiz { display: flex; flex-direction: column; gap: 10px; }
+  .quiz-done { align-self: flex-end; font-weight: 700; }
 </style>
 </head>
 <body>
@@ -1163,7 +1164,7 @@ function attendRate() {
   const n = Object.keys(learnState.days).filter((k) => k.startsWith(pre)).length;
   return { n, of: t.getDate(), pct: Math.round((n / t.getDate()) * 100) };
 }
-// OX 퀴즈 (오늘의 퀴즈·팝업 공용). today면 답한 뒤 5초 있다가 사라진다
+// OX 퀴즈 (오늘의 퀴즈·팝업 공용). today면 답한 뒤 '옮겨둘게요' 버튼으로 치운다
 function quizBox(c, lv, dark, mini = false, today = false) {
   const q = quizzesOf(c)[lv];
   const ans = qa(c, lv);
@@ -1172,11 +1173,11 @@ function quizBox(c, lv, dark, mini = false, today = false) {
   return `${mini ? `<div class="qrow">` : ""}<p class="q">${esc(q.q)}</p>
     <div class="ox ${dark ? "" : "light"} ${mini ? "mini" : ""}">${["O", "X"].map((o) => `<button class="${cls(o)}" data-act="answer" data-id="${c.id}" data-lv="${lv}" data-o="${o}" ${today ? 'data-today="1"' : ""} ${ans ? "disabled" : ""} aria-label="${o === "O" ? "맞다" : "아니다"}">${o}</button>`).join("")}</div>${mini ? "</div>" : ""}
     ${ans ? `<div class="ex-row">${mascot(34, ans.ok ? "happy" : "reassure")}<p class="ex"><b>${ans.ok ? "정답이에요!" : `정답은 ${q.a}예요.`}</b> ${esc(q.ex)}</p></div>
-      ${today ? `<p class="hint" style="margin:0">${ans.ok ? "‘푼 문제’로 옮겨둘게요." : "‘복습할 문제’에 담아둘게요."}</p>`
+      ${today ? `<button class="link-btn quiz-done" data-act="quiz-dismiss">${ans.ok ? "‘푼 문제’로 옮겨둘게요" : "‘복습할 문제’에 담아둘게요"} ›</button>`
         : !ans.ok ? `<button class="link-btn" style="padding-left:0;align-self:flex-start" data-act="retry" data-id="${c.id}" data-lv="${lv}">다시 풀기 ›</button>`
         : hasNext && curLv(c) === lv + 1 ? `<button class="btn" data-act="quiz-next" data-id="${c.id}">더 어려운 ${LV_NAME[lv + 1]} 풀기 ›</button>` : ""}` : ""}`;
 }
-// 오늘의 퀴즈: 하루에 한 문제를 정해두고(아직 다 못 푼 개념의 지금 단계), 답하면 5초 뒤 사라진다
+// 오늘의 퀴즈: 하루에 한 문제를 정해두고(아직 다 못 푼 개념의 지금 단계), 답한 뒤 '옮겨둘게요'를 누르면 사라진다
 function todayQuiz() {
   const list = data.learn?.concepts || [];
   if (!list.length) return null;
@@ -1194,8 +1195,7 @@ function todayQuiz() {
 }
 function todayQuizShown(t) {
   if (!t) return false;
-  if (!qa(t.c, t.lv)) return true;
-  return ui.quizJust === `${t.c.id}:${t.lv}` && Date.now() < ui.quizJustUntil;
+  return !learnState.today?.dismissed;
 }
 function modalQuiz(m) {
   const c = conceptById(m.id);
@@ -2792,14 +2792,11 @@ document.addEventListener("click", async (e) => {
       const key = `${c.id}:${lv}`;
       learnState.answers[key] = { pick: el.dataset.o, ok: el.dataset.o === q.a, at: Date.now() };
       saveLearn(); markAttend();
-      if (el.dataset.today) { // 오늘의 퀴즈: 결과를 5초 보여주고 사라짐
-        ui.quizJust = key; ui.quizJustUntil = Date.now() + 5000;
-        setTimeout(() => { if (["home", "learn"].includes(route())) render(); }, 5100);
-      }
       render();
       break;
     }
     case "retry": delete learnState.answers[`${el.dataset.id}:${el.dataset.lv || 0}`]; saveLearn(); render(); break;
+    case "quiz-dismiss": if (learnState.today) { learnState.today.dismissed = true; saveLearn(); } render(); break;
     case "quiz-open": openModal("quiz", { id: el.dataset.id, lv: Number(el.dataset.lv || 0) }); break;
     case "quiz-next": { const c = conceptById(el.dataset.id); if (c && ui.modal && !mastered(c)) ui.modal.lv = curLv(c); render(); break; }
     case "go-learn": go("#learn"); break;
