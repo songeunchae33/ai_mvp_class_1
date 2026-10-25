@@ -1083,7 +1083,9 @@ function summaryForAi() {
 // 뉴스 제목을 몇 단어로 줄이기: [단독] 같은 머리말, 언론사 꼬리, 부제(… · - |) 떼고 22자 안팎에서 자르기
 function shortTitle(t) {
   let s = String(t || "").replace(/^\s*(\[[^\]]*\]|【[^】]*】|<[^>]*>)\s*/g, "").replace(/\s*[-|]\s*[^-|]{2,12}$/, "");
-  s = s.split(/…|\.\.\.|\s·\s|\s-\s|\s\|\s|,\s/)[0].trim() || s;
+  // 부제(… · - | , 뒤)는 잘라내되, 앞부분이 너무 짧으면('북,' '삼성그룹,') 자르지 않고 길이로만 줄인다
+  const head = s.split(/…|\.\.\.|\s·\s|\s-\s|\s\|\s|,\s/)[0].trim();
+  if (head.length >= 10) s = head;
   if (s.length > 22) {
     const cut = s.slice(0, 22);
     const sp = cut.lastIndexOf(" ");
