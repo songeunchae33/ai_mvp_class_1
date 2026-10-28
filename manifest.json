@@ -1,0 +1,17 @@
+{
+  "name": "나만의 경제",
+  "short_name": "나만의 경제",
+  "description": "내 자산·성향·관심사에 맞춘 경제 소식을 루미가 쉽게 알려줘요",
+  "lang": "ko",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#F6F7F5",
+  "theme_color": "#F2F4F6",
+  "icons": [
+    { "src": "/img/lumi/app-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/img/lumi/app-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/img/lumi/app-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
