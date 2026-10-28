@@ -775,6 +775,9 @@
   .consent { margin: 0; padding-left: 18px; font-size: 14px; line-height: 1.6; display: flex; flex-direction: column; gap: 6px; }
   .consent-check { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 700; }
   .consent-check input { width: 20px; height: 20px; }
+  .cat-row-btn { width: 100%; border: none; background: none; padding: 2px 0; font: inherit; color: inherit; text-align: left; cursor: pointer; border-radius: 8px; }
+  .cat-row-btn:active { background: var(--soft); }
+  .cat-detail { display: flex; flex-direction: column; }
 </style>
 </head>
 <body>
@@ -2039,7 +2042,7 @@ function openModal(kind, extra = {}) { ui.modal = { kind, route: routeKey(), ...
 function viewModal() {
   const m = ui.modal;
   if (!m) return "";
-  const body = { "tx-edit": modalTxEdit, "tx-add": modalTxAdd, fixed: modalFixed, consent: modalConsent, assets: modalAssets, goal: modalGoal, quiz: modalQuiz }[m.kind]?.(m);
+  const body = { "tx-edit": modalTxEdit, "tx-add": modalTxAdd, fixed: modalFixed, consent: modalConsent, catDetail: modalCatDetail, assets: modalAssets, goal: modalGoal, quiz: modalQuiz }[m.kind]?.(m);
   if (!body) { ui.modal = null; return ""; }
   return `<div class="modal-back"><div class="modal form" role="dialog" aria-modal="true">${body}</div></div>`;
 }
@@ -2077,6 +2080,22 @@ function modalFixed(m) {
       ${catField("fx-cat", f?.cat || "주거·통신")}
       ${f ? `<p class="hint" style="margin:0">고친 내용은 다음 기록부터 적용돼요. 이미 기록된 달의 금액은 그 기록을 눌러 고쳐요.</p>` : ""}
       <div class="inline">${f ? `<button class="btn ghost" data-act="fixed-rm" data-id="${f.id}" style="flex:1;color:var(--up)">삭제</button>` : ""}<button class="btn ghost" data-act="modal-close" style="flex:1">취소</button><button class="btn" data-act="fixed-save" style="flex:2">저장</button></div>`;
+}
+// 통계의 분류 줄을 누르면: 그 기간 그 분류의 나간 돈을 날짜별로 (누르면 고치기)
+function modalCatDetail(m) {
+  const S = spendSummary(m.period);
+  const list = S.list.filter((t) => t.cat === m.c && t.dir === "out").sort((a, b) => b.date.localeCompare(a.date));
+  const total = list.reduce((a, t) => a + t.amount, 0);
+  const byDate = {};
+  list.forEach((t) => (byDate[t.date] = byDate[t.date] || []).push(t));
+  return `<div class="sec-title" style="margin:0"><h2><i class="tx-dot" style="background:${catColor(m.c)};display:inline-block;margin-right:6px"></i>${esc(m.c)}</h2><span>${m.period === "week" ? "이번 주" : "이번 달"} ${S.a.slice(5).replace("-", "/")} ~ ${S.b.slice(5).replace("-", "/")}</span></div>
+    <div class="money-row"><b class="num" style="font-size:24px">${won(total)}</b><span class="hint">${list.length}건${S.total ? ` · 전체의 ${Math.round((total / S.total) * 100)}%` : ""}</span></div>
+    <div class="cat-detail">${Object.entries(byDate).map(([d, ts]) => {
+      const dt = new Date(d + "T00:00:00");
+      return `<div class="tx-day" style="display:flex;justify-content:space-between"><span>${dt.getMonth() + 1}월 ${dt.getDate()}일 (${"일월화수목금토"[dt.getDay()]})</span><span class="num">${won(ts.reduce((a, t) => a + t.amount, 0))}</span></div>${ts.map(txRow).join("")}`;
+    }).join("") || `<p class="hint">이 기간에는 내역이 없어요</p>`}</div>
+    <p class="hint" style="margin:0">내역을 누르면 고칠 수 있어요.</p>
+    <button class="btn ghost" data-act="modal-close">닫기</button>`;
 }
 function modalTxAdd() {
   return `<div class="sec-title" style="margin:0"><h2>직접 기록하기</h2><span>현금·이체·월급 등</span></div>
@@ -2221,7 +2240,7 @@ function moneyBody() {
       <div class="hint" style="margin-bottom:10px">${s.count}건${s.income ? ` · 들어온 돈 ${won(s.income)}` : ""}</div>
       ${cats.length ? `<div class="donut-wrap"><div class="donut" style="background:conic-gradient(${donutStops(cats)})" role="img" aria-label="분류별 지출 비율"><span>${esc(cats[0][0])}<b class="num">${Math.round((cats[0][1] / sumCats) * 100)}%</b></span></div>
           <p class="hint" style="margin:0">${kind === "week" ? "지난주" : "지난달"}와 비교하면<br>${compareLine(cats, p.byCat, kind)}</p></div>`
-        + cats.map(([c, v]) => { const d = v - (p.byCat[c] || 0); return `<div class="cat-row"><span class="cat-name"><i class="tx-dot" style="background:${catColor(c)}"></i>${esc(c)}</span><div class="cat-bar"><i style="width:${Math.max(4, (v / max) * 100)}%;background:${catColor(c)}"></i></div><span class="num cat-v">${won(v)}<small class="${d > 0 ? "up" : d < 0 ? "down" : "flat"}">${Math.round((v / sumCats) * 100)}% · ${!p.byCat[c] ? "새로 씀" : d === 0 ? "같음" : `${d > 0 ? "▲" : "▼"}${shortWon(Math.abs(d))}`}</small></span></div>`; }).join("")
+        + cats.map(([c, v]) => { const d = v - (p.byCat[c] || 0); return `<button class="cat-row cat-row-btn" data-act="cat-detail" data-c="${esc(c)}" aria-label="${esc(c)} 내역 보기"><span class="cat-name"><i class="tx-dot" style="background:${catColor(c)}"></i>${esc(c)}</span><div class="cat-bar"><i style="width:${Math.max(4, (v / max) * 100)}%;background:${catColor(c)}"></i></div><span class="num cat-v">${won(v)}<small class="${d > 0 ? "up" : d < 0 ? "down" : "flat"}">${Math.round((v / sumCats) * 100)}% · ${!p.byCat[c] ? "새로 씀" : d === 0 ? "같음" : `${d > 0 ? "▲" : "▼"}${shortWon(Math.abs(d))}`}</small></span><span class="tx-pen" aria-hidden="true">›</span></button>`; }).join("")
         : `<p class="hint" style="margin:0">아직 기록이 없어요. 아래에서 캡처를 올려보세요.</p>`}
       ${s.top.length ? `<div class="hint" style="margin-top:10px">많이 쓴 곳: ${s.top.map(([m, v]) => `${esc(m)} ${won(v)}`).join(" · ")}</div>` : ""}
       ${s.count ? `<button class="btn ghost" style="margin-top:12px;width:100%" data-act="money-feedback" ${ui.moneyFb?.loading ? "disabled" : ""}>${ui.moneyFb?.loading ? "생각하는 중…" : "루미에게 피드백 받기"}</button>` : ""}
@@ -3333,9 +3352,10 @@ document.addEventListener("click", async (e) => {
       ui.modal = null; render(); toast("기록했어요");
       break;
     }
-    case "tx-rm": if (!confirm("이 기록을 지울까요?")) break; ledger.tx = ledger.tx.filter((t) => t.id !== el.dataset.id); saveLedger(); render(); break;
-    case "tx-edit": openModal("tx-edit", { id: el.dataset.id }); break;
+    case "tx-rm": if (!confirm("이 기록을 지울까요?")) break; ledger.tx = ledger.tx.filter((t) => t.id !== el.dataset.id); ui.modal = ui.modal?.back || null; saveLedger(); render(); break;
+    case "tx-edit": openModal("tx-edit", { id: el.dataset.id, back: ui.modal?.kind === "catDetail" ? ui.modal : null }); break; // 분류 상세에서 열었으면 닫을 때 그 목록으로
     case "tx-add": openModal("tx-add"); break;
+    case "cat-detail": openModal("catDetail", { c: el.dataset.c, period: ui.moneyKind || "week" }); break;
     case "sync-start": openModal("consent"); break;
     case "sync-agree":
       if (!document.getElementById("consent-ok")?.checked) { toast("동의에 체크해 주세요"); break; }
@@ -3403,7 +3423,7 @@ document.addEventListener("click", async (e) => {
       if (!confirm("이 고정 수입·지출을 지울까요? 이미 기록된 내역은 남아요.")) break;
       ledger.fixed = ledger.fixed.filter((x) => x.id !== el.dataset.id); saveLedger(); ui.modal = null; render();
       break;
-    case "modal-close": ui.modal = null; ui.catPick = null; drawCatPicker(); render(); break;
+    case "modal-close": ui.modal = ui.modal?.back || null; ui.catPick = null; drawCatPicker(); render(); break;
     case "tx-save": {
       const t = ledger.tx.find((x) => x.id === el.dataset.id);
       if (!t) break;
@@ -3412,7 +3432,7 @@ document.addEventListener("click", async (e) => {
       Object.assign(t, { amount, dir: document.getElementById("e-dir").value, cat: document.getElementById("e-cat").value,
         merchant: document.getElementById("e-merch").value.trim().slice(0, 20) || t.merchant, date: document.getElementById("e-date").value || t.date });
       ledger.tx.sort((a, b) => b.date.localeCompare(a.date));
-      saveLedger(); render(); toast("고쳤어요");
+      ui.modal = ui.modal?.back || null; saveLedger(); render(); toast("고쳤어요");
       break;
     }
     case "cal-move":
