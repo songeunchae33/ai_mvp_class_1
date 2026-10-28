@@ -1922,7 +1922,7 @@ function moneyBody() {
 
   const captureBlock = `<section class="card form" id="m-capture">
       <div class="sec-title"><h2>캡처로 기록하기</h2><span>오늘 ${usedToday}/${CAPTURE_DAILY}장</span></div>
-      <p class="hint" style="margin:0">카드·은행·토스·카카오페이 앱의 <b>이용내역 화면</b>을 캡처해서 올려요. 여러 장을 한 번에 골라도 돼요(최대 8장). 계좌번호·잔액은 가려도 괜찮아요.</p>
+      <p class="hint" style="margin:0">카드·은행·토스·카카오페이 앱의 <b>이용내역 화면</b>을 캡처해서 올려요. 여러 장을 한 번에 골라도 되고(최대 8장), 스크롤해서 길게 찍은 캡처도 읽어요. 계좌번호·잔액은 가려도 괜찮아요.</p>
       <label class="btn block" for="cap-files" style="display:flex;align-items:center;justify-content:center;cursor:pointer">${C?.loading ? "읽는 중… 잠시만요" : "캡처 사진 고르기"}</label>
       <input id="cap-files" type="file" accept="image/*" multiple class="sr" ${C?.loading ? "disabled" : ""}>
       ${C?.error ? `<p class="hint" style="margin:0;color:var(--up)">${esc(C.error)}</p>` : ""}
@@ -2194,17 +2194,37 @@ function analysisHtml() {
 }
 
 // 사진을 폰에서 줄여서(긴 변 1400px, JPEG) 보내기 → AI 비용·전송량 절약
-function shrinkImage(file) {
+// 사진을 폰에서 줄여서 보내기 → AI 비용·전송량 절약.
+// 스크롤해서 길게 찍은 캡처는 그냥 줄이면 글씨가 너무 작아져서, 폭을 유지한 채 위에서 아래로 겹치게 잘라 여러 조각으로 보낸다.
+const PIECE_W = 900, PIECE_H = 1500, PIECE_OVERLAP = 160;
+function imagePieces(file) {
   return new Promise((resolve, reject) => {
     const img = new Image();
     const url = URL.createObjectURL(file);
     img.onload = () => {
-      const scale = Math.min(1, 1400 / Math.max(img.width, img.height));
-      const c = document.createElement("canvas");
-      c.width = Math.round(img.width * scale); c.height = Math.round(img.height * scale);
-      c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
       URL.revokeObjectURL(url);
-      resolve(c.toDataURL("image/jpeg", 0.72));
+      const jpeg = (sx, sy, sw, sh, w, h) => {
+        const c = document.createElement("canvas");
+        c.width = Math.round(w); c.height = Math.round(h);
+        const g = c.getContext("2d");
+        g.fillStyle = "#fff"; g.fillRect(0, 0, c.width, c.height);
+        g.drawImage(img, sx, sy, sw, sh, 0, 0, c.width, c.height);
+        return c.toDataURL("image/jpeg", 0.75);
+      };
+      const W = Math.min(img.width, PIECE_W), s = W / img.width, H = img.height * s;
+      // 보통 캡처(세로가 폭의 2.4배 이하)는 예전처럼 한 장으로
+      if (H <= W * 2.4) {
+        const k = Math.min(1, 1400 / Math.max(img.width, img.height));
+        return resolve([jpeg(0, 0, img.width, img.height, img.width * k, img.height * k)]);
+      }
+      const out = [];
+      for (let y = 0; y < H; y += PIECE_H - PIECE_OVERLAP) {
+        const h = Math.min(PIECE_H, H - y);
+        if (out.length && h < PIECE_OVERLAP + 40) break; // 앞 조각과 거의 겹치는 꼬리는 버림
+        out.push(jpeg(0, y / s, img.width, h / s, W, h));
+        if (y + h >= H) break;
+      }
+      resolve(out);
     };
     img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("사진을 열 수 없어요")); };
     img.src = url;
@@ -2215,16 +2235,38 @@ async function readCaptures(files) {
   const used = ledger.uploads[day] || 0;
   files = [...files].slice(0, 8);
   if (!files.length) return;
-  if (used + files.length > CAPTURE_DAILY) { ui.capture = { error: `오늘은 ${CAPTURE_DAILY - used}장만 더 올릴 수 있어요` }; render(); return; }
   ui.capture = { loading: true };
   render();
   try {
-    const images = await Promise.all(files.map(shrinkImage));
-    const j = await getJson("/api/receipts", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ images }) });
-    ledger.uploads[day] = used + files.length;
-    saveLedger();
+    // 사진마다 조각 묶음(긴 캡처는 여러 조각). 하루 한도는 조각 수로 센다(AI가 읽는 장 수)
+    const groups = await Promise.all(files.map(imagePieces));
+    const total = groups.reduce((n, g) => n + g.length, 0);
+    if (used + total > CAPTURE_DAILY) {
+      const long = groups.some((g) => g.length > 1);
+      ui.capture = { error: `오늘은 ${CAPTURE_DAILY - used}장만 더 읽을 수 있어요.${long ? ` 긴 캡처는 ${total}조각으로 나눠 읽어서 ${total}장으로 세요.` : ""}` };
+      render(); return;
+    }
+    // 한 번에 8조각까지. 긴 캡처는 조각 순서대로 보내고, 앞 묶음의 마지막 날짜를 알려줘 날짜가 이어지게 한다
+    const batches = [];
+    for (const g of groups) {
+      for (let i = 0; i < g.length; i += 8) batches.push({ images: g.slice(i, i + 8), pieces: g.length > 1, cont: i > 0 });
+    }
+    const found = [];
+    let lastDate = "";
+    for (const b of batches) {
+      const j = await getJson("/api/receipts", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ images: b.images, pieces: b.pieces, lastDate: b.cont ? lastDate : "" }) });
+      const list = j.transactions || [];
+      found.push(...list);
+      if (list.length) lastDate = list[list.length - 1].date;
+      ledger.uploads[day] = (ledger.uploads[day] || 0) + b.images.length;
+      saveLedger();
+    }
+    // 조각이 겹친 곳에서 같은 거래가 두 번 나오면 하나만
+    const seen = new Set();
+    const uniq = found.filter((t) => { const k = txKey(t); if (seen.has(k)) return false; seen.add(k); return true; });
     const have = new Set(ledger.tx.map(txKey));
-    const items = (j.transactions || []).map((t) => ({ ...t, skip: have.has(txKey(t)) }));
+    const items = uniq.map((t) => ({ ...t, skip: have.has(txKey(t)) }));
     ui.capture = items.length ? { items } : { error: "거래를 찾지 못했어요. 이용내역 화면이 잘 보이게 캡처해 주세요" };
   } catch (err) {
     ui.capture = { error: err.body?.error || err.message || "읽지 못했어요" };

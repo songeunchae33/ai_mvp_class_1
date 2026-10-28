@@ -82,7 +82,9 @@ export default async function handler(req, res) {
       text: { format: { type: "json_schema", name: "transactions", schema: SCHEMA, strict: true } },
       input: [
         { role: "system", content: READ_RULES },
-        { role: "user", content: [{ type: "input_text", text: `오늘은 ${today}이야. 아래 캡처 ${images.length}장의 거래를 모두 뽑아줘.` },
+        { role: "user", content: [{ type: "input_text", text: `오늘은 ${today}이야. 아래 캡처 ${images.length}장의 거래를 모두 뽑아줘.` + (body.pieces
+            ? ` 이 사진들은 스크롤해서 길게 찍은 캡처 한 장을 위에서 아래로 순서대로 자른 조각이야. 조각끼리 조금 겹쳐 있으니 겹친 거래는 한 번만 적어. 날짜 머리글이 앞 조각에 있으면 그 날짜를 다음 조각 거래에도 이어서 써.${/^\d{4}-\d{2}-\d{2}$/.test(String(body.lastDate || "")) ? ` 바로 앞 조각의 마지막 거래 날짜는 ${body.lastDate}였어.` : ""}`
+            : "") },
           ...images.map((image_url) => ({ type: "input_image", image_url, detail: "high" }))] },
       ],
     });
