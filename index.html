@@ -1671,7 +1671,8 @@ const LEDGER_KEY = "myeco.ledger.v1";
 const MONEY_CATS = ["식비", "카페·간식", "쇼핑", "교통", "주거·통신", "구독", "의료·건강", "문화·여가", "여행", "교육", "경조사·선물", "금융·수수료", "급여·수입", "내부이체", "기타"];
 const CAT_COLOR = { 식비: "#7C96FF", "카페·간식": "#B69CFF", 쇼핑: "#FF9EBB", 교통: "#6FCFD8", "주거·통신": "#9FB3D9", 구독: "#E5A0F0", "의료·건강": "#8FD6A8",
   "문화·여가": "#FFC48A", 여행: "#7FC4FF", 교육: "#C9B8F5", "경조사·선물": "#FFB3C7", "금융·수수료": "#AEB8CC", 기타: "#CBD3E6" };
-const CAPTURE_DAILY = 20; // 하루에 올릴 수 있는 캡처 수 (AI 비용 보호)
+const CAPTURE_DAILY = 20; // 하루에 AI가 읽는 캡처 조각 수 (AI 비용 보호). 화면에는 %로만 보여준다
+function capPct(n) { return Math.min(100, Math.round((n / CAPTURE_DAILY) * 100)); }
 function loadLedger() {
   try { const v = JSON.parse(localStorage.getItem(LEDGER_KEY)) || {}; return { tx: v.tx || [], uploads: v.uploads || {}, fixed: v.fixed || [] }; } catch { return { tx: [], uploads: {}, fixed: [] }; }
 }
@@ -1921,7 +1922,7 @@ function moneyBody() {
   const usedToday = ledger.uploads[ymd(today0())] || 0;
 
   const captureBlock = `<section class="card form" id="m-capture">
-      <div class="sec-title"><h2>캡처로 기록하기</h2><span>오늘 ${usedToday}/${CAPTURE_DAILY}장</span></div>
+      <div class="sec-title"><h2>캡처로 기록하기</h2><span>오늘 사용량 ${capPct(usedToday)}%</span></div>
       <p class="hint" style="margin:0">카드·은행·토스·카카오페이 앱의 <b>이용내역 화면</b>을 캡처해서 올려요. 여러 장을 한 번에 골라도 되고(최대 8장), 스크롤해서 길게 찍은 캡처도 읽어요. 계좌번호·잔액은 가려도 괜찮아요.</p>
       <label class="btn block" for="cap-files" style="display:flex;align-items:center;justify-content:center;cursor:pointer">${C?.loading ? "읽는 중… 잠시만요" : "캡처 사진 고르기"}</label>
       <input id="cap-files" type="file" accept="image/*" multiple class="sr" ${C?.loading ? "disabled" : ""}>
@@ -2243,7 +2244,7 @@ async function readCaptures(files) {
     const total = groups.reduce((n, g) => n + g.length, 0);
     if (used + total > CAPTURE_DAILY) {
       const long = groups.some((g) => g.length > 1);
-      ui.capture = { error: `오늘은 ${CAPTURE_DAILY - used}장만 더 읽을 수 있어요.${long ? ` 긴 캡처는 ${total}조각으로 나눠 읽어서 ${total}장으로 세요.` : ""}` };
+      ui.capture = { error: `오늘 사용량이 ${capPct(used)}%라, 이 사진을 읽으면 ${Math.round(((used + total) / CAPTURE_DAILY) * 100)}%가 되어 하루 한도(100%)를 넘어요.${long ? " 긴 캡처는 여러 조각으로 나눠 읽어서 사용량이 많이 들어요. 짧게 나눠 찍거나 내일 다시 올려 주세요." : " 사진 수를 줄이거나 내일 다시 올려 주세요."}` };
       render(); return;
     }
     // 한 번에 8조각까지. 긴 캡처는 조각 순서대로 보내고, 앞 묶음의 마지막 날짜를 알려줘 날짜가 이어지게 한다
