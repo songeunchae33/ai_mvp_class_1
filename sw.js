@@ -1,7 +1,7 @@
 // 앱처럼 설치(PWA)하기 위한 서비스 워커.
 // 화면(index.html)은 늘 인터넷에서 새로 받고, 인터넷이 끊겼을 때만 저장해 둔 것을 보여준다.
 // 시세·뉴스 같은 /api 응답은 저장하지 않는다(오래된 숫자를 보여주지 않게).
-const CACHE = "myeco-v1";
+const CACHE = "myeco-v2";
 const SHELL = ["/", "/manifest.json", "/img/lumi/app-192.png", "/img/lumi/icon.png", "/img/lumi/main.png"];
 
 self.addEventListener("install", (e) => {
@@ -14,7 +14,8 @@ self.addEventListener("activate", (e) => {
 
 self.addEventListener("fetch", (e) => {
   const url = new URL(e.request.url);
-  if (e.request.method !== "GET" || url.origin !== location.origin || url.pathname.startsWith("/api/")) return;
+  // /api(시세·뉴스)와 /__/auth(구글 로그인 중계)는 건드리지 않는다
+  if (e.request.method !== "GET" || url.origin !== location.origin || url.pathname.startsWith("/api/") || url.pathname.startsWith("/__/")) return;
   // 화면: 인터넷 먼저, 안 되면 저장본
   if (e.request.mode === "navigate") {
     e.respondWith(fetch(e.request).then((r) => {
