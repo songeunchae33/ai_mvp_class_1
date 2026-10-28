@@ -750,6 +750,19 @@
   .hot-item .hot-t small { font-size: 12px; }
   a.hot-item { color: inherit; text-decoration: none; padding: 8px 0; }
   a.hot-item .hot-t { flex: 1; min-width: 0; }
+
+  /* ═════ 가계부: 분류 고르기 · 편집 ═════ */
+  .cat-back { z-index: 70; }
+  .cat-field { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; cursor: pointer; background: #fff; }
+  .cat-field span:first-of-type { flex: 1; }
+  .cat-arrow { color: var(--sub); }
+  .cat-grid { display: flex; flex-wrap: wrap; gap: 8px; }
+  .cat-chip { position: relative; display: inline-flex; align-items: center; gap: 6px; min-height: 40px; padding: 0 14px; border-radius: 999px; border: 1px solid #E3E8F0; background: #fff; font: inherit; font-size: 14px; color: var(--ink); cursor: pointer; }
+  .cat-chip.on { border-color: #1E40AF; background: #EEF2FF; font-weight: 700; }
+  .cat-chip.editing { padding-right: 34px; }
+  .cat-chip.cat-add { border-style: dashed; color: #1E40AF; font-weight: 700; }
+  .cat-chip.off { color: var(--sub); background: #F6F7F9; }
+  .cat-x { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); width: 24px; height: 24px; border-radius: 50%; background: #F04452; color: #fff; display: grid; place-items: center; font-size: 15px; line-height: 1; }
 </style>
 </head>
 <body>
@@ -1674,10 +1687,54 @@ const CAT_COLOR = { 식비: "#7C96FF", "카페·간식": "#B69CFF", 쇼핑: "#FF
 const CAPTURE_DAILY = 20; // 하루에 AI가 읽는 캡처 조각 수 (AI 비용 보호). 화면에는 %로만 보여준다
 function capPct(n) { return Math.min(100, Math.round((n / CAPTURE_DAILY) * 100)); }
 function loadLedger() {
-  try { const v = JSON.parse(localStorage.getItem(LEDGER_KEY)) || {}; return { tx: v.tx || [], uploads: v.uploads || {}, fixed: v.fixed || [] }; } catch { return { tx: [], uploads: {}, fixed: [] }; }
+  try { const v = JSON.parse(localStorage.getItem(LEDGER_KEY)) || {}; return { tx: v.tx || [], uploads: v.uploads || {}, fixed: v.fixed || [], cats: { added: v.cats?.added || [], hidden: v.cats?.hidden || [] } }; } catch { return { tx: [], uploads: {}, fixed: [], cats: { added: [], hidden: [] } }; }
 }
 function saveLedger() { try { localStorage.setItem(LEDGER_KEY, JSON.stringify(ledger)); } catch {} }
 const ledger = loadLedger();
+// ── 분류: 기본 분류 + 내가 만든 분류 − 숨긴 분류. 기타·급여·수입·내부이체는 계산에 쓰여서 지울 수 없다
+const CAT_KEEP = ["기타", "급여·수입", "내부이체"];
+const CUSTOM_COLORS = ["#F7A072", "#7BD3C0", "#A3B8FF", "#F2B5D4", "#C5D86D", "#B4A0E5", "#FFD166", "#8ECAE6"];
+function catColor(c) {
+  if (CAT_COLOR[c]) return CAT_COLOR[c];
+  const i = ledger.cats.added.indexOf(c);
+  return i >= 0 ? CUSTOM_COLORS[i % CUSTOM_COLORS.length] : "#CBD3E6";
+}
+// 고를 수 있는 분류 (internal=true면 내부이체도). 기타는 늘 맨 끝
+function catList(internal = false) {
+  const base = MONEY_CATS.filter((c) => c !== "기타" && (internal || c !== "내부이체") && !ledger.cats.hidden.includes(c));
+  return [...base, ...ledger.cats.added, "기타"];
+}
+// 팝업 안의 분류 칸: 누르면 분류 고르기 창이 뜬다 (값은 숨은 칸에)
+function catField(id, value, internal = false) {
+  return `<span class="lb" style="margin:0">분류</span><input type="hidden" id="${id}" value="${esc(value)}">
+    <button class="field cat-field" type="button" data-act="cat-open" data-for="${id}" ${internal ? 'data-internal="1"' : ""}><i class="tx-dot" style="background:${catColor(value)}"></i><span>${esc(value)}</span><span class="cat-arrow" aria-hidden="true">›</span></button>`;
+}
+// 분류 고르기 창. 다른 팝업 위에 따로 띄워서, 적어 둔 금액·메모가 지워지지 않게 한다(화면 전체를 다시 그리지 않음)
+function drawCatPicker() {
+  let el = document.getElementById("cat-pick");
+  const P = ui.catPick;
+  if (!P) { el?.remove(); return; }
+  if (!el) { el = document.createElement("div"); el.id = "cat-pick"; el.className = "modal-back cat-back"; document.body.appendChild(el); }
+  const cur = document.getElementById(P.forId)?.value;
+  if (P.adding) {
+    el.innerHTML = `<div class="modal form" role="dialog" aria-modal="true" aria-label="분류 추가">
+      <div class="sec-title" style="margin:0"><h2>분류 추가</h2></div>
+      <div><label class="lb" for="cat-new">새 분류 이름</label><input class="field" id="cat-new" maxlength="8" placeholder="예: 반려동물, 운동"></div>
+      <div class="inline"><button class="btn ghost" data-act="cat-add-cancel" style="flex:1">취소</button><button class="btn" data-act="cat-add-save" style="flex:2">추가</button></div>
+    </div>`;
+    el.querySelector("#cat-new")?.focus();
+    return;
+  }
+  const list = catList(P.internal);
+  el.innerHTML = `<div class="modal form" role="dialog" aria-modal="true" aria-label="분류 선택">
+      <div class="sec-title" style="margin:0"><h2>${P.edit ? "분류 편집" : "분류 선택"}</h2><button class="link-btn" data-act="cat-edit">${P.edit ? "완료" : "편집"}</button></div>
+      ${P.edit ? `<p class="hint" style="margin:0">× 를 누르면 목록에서 빠져요. 이미 기록된 내역의 분류는 그대로예요. 기타·급여·수입·내부이체는 지울 수 없어요.</p>` : ""}
+      <div class="cat-grid">${list.map((c) => `<button class="cat-chip ${!P.edit && c === cur ? "on" : ""} ${P.edit ? "editing" : ""}" data-act="${P.edit ? "cat-noop" : "cat-pick"}" data-v="${esc(c)}"><i class="tx-dot" style="background:${catColor(c)}"></i>${esc(c)}${P.edit && !CAT_KEEP.includes(c) ? `<span class="cat-x" data-act="cat-rm" data-v="${esc(c)}" role="button" aria-label="${esc(c)} 지우기">×</span>` : ""}</button>`).join("")}
+        <button class="cat-chip cat-add" data-act="cat-add" aria-label="분류 추가">+ 추가</button></div>
+      ${ledger.cats.hidden.length && P.edit ? `<div><span class="lb">뺀 분류 (누르면 다시 넣어요)</span><div class="cat-grid">${ledger.cats.hidden.map((c) => `<button class="cat-chip off" data-act="cat-restore" data-v="${esc(c)}">+ ${esc(c)}</button>`).join("")}</div></div>` : ""}
+      <button class="btn ghost" data-act="cat-close">닫기</button>
+    </div>`;
+}
 // 고정 수입·지출: 규칙(이름·금액·매월 며칠)마다, 등록한 달부터 이번 달까지 그날이 지났으면 기록을 하나씩 만든다.
 // 만든 기록은 보통 기록처럼 고치거나 지울 수 있고, 지워도 다시 만들지 않는다(made에 표시).
 function applyFixed() {
@@ -1744,7 +1801,7 @@ function spendSummary(kind, prev = false) {
 function donutStops(cats) {
   const sum = cats.reduce((a, [, v]) => a + v, 0) || 1;
   let acc = 0;
-  return cats.map(([c, v]) => { const a = acc; acc += (v / sum) * 360; return `${CAT_COLOR[c] || "#CBD3E6"} ${a.toFixed(1)}deg ${acc.toFixed(1)}deg`; }).join(", ");
+  return cats.map(([c, v]) => { const a = acc; acc += (v / sum) * 360; return `${catColor(c)} ${a.toFixed(1)}deg ${acc.toFixed(1)}deg`; }).join(", ");
 }
 // 지난 기간보다 가장 많이 늘어난 분류 / 줄어든 분류
 function compareLine(cats, prev, kind) {
@@ -1779,7 +1836,7 @@ function moneyLine() {
 
 // 거래 한 줄: 누르면 고치기 팝업이 뜬다
 function txRow(t) {
-  return `<button class="tx-row" data-act="tx-edit" data-id="${t.id}" aria-label="${esc(t.merchant)} 기록 고치기"><span class="tx-dot" style="background:${CAT_COLOR[t.cat] || "#CBD3E6"}"></span><span class="cap-main"><b>${esc(t.merchant)}</b><span class="hint">${esc(t.cat)}${t.src ? " · " + esc(t.src) : ""}</span></span>
+  return `<button class="tx-row" data-act="tx-edit" data-id="${t.id}" aria-label="${esc(t.merchant)} 기록 고치기"><span class="tx-dot" style="background:${catColor(t.cat)}"></span><span class="cap-main"><b>${esc(t.merchant)}</b><span class="hint">${esc(t.cat)}${t.src ? " · " + esc(t.src) : ""}</span></span>
       <span class="num cap-amt ${t.dir === "in" ? "down" : ""} ${t.cat === "내부이체" ? "flat" : ""}">${t.dir === "in" ? "+" : "-"}${fmt(t.amount)}</span><span class="tx-pen" aria-hidden="true">›</span></button>`;
 }
 // 팝업: 취소·저장·닫기를 눌러야만 닫힌다 (바깥을 눌러도, 탭·뒤로가기로도 안 닫힘)
@@ -1805,8 +1862,7 @@ function modalTxEdit(m) {
         <label class="sr" for="e-merch">어디에</label><input class="field" id="e-merch" maxlength="20" value="${esc(t.merchant)}" style="flex:1">
         <label class="sr" for="e-date">날짜</label><input class="field" id="e-date" type="date" value="${t.date}" style="flex:0 0 140px">
       </div>
-      <label class="sr" for="e-cat">분류</label>
-      <select class="field" id="e-cat">${MONEY_CATS.map((c) => `<option ${c === t.cat ? "selected" : ""}>${c}</option>`).join("")}</select>
+      ${catField("e-cat", t.cat, true)}
       <div class="inline"><button class="btn ghost" data-act="tx-rm" data-id="${t.id}" style="flex:1;color:var(--up)">삭제</button><button class="btn ghost" data-act="modal-close" style="flex:1">취소</button><button class="btn" data-act="tx-save" data-id="${t.id}" style="flex:2">저장</button></div>
     `;
 }
@@ -1824,8 +1880,7 @@ function modalFixed(m) {
         <label class="sr" for="fx-name">이름</label><input class="field" id="fx-name" maxlength="20" placeholder="이름 (예: 월급, 월세, 통신비)" value="${esc(f?.name || "")}" style="flex:1">
         <div class="money" style="flex:0 0 110px"><label class="sr" for="fx-day">매월 며칠</label><span class="unit" style="position:static;padding-right:6px">매월</span><input class="field num" id="fx-day" inputmode="numeric" placeholder="25" value="${f?.day ?? ""}"><span class="unit">일</span></div>
       </div>
-      <label class="sr" for="fx-cat">분류</label>
-      <select class="field" id="fx-cat">${MONEY_CATS.filter((c) => c !== "내부이체").map((c) => `<option ${c === (f?.cat || "주거·통신") ? "selected" : ""}>${c}</option>`).join("")}</select>
+      ${catField("fx-cat", f?.cat || "주거·통신")}
       ${f ? `<p class="hint" style="margin:0">고친 내용은 다음 기록부터 적용돼요. 이미 기록된 달의 금액은 그 기록을 눌러 고쳐요.</p>` : ""}
       <div class="inline">${f ? `<button class="btn ghost" data-act="fixed-rm" data-id="${f.id}" style="flex:1;color:var(--up)">삭제</button>` : ""}<button class="btn ghost" data-act="modal-close" style="flex:1">취소</button><button class="btn" data-act="fixed-save" style="flex:2">저장</button></div>`;
 }
@@ -1840,8 +1895,7 @@ function modalTxAdd() {
         <label class="sr" for="q-memo">어디에</label><input class="field" id="q-memo" maxlength="20" placeholder="어디에 (예: 점심, 용돈)" style="flex:1">
         <label class="sr" for="q-date">날짜</label><input class="field" id="q-date" type="date" value="${ymd(today0())}" style="flex:0 0 140px">
       </div>
-      <label class="sr" for="q-cat">분류</label>
-      <select class="field" id="q-cat">${MONEY_CATS.filter((c) => c !== "내부이체").map((c) => `<option ${c === "식비" ? "selected" : ""}>${c}</option>`).join("")}</select>
+      ${catField("q-cat", "식비")}
       <div class="inline"><button class="btn ghost" data-act="modal-close" style="flex:1">취소</button><button class="btn" data-act="q-add" style="flex:2">기록하기</button></div>`;
 }
 // 최근 기록 / 검색 결과 목록 (검색할 땐 이 부분만 다시 그린다)
@@ -1934,7 +1988,7 @@ function moneyBody() {
             <input type="checkbox" id="cap-c-${i}" data-cap="skip" data-i="${i}" ${t.skip ? "" : "checked"}>
             <div class="cap-main"><b>${esc(t.merchant)}</b><span class="hint">${t.date.slice(5).replace("-", "/")}${t.src ? " · " + esc(t.src) : ""}</span></div>
             <label class="sr" for="cap-k-${i}">분류</label>
-            <select class="field cap-cat" id="cap-k-${i}" data-cap="cat" data-i="${i}">${MONEY_CATS.map((c) => `<option ${c === t.cat ? "selected" : ""}>${c}</option>`).join("")}</select>
+            <select class="field cap-cat" id="cap-k-${i}" data-cap="cat" data-i="${i}">${[...new Set([...catList(true), t.cat])].map((c) => `<option ${c === t.cat ? "selected" : ""}>${esc(c)}</option>`).join("")}</select>
             <span class="num cap-amt ${t.dir === "in" ? "down" : ""}">${t.dir === "in" ? "+" : "-"}${fmt(t.amount)}</span>
           </div>`).join("")}
           <p class="hint" style="margin:4px 0 0">‘내부이체’(카드대금·내 계좌 이동)는 지출로 세지 않아요. 이미 기록된 거래는 자동으로 건너뛰어요.</p>
@@ -1952,7 +2006,7 @@ function moneyBody() {
     <button class="card line" id="m-quick" data-act="tx-add"><span><b>직접 기록하기</b> <span class="hint">현금·이체·월급 등</span></span><span class="plus line-plus" aria-hidden="true">+</span></button>
     <section class="card" id="m-fixed" style="padding:8px 16px">
       <div class="sec-title" style="margin:6px 0"><h2>고정 수입·지출</h2><button class="plus" data-act="fixed-new">+ 추가</button></div>
-      ${ledger.fixed.map((f) => `<button class="tx-row" data-act="fixed-edit" data-id="${f.id}" aria-label="${esc(f.name)} 고치기"><span class="tx-dot" style="background:${CAT_COLOR[f.cat] || "#CBD3E6"}"></span><span class="cap-main"><b>${esc(f.name)}</b><span class="hint">매월 ${f.day}일 · ${esc(f.cat)}</span></span>
+      ${ledger.fixed.map((f) => `<button class="tx-row" data-act="fixed-edit" data-id="${f.id}" aria-label="${esc(f.name)} 고치기"><span class="tx-dot" style="background:${catColor(f.cat)}"></span><span class="cap-main"><b>${esc(f.name)}</b><span class="hint">매월 ${f.day}일 · ${esc(f.cat)}</span></span>
           <span class="num cap-amt">${f.dir === "in" ? "+" : "-"}${fmt(f.amount)}</span><span class="tx-pen" aria-hidden="true">›</span></button>`).join("")
         || `<p class="hint" style="margin:0 0 8px">월급·용돈·월세·통신비·교통비처럼 매달 들어오고 나가는 돈을 넣으면, 매달 그날 자동으로 기록돼요. 달마다 금액이 다르면 그 달 기록을 눌러 고치면 돼요.</p>`}
     </section>
@@ -1973,7 +2027,7 @@ function moneyBody() {
       <div class="hint" style="margin-bottom:10px">${s.count}건${s.income ? ` · 들어온 돈 ${won(s.income)}` : ""}</div>
       ${cats.length ? `<div class="donut-wrap"><div class="donut" style="background:conic-gradient(${donutStops(cats)})" role="img" aria-label="분류별 지출 비율"><span>${esc(cats[0][0])}<b class="num">${Math.round((cats[0][1] / sumCats) * 100)}%</b></span></div>
           <p class="hint" style="margin:0">${kind === "week" ? "지난주" : "지난달"}와 비교하면<br>${compareLine(cats, p.byCat, kind)}</p></div>`
-        + cats.map(([c, v]) => { const d = v - (p.byCat[c] || 0); return `<div class="cat-row"><span class="cat-name"><i class="tx-dot" style="background:${CAT_COLOR[c] || "#CBD3E6"}"></i>${esc(c)}</span><div class="cat-bar"><i style="width:${Math.max(4, (v / max) * 100)}%;background:${CAT_COLOR[c] || "#CBD3E6"}"></i></div><span class="num cat-v">${won(v)}<small class="${d > 0 ? "up" : d < 0 ? "down" : "flat"}">${Math.round((v / sumCats) * 100)}% · ${!p.byCat[c] ? "새로 씀" : d === 0 ? "같음" : `${d > 0 ? "▲" : "▼"}${shortWon(Math.abs(d))}`}</small></span></div>`; }).join("")
+        + cats.map(([c, v]) => { const d = v - (p.byCat[c] || 0); return `<div class="cat-row"><span class="cat-name"><i class="tx-dot" style="background:${catColor(c)}"></i>${esc(c)}</span><div class="cat-bar"><i style="width:${Math.max(4, (v / max) * 100)}%;background:${catColor(c)}"></i></div><span class="num cat-v">${won(v)}<small class="${d > 0 ? "up" : d < 0 ? "down" : "flat"}">${Math.round((v / sumCats) * 100)}% · ${!p.byCat[c] ? "새로 씀" : d === 0 ? "같음" : `${d > 0 ? "▲" : "▼"}${shortWon(Math.abs(d))}`}</small></span></div>`; }).join("")
         : `<p class="hint" style="margin:0">아직 기록이 없어요. 아래에서 캡처를 올려보세요.</p>`}
       ${s.top.length ? `<div class="hint" style="margin-top:10px">많이 쓴 곳: ${s.top.map(([m, v]) => `${esc(m)} ${won(v)}`).join(" · ")}</div>` : ""}
       ${s.count ? `<button class="btn ghost" style="margin-top:12px;width:100%" data-act="money-feedback" ${ui.moneyFb?.loading ? "disabled" : ""}>${ui.moneyFb?.loading ? "생각하는 중…" : "루미에게 피드백 받기"}</button>` : ""}
@@ -3080,6 +3134,39 @@ document.addEventListener("click", async (e) => {
     case "tx-rm": if (!confirm("이 기록을 지울까요?")) break; ledger.tx = ledger.tx.filter((t) => t.id !== el.dataset.id); saveLedger(); render(); break;
     case "tx-edit": openModal("tx-edit", { id: el.dataset.id }); break;
     case "tx-add": openModal("tx-add"); break;
+    case "cat-open": ui.catPick = { forId: el.dataset.for, internal: !!el.dataset.internal, edit: false, adding: false }; drawCatPicker(); break;
+    case "cat-close": ui.catPick = null; drawCatPicker(); break;
+    case "cat-edit": ui.catPick.edit = !ui.catPick.edit; drawCatPicker(); break;
+    case "cat-noop": break;
+    case "cat-pick": {
+      const v = el.dataset.v, P = ui.catPick;
+      const input = document.getElementById(P.forId), btn = document.querySelector(`[data-act="cat-open"][data-for="${P.forId}"]`);
+      if (input) input.value = v;
+      if (btn) { btn.querySelector("span").textContent = v; btn.querySelector(".tx-dot").style.background = catColor(v); }
+      ui.catPick = null; drawCatPicker();
+      break;
+    }
+    case "cat-add": ui.catPick.adding = true; drawCatPicker(); break;
+    case "cat-add-cancel": ui.catPick.adding = false; drawCatPicker(); break;
+    case "cat-add-save": {
+      const name = (document.getElementById("cat-new")?.value || "").trim().replace(/\s+/g, " ").slice(0, 8);
+      if (!name) { toast("분류 이름을 적어주세요"); break; }
+      if (MONEY_CATS.includes(name) && ledger.cats.hidden.includes(name)) ledger.cats.hidden = ledger.cats.hidden.filter((c) => c !== name);
+      else if (MONEY_CATS.includes(name) || ledger.cats.added.includes(name)) { toast("이미 있는 분류예요"); break; }
+      else ledger.cats.added.push(name);
+      saveLedger(); ui.catPick.adding = false; drawCatPicker(); toast(`‘${name}’ 분류를 추가했어요`);
+      break;
+    }
+    case "cat-rm": {
+      e.stopPropagation();
+      const v = el.dataset.v;
+      if (CAT_KEEP.includes(v)) break;
+      if (ledger.cats.added.includes(v)) ledger.cats.added = ledger.cats.added.filter((c) => c !== v);
+      else if (!ledger.cats.hidden.includes(v)) ledger.cats.hidden.push(v);
+      saveLedger(); drawCatPicker();
+      break;
+    }
+    case "cat-restore": ledger.cats.hidden = ledger.cats.hidden.filter((c) => c !== el.dataset.v); saveLedger(); drawCatPicker(); break;
     case "fixed-new": openModal("fixed"); break;
     case "fixed-edit": openModal("fixed", { id: el.dataset.id }); break;
     case "fixed-save": {
@@ -3100,7 +3187,7 @@ document.addEventListener("click", async (e) => {
       if (!confirm("이 고정 수입·지출을 지울까요? 이미 기록된 내역은 남아요.")) break;
       ledger.fixed = ledger.fixed.filter((x) => x.id !== el.dataset.id); saveLedger(); ui.modal = null; render();
       break;
-    case "modal-close": ui.modal = null; render(); break;
+    case "modal-close": ui.modal = null; ui.catPick = null; drawCatPicker(); render(); break;
     case "tx-save": {
       const t = ledger.tx.find((x) => x.id === el.dataset.id);
       if (!t) break;
@@ -3198,7 +3285,7 @@ document.addEventListener("click", async (e) => {
     case "wipe":
       if (confirm("이 기기에 저장된 내 정보를 모두 지울까요? 되돌릴 수 없어요.")) {
         try { [STORE_KEY, UI_KEY, LEARN_KEY, LEDGER_KEY, AI_KEY].forEach((k) => localStorage.removeItem(k)); } catch {}
-        ledger.tx = []; ledger.uploads = {}; ledger.fixed = []; learnState.answers = {}; learnState.notes = {}; learnState.days = {}; learnState.today = null;
+        ledger.tx = []; ledger.uploads = {}; ledger.fixed = []; ledger.cats = { added: [], hidden: [] }; learnState.answers = {}; learnState.notes = {}; learnState.days = {}; learnState.today = null;
         profile = null; ui.onb = { step: 0, draft: null }; location.hash = ""; render();
       }
       break;
