@@ -662,6 +662,77 @@
   .bubble-onb { margin: 0; flex: 1; background: #F1F5FB; border-radius: 18px 18px 18px 4px; padding: 14px 16px; font-size: 15px; line-height: 1.6; }
   .bubble-onb b { color: var(--blue); }
 
+  /* ═════ 디자인 견본(DESIGN.md): 홈부터. 글꼴은 그대로, 여러 화면이 같이 쓰는 모양은 같이 바뀜 ═════ */
+  /* 바탕 background-gray · 카드 layer1 · 글자 text-normal/neutral · 선 line-strong · 안쪽 면 layer3 · 주 색 green-strong(흰 글자 대비 4.5 이상) */
+  :root {
+    --bg: #F6F7F9; --outer: #EBEEF2; --card: #FFFFFF; --ink: #272A30; --sub: #606874; --line: #E5E8ED;
+    --soft: #F2F3F6; --green: #04764C; --mint: #CDEEE2;
+    --up: #B22E3B; --up-bg: #FCEBED; --down: #066098; --down-bg: #CEE7F7; --flat-bg: #EBEEF2; --radius: 16px;
+  }
+  .top, .page-head, .askbar, .searchwrap { background: rgba(246, 247, 249, 0.94) !important; }
+  .scroll { padding-left: 20px; padding-right: 20px; }
+  .bleed { margin: 0 -20px; padding: 0 20px; }
+  .home-top { padding-left: 20px !important; }
+  .searchwrap { padding-left: 20px !important; padding-right: 20px !important; }
+  .scroll.home { gap: 12px; }
+
+  /* 카드: 그림자 없이 흰 면 + 1px 선, 모서리 16 */
+  .card, .mkt div, .mkt.line > *, .impact, .results, .more, .quiz, .hero {
+    background: var(--card) !important; border: 1px solid #F0F2F5 !important; border-radius: 16px !important; box-shadow: none !important;
+  }
+  .home .card:not(.links), .home .more, .home .quiz, .home .hero, .home .impact { padding: 16px !important; }
+  .mkt .add, .mkt.line .add { background: transparent !important; border: 1.5px dashed #D2D6DD !important; color: var(--sub); }
+  .bubble, .home .bubble { background: var(--soft) !important; border-radius: 4px 12px 12px 12px !important; }
+  .brief-line { background: var(--soft) !important; border-radius: 12px !important; }
+  .dot { background: #D2D6DD; } .dot.on { background: #06A96C !important; }
+
+  /* 글자 크기 */
+  .sec-title h2, .home .sec-title h2 { font-size: 18px; line-height: 26px; }
+  .brandbtn span { font-size: 20px; line-height: 28px; color: var(--green); }
+  .bubble p, .home .bubble p { font-size: 15px !important; line-height: 23px; }
+  .mkt .v, .mkt.line .v { font-size: 18px; line-height: 26px; }
+  .mkt .k, .mkt.line .k, .mkt .c, .mkt.line .c { font-size: 12px; line-height: 18px; }
+  .home .impact p { font-size: 14px; line-height: 20px; }
+  .nl .src { font-size: 12px; }
+  .qrow .q { font-size: 15px; line-height: 23px; }
+  .home .quiz .ex { font-size: 14px; line-height: 20px; }
+  .more .q { font-size: 16px; line-height: 24px; }
+  .home .foot { font-size: 12px; line-height: 18px; }
+
+  /* 배지: 같은 계열 옅은 바탕 + 진한 글자 알약 */
+  .badge { font-size: 12px; line-height: 16px; font-weight: 700; padding: 2px 6px; border-radius: 999px !important; }
+  .b-green, .lrow .lk, .cal .tagc { background: var(--mint) !important; color: var(--green) !important; border-radius: 999px; }
+  .b-sample { color: #8C5F12; background: #FAF3E8; }
+
+  /* 버튼·칩 */
+  .btn { background: var(--green) !important; color: #FFFFFF; border-radius: 12px !important; min-height: 48px; font-size: 16px; box-shadow: none !important; }
+  .btn.ghost { background: var(--mint) !important; color: var(--green) !important; }
+  .btn.block { min-height: 56px; border-radius: 16px !important; }
+  .btn.danger { background: var(--up-bg) !important; color: var(--up) !important; }
+  .btn.sm { min-height: 40px; font-size: 14px; }
+  .chip { border: 1px solid var(--line) !important; background: var(--card); color: var(--ink); }
+  .chip.on, .sortbar button.on { background: var(--green) !important; border-color: var(--green) !important; color: #FFFFFF !important; }
+  .plus { background: var(--soft) !important; color: var(--sub) !important; border-radius: 12px !important; }
+  .link-btn, .si.ask, .quiz-head span:last-child { color: var(--green) !important; }
+
+  /* 검색창 */
+  .searchbox, .home-top .searchbox { border: 1px solid var(--line) !important; border-radius: 12px !important; }
+  .searchbox:focus-within { border-color: var(--green) !important; box-shadow: none !important; }
+  .searchbox input::placeholder, .searchbox svg { color: var(--sub) !important; }
+  .top-icons .icon-btn, .home-top .icon-btn { color: var(--sub); }
+
+  /* OX 퀴즈 */
+  .ox button, .ox.light button { background: var(--soft) !important; color: var(--ink) !important; border-radius: 12px !important; }
+  .ox button.right, .ox.light button.right { background: var(--green) !important; color: #FFFFFF !important; }
+  .ox button.dim, .ox.light button.dim { color: var(--sub) !important; }
+  .ox button.wrong, .ox.light button.wrong { background: var(--up-bg) !important; color: var(--up) !important; }
+  .quiz .ex b, .c-quiz .ex b, .c-body .me b, .bp .me b, .brief-line b, .streak-card b, .mini-card b { color: var(--green) !important; }
+
+  /* 하단 탭 */
+  .tabbar { border-top-color: #F0F2F5; }
+  .tabbar button { color: var(--sub); }
+  .tabbar button.on { color: var(--green); }
+
   /* ═════ 루미 움직임 (코스피 분위기) ═════ */
   .lumi .lumi-body, .lumi .lumi-arm, .lumi .lumi-spark { transform-box: view-box; }
   .lumi .lumi-body { transform-origin: 32px 56px; }
