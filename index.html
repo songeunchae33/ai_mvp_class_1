@@ -855,6 +855,24 @@
   .bud-in label { display: flex; flex-direction: column; font-size: 14px; font-weight: 600; }
   .bud-in label .tx-dot { display: inline-block; margin-right: 6px; }
   .bud-in small { font-weight: 400; font-size: 11px; }
+
+  /* ═════ 공부: 탈출 지도(레트로 오락실) ═════ */
+  .arc-card { padding: 0 0 12px; overflow: hidden; background: var(--abg) !important; border: 3px solid var(--agir) !important; color: #fff; gap: 6px; }
+  .arc-card .st-top, .arc-card .arc-bar, .arc-card .arc-sub { margin: 0 12px; }
+  .arc-thumb { width: 100%; aspect-ratio: 150 / 64; display: block; }
+  .arc-bar { height: 8px; border-radius: 999px; background: rgba(255,255,255,0.18); overflow: hidden; }
+  .arc-bar i { display: block; height: 100%; background: var(--agir); }
+  .arc-sub { font-size: 12px; color: rgba(255,255,255,0.75); }
+  .arcade { position: relative; width: 100%; border-radius: 20px; overflow: hidden; border: 3px solid; margin-top: 10px; }
+  .arcade canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  .arc-node { position: absolute; width: max-content; display: flex; align-items: center; gap: 4px; transform: translate(-22px, -50%); background: none; border: 0; padding: 0; font: inherit; cursor: pointer; text-align: left; }
+  .arc-node.r { flex-direction: row-reverse; transform: translate(calc(-100% + 22px), -50%); text-align: right; }
+  .arc-node .hit { width: 44px; height: 44px; flex-shrink: 0; border-radius: 50%; }
+  .arc-node .lb { max-width: 124px; font-size: 11px; line-height: 1.3; font-weight: 700; color: #fff; background: rgba(0,0,0,0.5); padding: 3px 7px; border-radius: 8px; }
+  .arc-node .lb small { display: block; font-size: 10px; color: #ffd23f; }
+  .arc-node.locked .lb { opacity: 0.55; }
+  .arc-node.wrong .lb small { color: #ff8a9b; }
+  .arc-node:focus-visible .hit { outline: 3px solid #fff; }
 </style>
 </head>
 <body>
@@ -2898,10 +2916,12 @@ function viewLearn() {
     const done = list.filter(mastered).length;
     const stars = list.reduce((n, c) => n + Math.min(curLv(c), 3), 0);
     const all = done === list.length;
-    return `<button class="stage ${all ? "clear" : ""}" data-act="stage-open" data-c="${cat.id}">
+    const th = arcTheme(cat.id);
+    return `<button class="stage arc-card ${all ? "clear" : ""}" data-act="stage-open" data-c="${cat.id}" style="--abg:${th.bg};--agir:${th.gir}">
+        <canvas class="arc-thumb" data-arc="thumb" data-c="${cat.id}" aria-hidden="true"></canvas>
         <span class="st-top"><b>${esc(cat.name)}</b>${all ? `<span class="st-badge">🏅</span>` : ""}</span>
-        <span class="gbar"><i style="width:${Math.round((stars / (list.length * 3)) * 100)}%"></i></span>
-        <span class="hint">개념 ${done}/${list.length} · ★ ${stars}/${list.length * 3}</span>
+        <span class="arc-bar"><i style="width:${Math.round((stars / (list.length * 3)) * 100)}%"></i></span>
+        <span class="arc-sub">개념 ${done}/${list.length} · ★ ${stars}/${list.length * 3}</span>
       </button>`;
   }).join("");
   return `${tabHead("공부")}
@@ -2926,34 +2946,301 @@ function viewLearn() {
       <div><b class="num">${att.pct}%</b><span>출석률 · ${att.n}/${att.of}일</span></div>
       <button data-act="nav" data-route="review"><b class="num" style="color:${wrong.length ? "var(--up)" : "inherit"}">${wrong.length}</b><span>복습할 문제 ›</span></button>
     </section>
-    <div class="sec-title" style="margin:6px 2px 0"><h2 style="font-size:20px">스테이지</h2><button class="link-btn" data-act="notes-open">내 노트 ${Object.keys(learnState.notes).length} ›</button></div>
+    <div class="sec-title" style="margin:6px 2px 0"><h2 style="font-size:20px">탈출 지도</h2><button class="link-btn" data-act="notes-open">내 노트 ${Object.keys(learnState.notes).length} ›</button></div>
     <div class="stage-grid">${stages}</div>
     ${hotBlock}
     <section class="hub">
       ${[["news", "", "뉴스 쉽게 풀이", "오늘의 경제를 쉬운 말로"], ["letters", "", "뉴스레터", "구독 관리·붙여넣기 풀이"], ["watch", "", "관심 종목", "추가·순서·보유 수량"]]
         .map(([r, t, n, d]) => `<button class="hub-item" data-act="nav" data-route="${r}" data-target="${t}"><b>${n}</b><span>${d}</span></button>`).join("")}
     </section>
-    <p class="foot">앞 개념의 1단계를 맞히면 다음 개념이 열려요. 화제 TOP 5는 최근 7일 정부 보도자료 기준이에요. 기록은 이 기기(연결하면 내 계정)에 저장돼요.</p>
+    <p class="foot">앞 개념의 1단계를 맞히면 다음 칸이 열리고, 틀리면 공룡이 한 칸 다가와요. 화제 TOP 5는 최근 7일 정부 보도자료 기준이에요. 기록은 이 기기(연결하면 내 계정)에 저장돼요.</p>
   </main>`;
 }
-// 스테이지 지도: 한 주제의 개념들을 길 위의 점으로
-function viewStage(catId) {
+// 탈출 지도: 과목마다 다른 게임 그림(레트로 오락실·옛날 게임·블록 점프·겨울 숲)에서 아래에서 위로 올라가 공룡에게서 탈출한다.
+// 그림은 canvas에 코드로 그리고(startArcade), 누르는 칸과 개념 이름은 그 위에 버튼으로 얹는다.
+const ARC_W = 220, ARC_GAP = 46;
+// 과목 순서대로 쓰는 그림. bg·gir는 과목 카드의 바탕색·테두리색
+const ARC_THEMES = [
+  { key: "retro", bg: "#17123d", gir: "#ff6fb0" },
+  { key: "oldgame", bg: "#000000", gir: "#ffd23f" },
+  { key: "block", bg: "#4f86e8", gir: "#f6be2c" },
+  { key: "winter", bg: "#2a3f7a", gir: "#cfe0ff" },
+];
+function arcTheme(catId) {
+  const i = Math.max(0, (data.learn?.categories || []).findIndex((c) => c.id === catId));
+  return ARC_THEMES[i % ARC_THEMES.length];
+}
+const ARC_PAL = { R: "#ff3b5c", W: "#fff", G: "#2fbf4a", Y: "#ffd23f", K: "#222", P: "#ff9ec8", B: "#8a5a2b", S: "#f3dcb4", O: "#3a2a4a", T: "#fff", L: "#2fbf4a", H: "#1a7a2e" };
+const ARC_S = {
+  dino: ["..........GGGGGG.", ".........GGWKGGGG", ".........GGGGGGGG", ".........GGGGTTTT", ".........GGGGG...", "..G.....GGGGG....", ".GG....GGGGGGL...", ".GGG..GGGGGGG....", "..GGGGGGGGGGG....", "...GGGGGGGGG.....", "....GGG..GGG.....", "....GG....GG.....", "....HH....HH....."],
+  hero: ["..OOOOO..", ".OWWWWWO.", "OWWWWWWWO", "OWKWWWKWO", "OWPWWWPWO", "OWWWWWWWO", ".OWWWWWO.", ".OWO.OWO.", ".OO...OO."],
+  cherry: ["......G..", ".....GG..", "....G..G.", "...G....G", ".RRR..RRR", "RRWRRRRWR", "RRRR.RRRR", ".RR...RR."],
+  heart: [".RR.RR.", "RWRRRRR", "RRRRRRR", ".RRRRR.", "..RRR..", "...R..."],
+  star: ["....Y....", "...YYY...", "YYYYYYYYY", ".YYKYKYY.", "..YYYYY..", ".YYY.YYY.", ".YY...YY."],
+  gift: ["..Y..Y..", "...YY...", "RRRYYRRR", "RRRYYRRR", "YYYYYYYY", "RRRYYRRR", "RRRYYRRR", "RRRYYRRR"],
+  cake: ["...R....", "..WWWW..", ".PPPPPP.", "WWWWWWWW", "PPPPPPPP", "BBBBBBBB", "BBBBBBBB"],
+  letter: ["WWWWWWWWW", "WPWWWWWPW", "WWPWWWPWW", "WWWPRPWWW", "WWWWPWWWW", "WWWWWWWWW"],
+  mush: ["..RRRR..", ".RWWRRR.", "RRWWRRWR", "RRRRRRRR", "..SSSS..", "..SKSK..", "..SSSS.."],
+  coin: [".YYY.", "YYWYY", "YYWYY", "YYWYY", ".YYY."],
+  burger: [".YYYYY.", "YYYYYYY", "GGGGGGG", "RRRRRRR", "BBBBBBB", ".YYYYY."],
+  snowman: ["..KKK..", "..KKK..", ".KKKKK.", "..WWW..", ".WKWKW.", "..WRW..", ".RRRRR.", "WWWWWWW", "WWWKWWW", "WWWWWWW", ".WWWWW."],
+  mitten: ["..RRR...", ".RRRRR..", ".RRRRRRR", "RRRRRRRR", "RRRRRRR.", "WWWWWW..", "WWWWWW.."],
+  lantern: ["..KKK..", ".KYYYK.", "KYYWYYK", "KYYYYYK", "KYYYYYK", ".KKKKK."],
+  cocoa: [".W.W...", "..W.W..", "BBBBBB.", "BWWWWBB", "BBBBBB.B", "BBBBBBB.", ".BBBB..."],
+  lock: [".KKK.", "K...K", "KKKKK", "KKYKK", "KKKKK"],
+};
+function arcSpr(x, rows, pal, cx, cy, s) {
+  const ox = Math.round(cx - (rows[0].length * s) / 2), oy = Math.round(cy - (rows.length * s) / 2);
+  for (let r = 0; r < rows.length; r++) for (let c = 0; c < rows[r].length; c++) { const k = rows[r][c]; if (pal[k]) { x.fillStyle = pal[k]; x.fillRect(ox + c * s, oy + r * s, s, s); } }
+}
+function arcRR(x, a, b, w, h, r) { x.beginPath(); if (x.roundRect) x.roundRect(a, b, w, h, r); else x.rect(a, b, w, h); }
+function arcPill(x, txt, a, b, bg, fg) {
+  x.font = "bold 11px sans-serif";
+  const w = x.measureText(txt).width + 16;
+  arcRR(x, a, b, w, 20, 10); x.fillStyle = bg; x.fill();
+  x.fillStyle = fg; x.textBaseline = "middle"; x.textAlign = "left"; x.fillText(txt, a + 8, b + 10.5);
+}
+// 한 과목 지도의 모양: 칸 위치, 지금 칸, 공룡과의 거리
+function arcMap(catId) {
   const list = stageConcepts(catId);
-  const done = list.filter(mastered).length;
-  const ICONS = { done: "✓", wrong: "!", locked: "🔒", open: "▶" };
+  const n = list.length, H = 70 + n * ARC_GAP + 56;
+  const pts = list.map((_, i) => [i === 0 ? 110 : i % 2 ? 60 : 160, H - 62 - i * ARC_GAP]);
+  const states = list.map((_, i) => nodeState(list, i));
+  let hero = states.findIndex((st) => st !== "done");
+  const allDone = hero < 0;
+  if (allDone) hero = n;
+  const wrong = states.filter((st) => st === "wrong").length;
+  return { list, n, H, pts, states, hero, allDone, gap: Math.max(0, hero + 1 - wrong), th: arcTheme(catId) };
+}
+// 칸 하나의 표시: 다 푼 칸은 주황 ✓, 틀린 칸은 빨간 !, 잠긴 칸은 흐리게 + 자물쇠
+function arcMark(x, px, fy, st) {
+  if (st === "locked") { arcSpr(x, ARC_S.lock, { K: "#2b2b2b", Y: "#ffd23f" }, px + 9, fy + 8, 2); return; }
+  if (st !== "done" && st !== "wrong") return;
+  x.fillStyle = st === "done" ? "#ffb020" : "#ff4f6a"; x.beginPath(); x.arc(px + 10, fy - 10, 6, 0, 7); x.fill();
+  x.strokeStyle = "#fff"; x.lineWidth = 2; x.beginPath();
+  if (st === "done") { x.moveTo(px + 7, fy - 10); x.lineTo(px + 9.5, fy - 7.5); x.lineTo(px + 13.5, fy - 13); }
+  else { x.moveTo(px + 10, fy - 14); x.lineTo(px + 10, fy - 10); x.moveTo(px + 10, fy - 7.5); x.lineTo(px + 10, fy - 6.5); }
+  x.stroke();
+}
+function arcItem(x, name, px, fy, sz, st) {
+  x.save(); if (st === "locked") x.globalAlpha = 0.32; arcSpr(x, ARC_S[name], ARC_PAL, px, fy, sz); x.restore();
+  arcMark(x, px, fy, st);
+}
+function arcHero(x, t, px, py, scarf) {
+  x.fillStyle = "rgba(0,0,0,.28)"; x.beginPath(); x.ellipse(px, py + 11, 8, 2.5, 0, 0, 7); x.fill();
+  const by = py + Math.sin(t * 5) * 1.5;
+  arcSpr(x, ARC_S.hero, ARC_PAL, px, by, 2);
+  if (scarf) { x.fillStyle = "#e2483d"; x.fillRect(px - 7, by + 3, 14, 3); }
+}
+// 맨 아래: 쫓아오는 공룡과 남은 거리
+function arcChaser(x, t, m, pal, bg, fg, scarf) {
+  if (m.allDone) return;
+  const dy = m.H - 20 - Math.abs(Math.sin(t * 6)) * 3;
+  arcSpr(x, ARC_S.dino, { ...ARC_PAL, ...pal }, 34, dy, 2);
+  if (scarf) { x.fillStyle = "#e2483d"; x.fillRect(44, dy - 6, 16, 4); x.fillRect(50, dy - 6, 4, 10); }
+  arcPill(x, m.gap <= 1 ? "공룡이 바로 뒤에!" : `공룡과 ${m.gap}칸`, 118, m.H - 32, bg, fg);
+}
+function arcTrail(x, m) {
+  const P = m.pts;
+  x.beginPath(); x.moveTo(P[0][0], m.H); x.lineTo(P[0][0], P[0][1]);
+  for (let i = 1; i < P.length; i++) { const [a, b] = P[i - 1], [c, d] = P[i]; x.bezierCurveTo(a, (b + d) / 2, c, (b + d) / 2, c, d); }
+  x.lineTo(P[P.length - 1][0], 60);
+}
+const ARC_DRAW = {
+  // 1. 레트로 오락실: 남색 밤하늘, 핑크 사다리, 방울 속 아이템
+  retro(x, t, m) {
+    const { pts, H } = m, items = ["cherry", "star", "heart", "cake", "gift"], bub = ["#4dff9a", "#5cc8ff", "#ff7ad9"];
+    x.fillStyle = "#17123d"; x.fillRect(0, 0, ARC_W, H);
+    for (let i = 0; i < 60; i++) { x.fillStyle = Math.floor(t * 3 + i) % 4 ? "#3a3290" : "#a69bff"; x.fillRect((i * 53) % ARC_W, (i * 97) % H, 2, 2); }
+    x.strokeStyle = "#ff6fb0"; x.lineWidth = 3; arcRR(x, 6, 48, ARC_W - 12, H - 54, 8); x.stroke();
+    pts.forEach(([px, py], i) => {
+      const a = Math.min(px, 110) - 30, b = Math.max(px, 110) + 30;
+      x.fillStyle = "#ff6fb0"; x.fillRect(a, py + 14, b - a, 7);
+      x.strokeStyle = "#ffd1e6"; x.lineWidth = 1.5;
+      for (let k = a; k < b; k += 7) { x.beginPath(); x.moveTo(k, py + 21); x.lineTo(k + 5, py + 14); x.stroke(); }
+      const y1 = i < pts.length - 1 ? pts[i + 1][1] + 14 : 40, y2 = py + 14;
+      x.fillStyle = "#7de2ff"; x.fillRect(104, y1, 2, y2 - y1); x.fillRect(114, y1, 2, y2 - y1);
+      for (let k = y1 + 4; k < y2; k += 6) x.fillRect(104, k, 12, 2);
+    });
+    pts.forEach(([px, py], i) => {
+      const st = m.states[i];
+      if (i === m.hero) return arcHero(x, t, px, py);
+      const fy = py + Math.sin(t * 2 + i) * 2;
+      x.fillStyle = st === "locked" ? "rgba(120,120,160,.22)" : st === "wrong" ? "rgba(255,80,100,.22)" : "rgba(80,255,170,.16)";
+      x.strokeStyle = st === "locked" ? "#55508a" : st === "wrong" ? "#ff4f6a" : bub[i % 3];
+      x.lineWidth = 2; x.beginPath(); x.arc(px, fy, 14, 0, 7); x.fill(); x.stroke();
+      x.fillStyle = "rgba(255,255,255,.8)"; x.fillRect(px - 8, fy - 9, 3, 3);
+      arcItem(x, items[i % items.length], px, fy, 2, st);
+    });
+    for (let i = 0; i < 6; i++) { const yy = H - ((t * 25 + i * 90) % H); x.strokeStyle = "rgba(125,226,255,.5)"; x.lineWidth = 1.5; x.beginPath(); x.arc(20 + i * 38, yy, 4, 0, 7); x.stroke(); }
+    arcRR(x, 62, 10, 96, 30, 15); x.fillStyle = "#ff6fb0"; x.fill();
+    x.fillStyle = "#fff"; x.font = "bold 15px sans-serif"; x.textAlign = "center"; x.textBaseline = "middle";
+    x.fillText(m.allDone ? "탈출 성공!" : "EXIT 탈출!", 110, 26); x.textAlign = "left";
+    if (m.allDone) arcHero(x, t, 180, 22);
+    arcChaser(x, t, m, {}, "#ff6fb0", "#fff");
+  },
+  // 2. 옛날 게임: 검은 화면, 알록달록한 철골 발판과 사다리, 맨 위 로켓
+  oldgame(x, t, m) {
+    const { pts, H } = m, cols = ["#ff4fa3", "#ffd23f", "#3fd2ff", "#38e07b", "#ff7a2f"], items = ["heart", "star", "burger", "coin", "mush"];
+    x.fillStyle = "#000"; x.fillRect(0, 0, ARC_W, H);
+    for (let i = 0; i < 40; i++) { x.fillStyle = cols[i % 5]; x.beginPath(); x.arc((i * 37 + 10) % ARC_W, ((i * 71) % (H - 100)) + 50, 1.6, 0, 7); x.fill(); }
+    pts.forEach(([px, py], i) => {
+      const a = Math.min(px, 110) - 32, b = Math.max(px, 110) + 32;
+      x.strokeStyle = cols[i % 5]; x.lineWidth = 2; x.beginPath(); x.moveTo(a, py + 14); x.lineTo(b, py + 14); x.moveTo(a, py + 20); x.lineTo(b, py + 20); x.stroke();
+      x.lineWidth = 1; x.beginPath(); for (let k = a; k < b - 3; k += 6) { x.moveTo(k, py + 20); x.lineTo(k + 3, py + 14); x.lineTo(k + 6, py + 20); } x.stroke();
+      const y1 = i < pts.length - 1 ? pts[i + 1][1] + 20 : 44, y2 = py + 14, lx = i % 2 ? 96 : 118;
+      x.fillStyle = cols[(i + 2) % 5]; x.fillRect(lx, y1, 2, y2 - y1); x.fillRect(lx + 10, y1, 2, y2 - y1);
+      for (let k = y1 + 4; k < y2; k += 6) x.fillRect(lx, k, 12, 2);
+    });
+    pts.forEach(([px, py], i) => {
+      if (i === m.hero) return arcHero(x, t, px, py + 1);
+      arcItem(x, items[i % items.length], px, py + Math.sin(t * 3 + i) * 1.5, 3, m.states[i]);
+    });
+    x.fillStyle = "#fff"; x.font = "bold 16px monospace"; x.textAlign = "center"; x.textBaseline = "middle";
+    x.fillText(m.allDone ? "CLEAR!" : "GAME ON!", 110, 26); x.textAlign = "left";
+    for (let i = 0; i < 3; i++) arcSpr(x, ARC_S.heart, { R: "#ff4fa3", W: "#ff4fa3" }, 18 + i * 14, 26, 2);
+    x.save(); x.translate(194, 24 + Math.sin(t * 4) * 2);
+    x.fillStyle = "#ffd23f"; x.beginPath(); x.moveTo(0, -10); x.lineTo(6, 4); x.lineTo(-6, 4); x.fill();
+    x.fillStyle = "#ff4fa3"; x.fillRect(-4, 4, 8, 4); x.fillStyle = "#ff7a2f"; x.fillRect(-2, 8, 4, 3 + (Math.sin(t * 20) + 1) * 2); x.restore();
+    if (m.allDone) arcHero(x, t, 172, 26);
+    arcChaser(x, t, m, { G: "#38e07b", H: "#1f9e52", L: "#38e07b" }, "#ffd23f", "#000");
+  },
+  // 3. 블록 점프: 파란 하늘, 눈 달린 구름, ? 블록을 밟고 성까지
+  block(x, t, m) {
+    const { pts, H } = m;
+    const g = x.createLinearGradient(0, 0, 0, H); g.addColorStop(0, "#4f86e8"); g.addColorStop(1, "#a9d0ff"); x.fillStyle = g; x.fillRect(0, 0, ARC_W, H);
+    const cloud = (cx, cy) => {
+      x.fillStyle = "#fff"; x.beginPath(); x.arc(cx - 10, cy, 9, 0, 7); x.arc(cx + 2, cy - 5, 11, 0, 7); x.arc(cx + 14, cy, 8, 0, 7); x.fill();
+      x.fillStyle = "#222"; x.fillRect(cx - 1, cy - 6, 2, 5); x.fillRect(cx + 5, cy - 6, 2, 5);
+    };
+    for (let y = 100, k = 0; y < H - 120; y += 120, k++) cloud((k % 2 ? 190 : 30) + Math.sin(t * 0.5 + k) * 5, y);
+    x.fillStyle = "#7fd37a"; x.fillRect(166, H - 88, 30, 60); x.fillStyle = "#f0b98a"; x.fillRect(184, H - 66, 40, 38);
+    [[20, H - 28, 22], [48, H - 28, 16]].forEach(([a, b, r]) => {
+      x.fillStyle = "#22a33a"; x.beginPath(); x.arc(a, b, r, Math.PI, 0); x.fill();
+      x.fillStyle = "#111"; x.fillRect(a - 4, b - r + 7, 2, 4); x.fillRect(a + 3, b - r + 7, 2, 4);
+    });
+    x.fillStyle = "#c97a4a"; x.fillRect(0, H - 28, ARC_W, 28);
+    x.fillStyle = "#a95f35"; for (let k = -10; k < ARC_W; k += 10) { x.beginPath(); x.moveTo(k, H); x.lineTo(k + 6, H); x.lineTo(k + 14, H - 24); x.lineTo(k + 8, H - 24); x.fill(); }
+    x.fillStyle = "#8a4a22"; x.fillRect(0, H - 28, ARC_W, 3);
+    pts.forEach(([px, py], i) => {
+      const st = m.states[i], by = py + 12;
+      x.fillStyle = st === "done" ? "#b0703a" : st === "locked" ? "rgba(240,190,60,.45)" : st === "wrong" ? "#e2614d" : "#f6be2c";
+      x.strokeStyle = "#5a3a10"; x.lineWidth = 2; arcRR(x, px - 13, by, 26, 22, 3); x.fill(); x.stroke();
+      x.fillStyle = st === "done" ? "#8a5428" : "#fff3c2"; [[3, 3], [20, 3], [3, 16], [20, 16]].forEach(([a, b]) => x.fillRect(px - 13 + a, by + b, 3, 3));
+      if (i === m.hero) return arcHero(x, t, px, py);
+      if (st === "done") { arcSpr(x, i % 2 ? ARC_S.mush : ARC_S.coin, ARC_PAL, px, py + Math.sin(t * 4 + i) * 2, 2); arcMark(x, px + 3, by + 8, "done"); return; }
+      x.fillStyle = st === "wrong" ? "#fff" : "#7a4f12"; x.font = "bold 15px sans-serif"; x.textAlign = "center"; x.textBaseline = "middle";
+      x.fillText(st === "wrong" ? "!" : "?", px, by + 12); x.textAlign = "left";
+      if (st === "locked") arcSpr(x, ARC_S.lock, { K: "#2b2b2b", Y: "#ffd23f" }, px + 12, by + 2, 2);
+    });
+    x.fillStyle = "#e9e2f5"; x.fillRect(84, 26, 52, 28); x.fillStyle = "#f27aa0";
+    [[84, 16], [102, 8], [120, 16]].forEach(([a, b]) => { x.fillRect(a, b, 16, 12); x.beginPath(); x.moveTo(a - 2, b); x.lineTo(a + 8, b - 10); x.lineTo(a + 18, b); x.fill(); });
+    x.fillStyle = "#7a5a3a"; x.fillRect(104, 40, 12, 14);
+    x.fillStyle = "#444"; x.fillRect(154, 8, 2, 46); x.fillStyle = "#e2483d"; x.beginPath(); x.moveTo(156, 8); x.lineTo(172, 13 + Math.sin(t * 5) * 2); x.lineTo(156, 18); x.fill();
+    if (m.allDone) arcHero(x, t, 60, 44);
+    arcChaser(x, t, m, {}, "#fff", "#a95f35");
+  },
+  // 4. 겨울 숲: 눈 내리는 밤, 눈길 따라 불 켜진 오두막으로
+  winter(x, t, m) {
+    const { pts, H } = m, items = ["snowman", "mitten", "gift", "lantern", "cocoa"];
+    const g = x.createLinearGradient(0, 0, 0, 160); g.addColorStop(0, "#2a3f7a"); g.addColorStop(1, "#6f8fc6"); x.fillStyle = g; x.fillRect(0, 0, ARC_W, H);
+    const tree = (cx, by, h, c) => { x.fillStyle = c; for (let k = 0; k < 4; k++) { const w = h * (0.55 - k * 0.1), y = by - k * h * 0.22; x.beginPath(); x.moveTo(cx - w / 2, y); x.lineTo(cx, y - h * 0.4); x.lineTo(cx + w / 2, y); x.fill(); } };
+    [[20, 140, 90], [62, 130, 80], [178, 140, 95], [212, 130, 70]].forEach(([a, b, h]) => tree(a, b, h, "#1d3b3a"));
+    x.fillStyle = "#e6eef9"; x.beginPath(); x.moveTo(0, 140); x.quadraticCurveTo(110, 120, ARC_W, 140); x.lineTo(ARC_W, H); x.lineTo(0, H); x.fill();
+    for (let y = 230, k = 0; y < H - 40; y += 95, k++) tree(k % 2 ? 208 : 12, y, 62, "#24524c");
+    x.lineCap = "round"; x.strokeStyle = "#c3d3ea"; x.lineWidth = 22; arcTrail(x, m); x.stroke();
+    x.strokeStyle = "#f7fbff"; x.lineWidth = 16; arcTrail(x, m); x.stroke(); x.lineCap = "butt";
+    x.fillStyle = "#9fb3d4";
+    for (let i = 0; i < Math.min(m.hero, pts.length - 1); i++) { const [a, b] = pts[i], [c, d] = pts[i + 1]; for (let k = 1; k < 4; k++) { x.beginPath(); x.ellipse(a + ((c - a) * k) / 4 + (k % 2 ? 3 : -3), b + ((d - b) * k) / 4, 2, 3, 0, 0, 7); x.fill(); } }
+    x.fillStyle = "#6b4a3a"; x.fillRect(80, 36, 60, 34); x.fillStyle = "#f4f8ff"; x.beginPath(); x.moveTo(72, 38); x.lineTo(110, 12); x.lineTo(148, 38); x.fill();
+    const lg = x.createRadialGradient(110, 54, 2, 110, 54, 40); lg.addColorStop(0, "rgba(255,220,140,.9)"); lg.addColorStop(1, "rgba(255,220,140,0)");
+    x.fillStyle = lg; x.fillRect(60, 6, 100, 100); x.fillStyle = "#ffd98a"; x.fillRect(100, 46, 20, 16); x.fillStyle = "#6b4a3a"; x.fillRect(109, 46, 2, 16);
+    pts.forEach(([px, py], i) => {
+      x.fillStyle = "rgba(80,100,140,.18)"; x.beginPath(); x.ellipse(px, py + 11, 12, 3, 0, 0, 7); x.fill();
+      if (i === m.hero) return arcHero(x, t, px, py, true);
+      arcItem(x, items[i % items.length], px, py, 2, m.states[i]);
+    });
+    for (let i = 0; i < 70; i++) { const sp = 10 + (i % 5) * 6, yy = (i * 37 + t * sp) % H, xx = (i * 53 + Math.sin(t + i) * 8) % ARC_W; x.fillStyle = i % 7 ? "rgba(255,255,255,.85)" : "rgba(255,240,200,.95)"; x.beginPath(); x.arc(xx, yy, i % 7 ? 1.3 : 2.4, 0, 7); x.fill(); }
+    if (m.allDone) arcHero(x, t, 150, 62, true);
+    arcChaser(x, t, m, { G: "#7f97c4", H: "#5a6f9a", L: "#7f97c4" }, "rgba(255,255,255,.92)", "#2a3f7a", true);
+  },
+};
+function arcDrawMap(x, t, m) { ARC_DRAW[m.th.key](x, t, m); }
+// 과목 카드 위의 작은 그림: 같은 장소에서 공룡이 루미를 쫓는 장면
+function arcDrawThumb(x, t, th) {
+  const W = 150, Hh = 64, k = th.key;
+  if (k === "block" || k === "winter") { const g = x.createLinearGradient(0, 0, 0, Hh); g.addColorStop(0, k === "block" ? "#4f86e8" : "#2a3f7a"); g.addColorStop(1, k === "block" ? "#a9d0ff" : "#6f8fc6"); x.fillStyle = g; }
+  else x.fillStyle = th.bg;
+  x.fillRect(0, 0, W, Hh);
+  if (k === "retro") {
+    for (let i = 0; i < 18; i++) { x.fillStyle = Math.floor(t * 3 + i) % 4 ? "#3a3290" : "#a69bff"; x.fillRect((i * 37) % W, (i * 23) % 50, 2, 2); }
+    x.fillStyle = "#ff6fb0"; x.fillRect(0, 54, W, 6);
+    x.fillStyle = "#7de2ff"; x.fillRect(118, 14, 2, 40); x.fillRect(128, 14, 2, 40); for (let j = 18; j < 54; j += 6) x.fillRect(118, j, 12, 2);
+    x.strokeStyle = "#4dff9a"; x.lineWidth = 2; x.beginPath(); x.arc(140, 12 + Math.sin(t * 2) * 2, 8, 0, 7); x.stroke();
+  }
+  if (k === "oldgame") {
+    const cols = ["#ff4fa3", "#ffd23f", "#3fd2ff", "#38e07b"];
+    for (let i = 0; i < 14; i++) { x.fillStyle = cols[i % 4]; x.fillRect((i * 41) % W, (i * 17) % 44, 2, 2); }
+    x.strokeStyle = "#3fd2ff"; x.lineWidth = 2; x.beginPath(); x.moveTo(0, 54); x.lineTo(W, 54); x.moveTo(0, 60); x.lineTo(W, 60); x.stroke();
+    arcSpr(x, ARC_S.star, ARC_PAL, 132, 22 + Math.sin(t * 3) * 2, 2);
+  }
+  if (k === "block") {
+    x.fillStyle = "#c97a4a"; x.fillRect(0, 54, W, 10);
+    x.fillStyle = "#f6be2c"; x.strokeStyle = "#5a3a10"; x.lineWidth = 2; arcRR(x, 118, 10, 22, 20, 3); x.fill(); x.stroke();
+    x.fillStyle = "#7a4f12"; x.font = "bold 13px sans-serif"; x.textAlign = "center"; x.textBaseline = "middle"; x.fillText("?", 129, 21); x.textAlign = "left";
+    x.fillStyle = "#1fae3a"; x.fillRect(102, 38, 14, 16); x.fillRect(100, 34, 18, 6);
+  }
+  if (k === "winter") {
+    x.fillStyle = "#e6eef9"; x.fillRect(0, 50, W, 14);
+    x.fillStyle = "#24524c"; x.beginPath(); x.moveTo(120, 52); x.lineTo(132, 14); x.lineTo(144, 52); x.fill();
+    for (let i = 0; i < 16; i++) { x.fillStyle = "#fff"; x.beginPath(); x.arc((i * 29) % W, (i * 13 + t * 12) % Hh, 1.2, 0, 7); x.fill(); }
+  }
+  const pal = { retro: {}, block: {}, oldgame: { G: "#38e07b", H: "#1f9e52", L: "#38e07b" }, winter: { G: "#7f97c4", H: "#5a6f9a", L: "#7f97c4" } }[k];
+  arcSpr(x, ARC_S.dino, { ...ARC_PAL, ...pal }, 28, 40 - Math.abs(Math.sin(t * 6)) * 2, 2);
+  arcSpr(x, ARC_S.hero, ARC_PAL, 78, 44 + Math.sin(t * 5), 2);
+}
+// 화면에 있는 탈출 지도 그림(canvas)을 그리고, 움직임을 켜 두었으면 계속 움직인다
+let arcRaf = 0;
+function startArcade() {
+  cancelAnimationFrame(arcRaf);
+  const items = [...document.querySelectorAll("canvas[data-arc]")].map((cv) => {
+    const map = cv.dataset.arc === "map", lw = map ? ARC_W : 150;
+    const m = map ? arcMap(cv.dataset.c) : null, th = arcTheme(cv.dataset.c);
+    const r = cv.getBoundingClientRect(), dpr = Math.min(2, window.devicePixelRatio || 1);
+    cv.width = Math.max(1, Math.round(r.width * dpr)); cv.height = Math.max(1, Math.round(r.height * dpr));
+    const x = cv.getContext("2d"), sc = (r.width / lw) * dpr;
+    x.setTransform(sc, 0, 0, sc, 0, 0);
+    return { cv, draw: (tt) => (map ? arcDrawMap(x, tt, m) : arcDrawThumb(x, tt, th)) };
+  });
+  if (!items.length) return;
+  const still = ui.lumiStill || window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+  items.forEach((o) => o.draw(0));
+  if (still) return;
+  let last = 0;
+  const tick = (ms) => {
+    if (!items[0].cv.isConnected) return;
+    if (ms - last > 50) { last = ms; items.forEach((o) => o.draw(ms / 1000)); }
+    arcRaf = requestAnimationFrame(tick);
+  };
+  arcRaf = requestAnimationFrame(tick);
+}
+function viewStage(catId) {
+  const m = arcMap(catId);
+  const done = m.list.filter(mastered).length;
+  const word = { done: "완료", wrong: "틀림", doing: "진행 중", open: "시작", locked: "잠김" };
   return `${tabHead("공부")}
   <main class="scroll">
-    <div class="stage-head"><button class="icon-btn" data-act="stage-close" aria-label="스테이지 목록으로">${ICON.back}</button><div><h2>${esc(catName(catId))}</h2><span class="hint">개념 ${done}/${list.length} 완료</span></div></div>
-    <section class="card path">
-      ${list.map((c, i) => {
-        const st = nodeState(list, i);
-        return `<div class="node-row ${i % 2 ? "r" : "l"}">
-          <button class="node ${st}" data-act="${st === "locked" ? "node-locked" : "concept-open"}" data-id="${c.id}" aria-label="${esc(c.term)} ${({ done: "완료", wrong: "틀림", doing: "진행 중", open: "시작", locked: "잠김" })[st]}">
-            <span class="nd">${st === "doing" ? `${curLv(c) + 1}단계` : ICONS[st]}</span></button>
-          <span class="node-t"><b>${esc(c.term)}</b><small>${st === "locked" ? "앞 개념을 먼저 풀어요" : esc(c.short)}</small></span>
-        </div>`;
+    <div class="stage-head"><button class="icon-btn" data-act="stage-close" aria-label="탈출 지도 목록으로">${ICON.back}</button><div><h2>${esc(catName(catId))}</h2><span class="hint">개념 ${done}/${m.n} 완료 · 아래에서 위로 올라가요</span></div></div>
+    <div class="arcade" style="aspect-ratio:${ARC_W}/${m.H};background:${m.th.bg};border-color:${m.th.gir}">
+      <canvas data-arc="map" data-c="${catId}" aria-hidden="true"></canvas>
+      ${m.list.map((c, i) => {
+        const st = m.states[i], [px, py] = m.pts[i];
+        const tag = i === m.hero ? `지금 여기${st === "doing" ? ` · ${curLv(c) + 1}단계` : ""}` : st === "doing" ? `${curLv(c) + 1}단계` : st === "wrong" ? "다시 풀기" : "";
+        return `<button class="arc-node ${px > 110 ? "r" : ""} ${st}" style="left:${((px / ARC_W) * 100).toFixed(2)}%;top:${((py / m.H) * 100).toFixed(2)}%" data-act="${st === "locked" ? "node-locked" : "concept-open"}" data-id="${c.id}" aria-label="${esc(c.term)} ${word[st]}">
+          <span class="hit"></span><span class="lb">${tag ? `<small>${tag}</small>` : ""}${esc(c.term)}</span></button>`;
       }).join("")}
-    </section>
+    </div>
+    <p class="foot">앞 개념의 1단계를 맞히면 다음 칸이 열려요. 틀린 칸이 있으면 공룡이 한 칸 다가와요.</p>
   </main>`;
 }
 
@@ -3458,6 +3745,7 @@ function render() {
   document.body.style.overflow = ui.modal ? "hidden" : "";
   window.scrollTo(0, y);
   if (focusId) document.getElementById(focusId)?.focus();
+  startArcade();
 }
 function go(hash) {
   if (location.hash === hash || (!location.hash && hash === "#home")) { render(); window.scrollTo(0, 0); }
