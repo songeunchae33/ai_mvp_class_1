@@ -12,7 +12,7 @@ colors:
   green-20: oklch(0.224 0.046 164.9)   # #012216
   green-30: oklch(0.342 0.075 160.6)   # #02442B
   green-40: oklch(0.500 0.112 159.8)   # #04764C
-  green-50: oklch(0.648 0.149 158.8)   # #06A96C — green-normal · background-highlight 가 가리키는 단
+  green-50: oklch(0.648 0.149 158.8)   # #06A96C — green-normal 이 가리키는 단
   green-60: oklch(0.678 0.143 161.5)   # #1FB27B — 다크 green-normal
   green-70: oklch(0.740 0.122 165.3)   # #51C398
   green-80: oklch(0.846 0.076 168.9)   # #9BDDC4
@@ -56,8 +56,8 @@ colors:
   deep-blue-20: oklch(0.257 0.061 257.8)   # #0F2340
   deep-blue-30: oklch(0.355 0.092 258.0)   # #1A3B6B
   deep-blue-40: oklch(0.444 0.122 258.3)   # #245296
-  deep-blue-50: oklch(0.571 0.164 258.3)   # #3375D6
-  deep-blue-60: oklch(0.612 0.147 257.8)   # #4783DA
+  deep-blue-50: oklch(0.571 0.164 258.3)   # #3375D6 — 주 색 · deep-blue-normal · background-highlight 가 가리키는 단
+  deep-blue-60: oklch(0.612 0.147 257.8)   # #4783DA — 다크 주 색(dark-deep-blue-normal)
   deep-blue-70: oklch(0.694 0.112 258.0)   # #709EE2
   deep-blue-80: oklch(0.826 0.062 257.5)   # #ADC8EF
   deep-blue-90: oklch(0.912 0.031 258.9)   # #D6E3F7
@@ -598,12 +598,12 @@ elevation:
   shadow-lg: 0px 8px 32px oklch(0.000 0.000 0.0 / 0.1)   # #0000001a · 화면 사용 0건
 components:
   button-primary:
-    backgroundColor: "{colors.green-normal}"
+    backgroundColor: "{colors.deep-blue-normal}"
     rounded: 16px   # ≈ 렌더 실측 · 클래스 미확인
     height: 56px   # ≈ 렌더 실측
   button-secondary:
-    backgroundColor: "{colors.green-weak}"
-    textColor: "{colors.green-strong}"
+    backgroundColor: "{colors.deep-blue-weak}"
+    textColor: "{colors.deep-blue-strong}"
     rounded: 12px   # ≈ 렌더 실측 · 클래스 미확인
     height: 48px   # ≈ 렌더 실측
   button-text:
@@ -614,7 +614,7 @@ components:
   tab-segment-active:
     textColor: "{colors.text-normal}"
   badge-count:
-    backgroundColor: "{colors.green-normal}"
+    backgroundColor: "{colors.deep-blue-normal}"
     typography: "{typography.c10}"
     rounded: 999px
   pill-red:
@@ -641,7 +641,7 @@ components:
     rounded: 16px   # 임의값 rounded-[16px] — 토큰 이름을 거치지 않는다
     padding: 16px
   banner-highlight:
-    backgroundColor: "{colors.green-bg}"
+    backgroundColor: "{colors.deep-blue-bg}"
     rounded: 12px   # 임의값 rounded-[12px] — 토큰 이름을 거치지 않는다
     padding: 20px
   notice-box:
@@ -663,13 +663,13 @@ components:
 
 # 뱅크샐러드 — design.md
 
-뱅크샐러드는 흰 바탕과 쿨 그레이 글자 위에 초록 `oklch(0.648 0.149 158.8)` 하나로 주 버튼과 강조 금액을 짚는 자산관리·금융상품 비교 서비스다 [src:1] [src:3] [src:9].
+뱅크샐러드는 흰 바탕과 쿨 그레이 글자 위에 파랑 `oklch(0.571 0.164 258.3)` 하나로 주 버튼과 강조 금액을 짚는 자산관리·금융상품 비교 서비스다 [src:1] [src:3] [src:9].
 
 ## Brand & Style
 
 뱅크샐러드는 (주)뱅크샐러드가 운영하는 자산관리·금융상품 비교 서비스로, App Store 카테고리는 금융이고 부제는 「금융을 넘어 건강 자산까지」다 [src:9] [src:21]. 웹 GNB 가 카드·대출·예적금에서 무료 건강 검사·건강 보험·자동차보험·머니피드까지 일곱 라벨을 늘어놓듯, 화면이 다루는 범위는 금융 비교에서 건강 자산으로 이어진다 [src:2].
 
-시각 톤은 절제된 금융 화면이다. 흰 바탕에 쿨 그레이 글자(`{colors.text-normal}` · `{colors.text-neutral}`)를 깔고, 유채색은 초록 `{colors.green-normal}` 하나가 주 버튼·강조 금액·개수 배지를 맡는다 [src:1] [src:3]. 회색 23단은 모든 단에서 파랑 성분이 빨강 성분 이상인 쿨 그레이라, 화면 전체가 살짝 푸른 기를 띤다 [src:1]. 숫자는 전역 `font-feature-settings: "tnum","ss01","ss07"` 로 고정폭이 기본이어서 금액·금리가 세로로 줄을 맞춘다 [src:1].
+시각 톤은 절제된 금융 화면이다. 흰 바탕에 쿨 그레이 글자(`{colors.text-normal}` · `{colors.text-neutral}`)를 깔고, 유채색은 파랑 `{colors.deep-blue-normal}` 하나가 주 버튼·강조 금액·개수 배지를 맡는다 [src:1] [src:3]. 회색 23단은 모든 단에서 파랑 성분이 빨강 성분 이상인 쿨 그레이라, 화면 전체가 살짝 푸른 기를 띤다 [src:1]. 숫자는 전역 `font-feature-settings: "tnum","ss01","ss07"` 로 고정폭이 기본이어서 금액·금리가 세로로 줄을 맞춘다 [src:1].
 
 ≈ 서비스 화면(건강 [src:4] · 대출 [src:3] · 카드 [src:5])은 넓은 데스크톱에서도 좁은 단일 열이다 — 건강·대출은 약 375px, 카드는 약 767px 폭이 1440 캔버스 가운데 놓인다(캡처 실측 · 공개 출처 없음 — 인용은 화면 위치만 가리킨다). ≈ 카드는 그림자 대신 연회색 면과 1px 선으로 나뉜다(렌더 관찰 — 면·선 토큰은 [src:1]).
 
@@ -683,7 +683,7 @@ components:
 
 ## Colors
 
-값의 정본은 홈이 불러오는 운영 CSS 의 `:root` · `:root[class~=dark]` 블록이고, 변수 값은 공백으로 구분한 R G B 숫자다 [src:1]. 색은 세 층이다 — 원시 `--base-color-*` 16계열 174개, 그 원시를 하나씩 가리키는 시맨틱 `--semantic-color-*` 112개(색 110 + 불투명도 수 2), 홈 마케팅 셸이 쓰는 옛 `--color-*` 87개 [src:1]. 다크 값은 공통 셸 번들의 `:root[class~=dark]` 에만 있고, 건강·대출·자동차보험·고객안전 앱 번들에는 다크 블록이 없다(2026-10-25 스냅숏 대조) [src:1] [src:15] [src:16] [src:17] [src:18]. 홈의 인라인 스크립트는 쿠키 `banksalad-application-name` 이 있고 `prefers-color-scheme: dark` 일 때만 `html` 에 `dark` 클래스를 붙이므로, 웹 방문자에게는 다크가 켜지지 않는다 — 앱 웹뷰에서만 켜지는 것으로 보이지만 앱이 그 쿠키를 심는다는 것은 추정이다 [src:2]. 그래서 frontmatter 의 `dark-` 행은 발행된 다크 짝이되, 웹에서 그것이 켜지는 경로는 이 조건 하나다. 대표색을 지정한 공개 문서는 없다. 정황상 대표색은 `{colors.green-50}` 이다 — `green-normal`·`background-highlight` 가 모두 이 원시를 가리키고 [src:1] 서비스 화면 주 버튼이 `green-normal` 채움이다 [src:3] [src:4]. 발행된 지정이 아니라 frontmatter 에 `primary` 별칭은 두지 않았다. 옛 층 `{colors.legacy-green-100}` 과 앱 아이콘의 초록 `oklch(0.747 0.176 157.7)` 은 이 값과 다르다 [src:1] [src:10].
+값의 정본은 홈이 불러오는 운영 CSS 의 `:root` · `:root[class~=dark]` 블록이고, 변수 값은 공백으로 구분한 R G B 숫자다 [src:1]. 색은 세 층이다 — 원시 `--base-color-*` 16계열 174개, 그 원시를 하나씩 가리키는 시맨틱 `--semantic-color-*` 112개(색 110 + 불투명도 수 2), 홈 마케팅 셸이 쓰는 옛 `--color-*` 87개 [src:1]. 다크 값은 공통 셸 번들의 `:root[class~=dark]` 에만 있고, 건강·대출·자동차보험·고객안전 앱 번들에는 다크 블록이 없다(2026-10-25 스냅숏 대조) [src:1] [src:15] [src:16] [src:17] [src:18]. 홈의 인라인 스크립트는 쿠키 `banksalad-application-name` 이 있고 `prefers-color-scheme: dark` 일 때만 `html` 에 `dark` 클래스를 붙이므로, 웹 방문자에게는 다크가 켜지지 않는다 — 앱 웹뷰에서만 켜지는 것으로 보이지만 앱이 그 쿠키를 심는다는 것은 추정이다 [src:2]. 그래서 frontmatter 의 `dark-` 행은 발행된 다크 짝이되, 웹에서 그것이 켜지는 경로는 이 조건 하나다. 대표색을 지정한 공개 문서는 없다. 정황상 대표색은 `{colors.deep-blue-50}` 이다 — `deep-blue-normal`·`background-highlight` 가 모두 이 원시를 가리키고 [src:1] 서비스 화면 주 버튼이 `deep-blue-normal` 채움이다 [src:3] [src:4]. 발행된 지정이 아니라 frontmatter 에 `primary` 별칭은 두지 않았다. 옛 층 `{colors.legacy-green-100}` 과 앱 아이콘의 초록 `oklch(0.747 0.176 157.7)` 은 이 값과 다르다 [src:1] [src:10].
 
 ### 원시 — 16계열 174개
 
@@ -701,7 +701,7 @@ components:
 | strong | 40 | 70 |
 | heavy | 30 | 80 |
 
-gray 만 다크 bg 가 25단이라 `{colors.dark-gray-bg}` 는 `{colors.gray-25}` 를 가리킨다 [src:1]. 화면에서 쓰는 슬롯은 초록 셋(`{colors.green-normal}` 주 버튼 · `{colors.green-weak}` 보조 버튼 바탕 · `{colors.green-strong}` 보조 버튼 글자), 상태 알약의 red · light-blue weak/strong, 안내 상자의 `{colors.mustard-bg}`, 이자지원금 배너의 `{colors.green-bg}`, 대출 요약 칩의 `{colors.gray-bg}`, 숫자 칩의 `{colors.gray-weak}` 다 [src:1] [src:19].
+gray 만 다크 bg 가 25단이라 `{colors.dark-gray-bg}` 는 `{colors.gray-25}` 를 가리킨다 [src:1]. 화면에서 쓰는 슬롯은 파랑 셋(`{colors.deep-blue-normal}` 주 버튼 · `{colors.deep-blue-weak}` 보조 버튼 바탕 · `{colors.deep-blue-strong}` 보조 버튼 글자), 상태 알약의 red · light-blue weak/strong, 안내 상자의 `{colors.mustard-bg}`, 이자지원금 배너의 `{colors.deep-blue-bg}`, 대출 요약 칩의 `{colors.gray-bg}`, 숫자 칩의 `{colors.gray-weak}` 다 [src:1] [src:19].
 
 ### 시맨틱 — 역할 30개
 
@@ -720,7 +720,7 @@ gray 만 다크 bg 가 25단이라 `{colors.dark-gray-bg}` 는 `{colors.gray-25}
 | `background-layer1` | `{colors.gray-100}` | `{colors.gray-23}` |
 | `background-layer2` | `{colors.gray-95}` | `{colors.gray-25}` |
 | `background-layer3` | `{colors.gray-92}` | `{colors.gray-27}` |
-| `background-highlight` | `{colors.green-50}` × 불투명도 0.04 | 같은 원시 × 0.04 — 불투명도를 거쳐 참조 행 없음 |
+| `background-highlight` | `{colors.deep-blue-50}` × 불투명도 0.04 | 같은 원시 × 0.04 — 불투명도를 거쳐 참조 행 없음 |
 | `background-dim` | `{colors.gray-10}` × 불투명도 0.56 | 같은 원시 × 0.72 — 불투명도를 거쳐 참조 행 없음 |
 | `line-normal` | `{colors.gray-91}` | `{colors.gray-27}` |
 | `line-strong` | `{colors.gray-88}` | `{colors.gray-32}` |
@@ -819,7 +819,7 @@ home-hero-pill        18px / 21px (500)
 홈 히어로 알약        0 4px 9px  oklch(0.000 0.000 0.0 / 0.15)
 홈 대출 버튼·캐러셀 점 0 2px 8px  oklch(0.000 0.000 0.0 / 0.1)
 위쪽 그림자 유틸      0px -3px 4px 0px oklch(0.000 0.000 0.0 / 0.12)   고정 CTA 에 쓰는지는 추정
-초록 글로우 유틸      0 4px 24px 0 + green-normal                     유틸 정의만 확인
+파랑 글로우 유틸      0 4px 24px 0 + deep-blue-normal                     유틸 정의만 확인
 ```
 
 ### Motion
@@ -849,17 +849,17 @@ prefers-reduced-motion 규칙 0건
 ### button-primary
 
 ```text
-배경       green-normal          글자  흰색 (토큰 미확인 · gray-100 값만 같음)
+배경       deep-blue-normal      글자  흰색 (토큰 미확인 · gray-100 값만 같음)
 타입       16 / 24 · 700 · 자간 -0.08px (b16 값만 같음 + font-bold)
 반경       16 (rounded-medium 값만 같음)   패딩  16 20   gap 4
 높이       ≈ 56
 클래스     relative inline-flex items-center justify-center gap-[4px] truncate font-bold
 ```
 
-`{colors.green-normal}` 채움 위 흰 글자다 [src:1]. 크기·행간·자간은 `{typography.b16}` 과, 반경은 `{rounded.medium}` 과 값만 같고 굵기 700 은 `font-bold` 다. 대출 사전조회 「최저금리 대출 찾기」와 건강보험 하단 CTA 가 이 버튼이다 [src:3] [src:4]. 흰 글자의 대비는 약 3.04:1 로 4.5:1 에 못 미친다(Known Gaps). 다크에서는 `{colors.dark-green-normal}` 로 바뀐다 [src:1].
+`{colors.deep-blue-normal}` 채움 위 흰 글자다 [src:1]. 크기·행간·자간은 `{typography.b16}` 과, 반경은 `{rounded.medium}` 과 값만 같고 굵기 700 은 `font-bold` 다. 대출 사전조회 「최저금리 대출 찾기」와 건강보험 하단 CTA 가 이 버튼이다 [src:3] [src:4]. 흰 글자의 대비는 약 4.51:1 로 4.5:1 을 넘는다. 다크에서는 `{colors.dark-deep-blue-normal}` 로 바뀐다 [src:1].
 
 ```tsx
-// 채움 {colors.green-normal} · 반경·글자는 {rounded.medium} · {typography.b16} 과 값만 같음 + 700
+// 채움 {colors.deep-blue-normal} · 반경·글자는 {rounded.medium} · {typography.b16} 과 값만 같음 + 700
 <Button variant="primary" fullWidth>
   확인하기
 </Button>
@@ -872,12 +872,12 @@ prefers-reduced-motion 규칙 0건
 ### button-secondary
 
 ```text
-배경  green-weak    글자  green-strong
+배경  deep-blue-weak    글자  deep-blue-strong
 타입  16 / 24 · 700 (b16 값만 같음 + font-bold)
 반경  12 (rounded-small 값만 같음)   패딩  12 16   높이 ≈ 48
 ```
 
-`{colors.green-weak}` 바탕에 `{colors.green-strong}` 글자로 대비 약 4.57:1 이다 [src:1]. 건강보험의 「건강정보 연결하고 확인하기」가 이 버튼이다 [src:4].
+`{colors.deep-blue-weak}` 바탕에 `{colors.deep-blue-strong}` 글자로 대비 약 5.94:1 이다 [src:1]. 건강보험의 「건강정보 연결하고 확인하기」가 이 버튼이다 [src:4].
 
 ### button-text
 
@@ -898,7 +898,7 @@ prefers-reduced-motion 규칙 0건
 막대    2px · 이동 곡선 cubic-bezier(.7,0,.4,1)
 ```
 
-비활성 탭은 `{colors.text-alternative}` 다 [src:1]. 건강보험 「내 보험 / 보장분석 / 보험청구」와 대출 허브 「MY 대출 / 대출 찾기」가 이 탭이다 [src:4] [src:19]. 카드 이벤트 탭은 다른 변종으로, 활성 탭의 개수를 `{colors.legacy-green-100}` 값으로 칠하고 위에 초록 알약 배지를 얹는다 [src:5].
+비활성 탭은 `{colors.text-alternative}` 다 [src:1]. 건강보험 「내 보험 / 보장분석 / 보험청구」와 대출 허브 「MY 대출 / 대출 찾기」가 이 탭이다 [src:4] [src:19]. 카드 이벤트 탭은 다른 변종으로, 활성 탭의 개수를 `{colors.legacy-green-100}` 값으로 칠하고 위에 파랑 알약 배지를 얹는다 [src:5].
 
 ### tab-segment-active
 
@@ -907,12 +907,12 @@ prefers-reduced-motion 규칙 0건
 ### badge-count
 
 ```text
-배경  green-normal   글자  흰색 (토큰 미확인 · gray-100 값만 같음)
+배경  deep-blue-normal   글자  흰색 (토큰 미확인 · gray-100 값만 같음)
 타입  10 / 14 · 700 (text-c10 + font-bold)
 반경  999 (임의값 rounded-[999px])   패딩  1 4
 ```
 
-`{colors.green-normal}` 위 흰 글자의 작은 알약이다 [src:1]. 타입은 `{typography.c10}` 클래스에 `font-bold` 를 더한다(렌더 DOM 관찰).
+`{colors.deep-blue-normal}` 위 흰 글자의 작은 알약이다 [src:1]. 타입은 `{typography.c10}` 클래스에 `font-bold` 를 더한다(렌더 DOM 관찰).
 
 ### pill-red
 
@@ -936,7 +936,7 @@ weak 바탕 + strong 글자 규칙의 빨강 판이다 — `{colors.red-weak}` /
 타입  12 / 16 · 700 (text-c12 + font-bold)   반경  999   패딩  2 6
 ```
 
-같은 규칙의 파랑 판이다 — `{colors.light-blue-weak}` / `{colors.light-blue-strong}`, 대비 약 5.23:1 [src:1]. 보장분석의 「200만원 이득」 자리다 [src:4]. 같은 화면의 「충분」은 알약이 아니라 초록 글자다.
+같은 규칙의 파랑 판이다 — `{colors.light-blue-weak}` / `{colors.light-blue-strong}`, 대비 약 5.23:1 [src:1]. 보장분석의 「200만원 이득」 자리다 [src:4]. 같은 화면의 「충분」은 알약이 아니라 파랑 글자다.
 
 ### number-chip
 
@@ -967,11 +967,11 @@ weak 바탕 + strong 글자 규칙의 빨강 판이다 — `{colors.red-weak}` /
 ### banner-highlight
 
 ```text
-배경  green-bg   반경  12 (rounded-small 값만 같음)   패딩  20
-금액  16 · 700 · green-normal
+배경  deep-blue-bg   반경  12 (rounded-small 값만 같음)   패딩  20
+금액  16 · 700 · deep-blue-normal
 ```
 
-`{colors.green-bg}` 바탕에 금액만 `{colors.green-normal}` 로 짚는 배너로, 대출 허브의 「이자지원금 / 최대 40만원」 자리다 [src:1] [src:19].
+`{colors.deep-blue-bg}` 바탕에 금액만 `{colors.deep-blue-normal}` 로 짚는 배너로, 대출 허브의 「이자지원금 / 최대 40만원」 자리다 [src:1] [src:19].
 
 ### notice-box
 
@@ -1063,7 +1063,7 @@ footer             pb-104 pt-40 · md:max-w-[958px]
 
 **Do** 금액·금리·개수는 고정폭 숫자(`tnum`)로 쓴다 — 전역 기본값이 그렇고 `.font-no-tnum` 은 예외용이다 [src:1].
 
-**Do** 화면 하나의 유채색 액션은 `{colors.green-normal}` 하나로 모으고, 나머지 위계는 `{colors.text-normal}` · `{colors.text-neutral}` · `{colors.text-alternative}` 회색 사다리로 나눈다 — 서비스 화면 주 버튼·강조 금액이 이 초록이다 [src:3] [src:4].
+**Do** 화면 하나의 유채색 액션은 `{colors.deep-blue-normal}` 하나로 모으고, 나머지 위계는 `{colors.text-normal}` · `{colors.text-neutral}` · `{colors.text-alternative}` 회색 사다리로 나눈다 — 서비스 화면 주 버튼·강조 금액이 이 파랑이다 [src:3] [src:4].
 
 **Do** 서비스 카드의 깊이는 `{colors.background-layer2}` 면이나 `{colors.background-layer1}` + 1px `{colors.line-normal}` 로 만든다 — 그림자를 기본으로 깔지 않는다(발행 그림자 셋은 화면 사용 0건, 렌더 관찰).
 
@@ -1071,13 +1071,13 @@ footer             pb-104 pt-40 · md:max-w-[958px]
 
 **Do** 한글 줄바꿈은 `word-break: keep-all` 로 어절 단위를 지킨다 [src:1].
 
-**Don't** 대출 사전조회·보장분석·마이데이터 연동·자산 모아보기의 화면 흐름, 「뱅샐」 약칭과 「~하기 / ~받기」 이자지원금 카피, 준법감시인 심의필·대출모집법인 고지 문안을 가져오지 않는다 — 차용할 것은 초록 하나와 쿨 그레이, 평평한 면의 시각 처리다.
+**Don't** 대출 사전조회·보장분석·마이데이터 연동·자산 모아보기의 화면 흐름, 「뱅샐」 약칭과 「~하기 / ~받기」 이자지원금 카피, 준법감시인 심의필·대출모집법인 고지 문안을 가져오지 않는다 — 차용할 것은 파랑 하나와 쿨 그레이, 평평한 면의 시각 처리다.
 
 **Don't** `{rounded.lg}` 를 20px 로 쓰지 않는다 — 원형 50% 이고 20px 은 `{rounded.large}` 다 [src:1].
 
 **Don't** 옛 층과 원시를 이름으로 맞바꾸지 않는다 — `{colors.legacy-gray-100}` 은 진회색, `{colors.gray-100}` 은 흰색이다 [src:1].
 
-**Don't** 홈 셸 리터럴(`{colors.legacy-green-100}` 알약, 히어로 파스텔)을 서비스 화면 컴포넌트에 섞지 않는다 — 서비스 화면의 주 버튼은 `{colors.green-normal}` 이다 [src:3] [src:4].
+**Don't** 홈 셸 리터럴(`{colors.legacy-green-100}` 알약, 히어로 파스텔)을 서비스 화면 컴포넌트에 섞지 않는다 — 서비스 화면의 주 버튼은 `{colors.deep-blue-normal}` 이다 [src:3] [src:4].
 
 **Don't** `{colors.status-profit}` · `{colors.status-loss}` 에 상승·하락 의미를 단정해 붙이지 않는다 — 이름만으로 읽은 해석이고 쓰는 화면이 관측되지 않았다 [src:1].
 
@@ -1107,10 +1107,10 @@ footer             pb-104 pt-40 · md:max-w-[958px]
 
 ## Known Gaps
 
-- **대비 미달 5건(계산값)** — 주 버튼 흰 글자 / `{colors.green-normal}` 약 3.04:1, 홈 히어로 알약 흰 / `{colors.legacy-green-100}` 약 2.44:1, 숫자 칩 `{colors.gray-50}` / `{colors.gray-weak}` 약 2.72:1, 홈 대출 버튼 흰 / `oklch(0.630 0.155 258.4)` 약 3.53:1, 보조 글자 `{colors.text-alternative}` 가 라이트 `{colors.background-white}` 위 약 2.48:1 · 다크 `{colors.dark-text-alternative}` 가 `{colors.dark-background-white}` 위 약 2.56:1 · `{colors.dark-background-layer1}` 위 약 2.36:1 · `{colors.dark-background-layer2}` 위 약 2.13:1 로 4.5:1 에 못 미친다. 발행값을 그대로 기록했고 바꾸지 않았다 [src:1] [src:2].
+- **대비 미달 4건(계산값)** — 홈 히어로 알약 흰 / `{colors.legacy-green-100}` 약 2.44:1, 숫자 칩 `{colors.gray-50}` / `{colors.gray-weak}` 약 2.72:1, 홈 대출 버튼 흰 / `oklch(0.630 0.155 258.4)` 약 3.53:1, 보조 글자 `{colors.text-alternative}` 가 라이트 `{colors.background-white}` 위 약 2.48:1 · 다크 `{colors.dark-text-alternative}` 가 `{colors.dark-background-white}` 위 약 2.56:1 · `{colors.dark-background-layer1}` 위 약 2.36:1 · `{colors.dark-background-layer2}` 위 약 2.13:1 로 4.5:1 에 못 미친다. 발행값을 그대로 기록했고 바꾸지 않았다 [src:1] [src:2].
 - **다크 범위** — 다크 값은 셸 번들에만 있고 앱 번들 넷에는 다크 블록이 없으며, 웹 방문자에게는 켜지지 않는다 [src:1] [src:15] [src:16] [src:17] [src:18]. 옛 층 다크값은 frontmatter 에 실은 여섯(`white-900` · `gray-050` · `gray-100` · `gray-200` · `gray-400` · `gray-550`)과 `green-200`·`shadow-white-000`·`spacing-gray-000`·`black-000` 을 확인했고, 나머지 표는 뽑지 않았다 [src:1]. ≈ 홈 셸을 강제 다크로 렌더하면 히어로 파스텔은 다크값이 없어 그대로 남는다 — 제품 다크 화면이 아니다(캡처 관찰 · 공개 출처 없음).
 - **status 의미 미확인** — status-* 를 쓰는 화면이 관측되지 않았고, 보장분석의 파랑 금액이 `{colors.status-positive}` 인지 `{colors.light-blue-normal}` 인지는 값이 같아 가를 수 없다 [src:1] [src:4].
-- **미측정 컴포넌트** — 입력·체크·스위치·바텀시트·모달·토스트는 CSS 단서(`focus:border-green-strong`, `data-[checked]:bg-green-normal`, `focus-visible:ring-2`)만 있고 치수를 재지 않았다. `button-text` 의 얇은 테두리를 그리는 방식, 서브셋 woff2 가 `ss01` · `ss07` 을 실제로 담는지도 확인하지 못했다 [src:1].
+- **미측정 컴포넌트** — 입력·체크·스위치·바텀시트·모달·토스트는 CSS 단서(`focus:border-deep-blue-strong`, `data-[checked]:bg-deep-blue-normal`, `focus-visible:ring-2`)만 있고 치수를 재지 않았다. `button-text` 의 얇은 테두리를 그리는 방식, 서브셋 woff2 가 `ss01` · `ss07` 을 실제로 담는지도 확인하지 못했다 [src:1].
 - **출처 수명과 약관** — 토큰 CSS 는 빌드 해시 경로라 배포마다 바뀐다. 재감사 때는 www 홈이 불러오는 `--base-color` 정의 파일을 다시 찾는다 [src:1] [src:2]. 서비스 이용약관에는 화면·디자인 이용을 제한하는 이용자 대상 조항이 있고, 이 카탈로그에 적용되는지는 판단하지 않았다 [src:12].
 
 ## References

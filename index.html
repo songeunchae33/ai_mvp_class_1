@@ -663,10 +663,10 @@
   .bubble-onb b { color: var(--blue); }
 
   /* ═════ 디자인 견본(DESIGN.md): 홈부터. 글꼴은 그대로, 여러 화면이 같이 쓰는 모양은 같이 바뀜 ═════ */
-  /* 바탕 background-gray · 카드 layer1 · 글자 text-normal/neutral · 선 line-strong · 안쪽 면 layer3 · 주 색 green-strong(흰 글자 대비 4.5 이상) */
+  /* 바탕 background-gray · 카드 layer1 · 글자 text-normal/neutral · 선 line-strong · 안쪽 면 layer3 · 주 색 deep-blue-strong(흰 글자 대비 4.5 이상) */
   :root {
     --bg: #F6F7F9; --outer: #EBEEF2; --card: #FFFFFF; --ink: #272A30; --sub: #606874; --line: #E5E8ED;
-    --soft: #F2F3F6; --green: #04764C; --mint: #CDEEE2;
+    --soft: #F2F3F6; --green: #245296; --mint: #D6E3F7;
     --up: #B22E3B; --up-bg: #FCEBED; --down: #066098; --down-bg: #CEE7F7; --flat-bg: #EBEEF2; --radius: 16px;
   }
   .top, .page-head, .askbar, .searchwrap { background: rgba(246, 247, 249, 0.94) !important; }
@@ -684,7 +684,7 @@
   .mkt .add, .mkt.line .add { background: transparent !important; border: 1.5px dashed #D2D6DD !important; color: var(--sub); }
   .bubble, .home .bubble { background: var(--soft) !important; border-radius: 4px 12px 12px 12px !important; }
   .brief-line { background: var(--soft) !important; border-radius: 12px !important; }
-  .dot { background: #D2D6DD; } .dot.on { background: #06A96C !important; }
+  .dot { background: #D2D6DD; } .dot.on { background: #3375D6 !important; }
 
   /* 글자 크기 */
   .sec-title h2, .home .sec-title h2 { font-size: 18px; line-height: 26px; }
@@ -857,14 +857,14 @@
   .lv-top b { font-size: 22px; color: #1E40AF; }
   .lv-title { font-weight: 700; flex: 1; }
   .xpbar { height: 10px; border-radius: 999px; background: #E9EDF5; overflow: hidden; }
-  .xpbar i { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, #10B981, #1E40AF); }
+  .xpbar i { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, #3375D6, #245296); }
   .mission { display: flex; flex-direction: column; gap: 8px; }
   .msn-dots { display: flex; gap: 6px; }
   .msn-dots i { flex: 1; height: 8px; border-radius: 999px; background: #E9EDF5; }
-  .msn-dots i.on { background: #10B981; }
+  .msn-dots i.on { background: #3375D6; }
   .stage-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
   .stage { display: flex; flex-direction: column; gap: 8px; text-align: left; padding: 14px; border-radius: 16px; border: 1px solid #E3E8F0; background: #fff; font: inherit; color: inherit; cursor: pointer; }
-  .stage.clear { border-color: #10B981; background: #F0FBF6; }
+  .stage.clear { border-color: #3375D6; background: #EBF1FB; }
   .st-top { display: flex; justify-content: space-between; align-items: center; font-size: 15px; }
   .stage-head { display: flex; align-items: center; gap: 8px; }
   .stage-head h2 { margin: 0; font-size: 20px; }
@@ -874,7 +874,7 @@
   .node-row + .node-row { margin-top: -2px; }
   .node { width: 64px; height: 64px; flex-shrink: 0; border-radius: 50%; border: none; font: inherit; font-weight: 800; font-size: 18px; cursor: pointer; box-shadow: 0 4px 0 rgba(0,0,0,0.12); }
   .node .nd { font-size: 16px; }
-  .node.done { background: #10B981; color: #fff; }
+  .node.done { background: #245296; color: #fff; }
   .node.doing { background: #1E40AF; color: #fff; }
   .node.doing .nd { font-size: 13px; }
   .node.open { background: #fff; color: #1E40AF; border: 3px solid #1E40AF; }
@@ -888,13 +888,13 @@
   .qq-dots { display: flex; gap: 6px; }
   .qq-dots i { flex: 1; height: 6px; border-radius: 999px; background: #E9EDF5; }
   .qq-dots i.cur { background: #1E40AF; }
-  .qq-dots i.ok { background: #10B981; }
+  .qq-dots i.ok { background: #3375D6; }
   .qq-dots i.no { background: #F04452; }
   .qq-result { display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center; padding: 8px 0; }
   .qq-result h2 { margin: 0; }
   .qq-result p { margin: 0; }
-  .qq-xp { display: flex; flex-direction: column; align-items: center; background: #F0FBF6; border-radius: 14px; padding: 10px 24px; }
-  .qq-xp b { font-size: 26px; color: #10B981; }
+  .qq-xp { display: flex; flex-direction: column; align-items: center; background: #EBF1FB; border-radius: 14px; padding: 10px 24px; }
+  .qq-xp b { font-size: 26px; color: #245296; }
   .qq-xp small { color: var(--sub); }
   .badge-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
   .bdg { display: flex; flex-direction: column; align-items: center; gap: 2px; text-align: center; padding: 10px 6px; border-radius: 14px; background: #F6F7F9; opacity: 0.55; }
@@ -911,7 +911,7 @@
   .net-ax { font-size: 10px; fill: var(--sub); }
   .net-line { fill: none; stroke: #1E40AF; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
   .net-dot { fill: #1E40AF; stroke: #fff; stroke-width: 2; }
-  .net-dot.on { fill: #10B981; }
+  .net-dot.on { fill: #3375D6; }
   .net-hit { fill: transparent; cursor: pointer; }
   .bud-total { display: flex; flex-direction: column; gap: 2px; margin-bottom: 8px; font-size: 15px; }
   .bud-row { display: flex; flex-direction: column; gap: 4px; padding: 8px 0; border-top: 1px solid #EEF1F8; }
