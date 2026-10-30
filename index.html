@@ -812,7 +812,7 @@
   .solved-row:first-child { border-top: none; }
   .solved-row .t { font-size: 15px; font-weight: 700; }
   .solved-row .d { font-size: 13px; color: var(--sub); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .modal .c-quiz { display: flex; flex-direction: column; gap: 10px; }
+  .modal .c-quiz, .qpage .c-quiz { display: flex; flex-direction: column; gap: 10px; }
   .quiz-done { align-self: flex-end; font-weight: 700; }
 
   /* ═════ 가계부: 달력 글씨 색 · 고정 · + 버튼 ═════ */
@@ -1515,7 +1515,7 @@ const TABS = [
   ["ledger", "가계부", `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" aria-hidden="true"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6M9 16h3"/></svg>`],
 ];
 function tabBar(r) {
-  const cur = r === "money" ? "ledger" : ["schedule", "benefits", "layout"].includes(r) ? "home" : ["news", "watch", "letters", "solved", "review"].includes(r) ? "learn" : r;
+  const cur = r === "money" ? "ledger" : ["schedule", "benefits", "layout"].includes(r) ? "home" : ["news", "watch", "letters", "solved", "review", "quiz"].includes(r) ? "learn" : r;
   return `<nav class="tabbar" aria-label="주요 메뉴">${TABS.map(([id, label, icon]) =>
     `<button class="${cur === id ? "on" : ""}" data-act="tab" data-t="${id}" ${cur === id ? 'aria-current="page"' : ""}>${icon}<span>${label}</span></button>`).join("")}</nav>`;
 }
@@ -1705,7 +1705,7 @@ function modalQuick(m) {
         <p><b class="num">${m.qs.length}문제 중 ${m.ok}개</b> 맞혔어요</p>
         <div class="qq-xp"><span>얻은 경험치</span><b class="num">+${m.xp} XP</b>${m.bonus ? `<small>콤보 보너스 +${m.bonus}</small>` : ""}</div>
         <p class="hint" style="margin:0">Lv.${levelOf(xpTotal())} ${titleOf(levelOf(xpTotal()))} · 다음 레벨까지 ${LEVEL_XP - (xpTotal() % LEVEL_XP)} XP</p></div>
-      <div class="inline"><button class="btn ghost" data-act="modal-close" style="flex:1">닫기</button><button class="btn" data-act="qq-start" style="flex:2">한 번 더 도전</button></div>`;
+      <div class="inline"><button class="btn ghost" data-act="qp-back" style="flex:1">닫기</button><button class="btn" data-act="qq-start" style="flex:2">한 번 더 도전</button></div>`;
   }
   const cur = m.qs[m.i], c = conceptById(cur.id), q = quizzesOf(c)[cur.lv];
   const picked = m.picked;
@@ -1717,7 +1717,7 @@ function modalQuick(m) {
       <div class="ox light">${["O", "X"].map((o) => `<button class="${cls(o)}" data-act="qq-answer" data-o="${o}" ${picked ? "disabled" : ""} aria-label="${o === "O" ? "맞다" : "아니다"}">${o}</button>`).join("")}</div>
       ${picked ? `<div class="ex-row">${mascot(34, picked === q.a ? "happy" : "reassure")}<p class="ex"><b>${picked === q.a ? `정답! +${XP_LV[cur.lv]} XP${m.lastBonus ? ` (콤보 +${m.lastBonus})` : ""}` : `정답은 ${q.a}예요.`}</b> ${esc(q.ex)}</p></div>` : ""}
     </div>
-    ${picked ? `<button class="btn" data-act="qq-next">${m.i + 1 < m.qs.length ? "다음 문제 ›" : "결과 보기"}</button>` : `<button class="link-btn" data-act="modal-close" style="align-self:center">그만하기</button>`}`;
+    ${picked ? `<button class="btn" data-act="qq-next">${m.i + 1 < m.qs.length ? "다음 문제 ›" : "결과 보기"}</button>` : `<button class="link-btn" data-act="qp-back" style="align-self:center">그만하기</button>`}`;
 }
 function modalConcept(m) {
   const c = conceptById(m.id);
@@ -1728,7 +1728,7 @@ function modalConcept(m) {
     <p style="margin:0;font-size:15px;line-height:1.7">${esc(c.body)}</p>
     <p class="me" style="margin:0"><b>나와 연결하면</b> ${esc(c.me)}</p>
     <div class="c-quiz"><span class="tagc">${done ? "3단계 모두 맞혔어요 · 다시 보기" : LV_NAME[m.lv]}</span>${quizBox(c, m.lv, false)}</div>
-    <div class="inline"><button class="btn ghost" data-act="note-toggle" data-id="${c.id}" style="flex:1">${learnState.notes[c.id] ? "★ 노트에서 빼기" : "☆ 노트에 담기"}</button><button class="btn ghost" data-act="modal-close" style="flex:1">닫기</button></div>`;
+    <div class="inline"><button class="btn ghost" data-act="note-toggle" data-id="${c.id}" style="flex:1">${learnState.notes[c.id] ? "★ 노트에서 빼기" : "☆ 노트에 담기"}</button><button class="btn ghost" data-act="qp-back" style="flex:1">닫기</button></div>`;
 }
 function modalBadges() {
   const list = badgeList();
@@ -1748,7 +1748,26 @@ function modalQuiz(m) {
   if (!c) return "";
   return `<div class="sec-title" style="margin:0"><h2>${esc(c.term)}</h2><span class="tagc">${LV_NAME[m.lv]}</span></div>
     <div class="c-quiz">${quizBox(c, m.lv, false)}</div>
-    <button class="btn ghost" data-act="modal-close">닫기</button>`;
+    <button class="btn ghost" data-act="qp-back">닫기</button>`;
+}
+// 문제 풀이 화면 (#quiz): 개념·다시 풀기·빠른 퀴즈를 팝업 대신 한 화면으로. 뒤로 가면 원래 화면으로 돌아간다
+function openQuizPage(kind, extra) {
+  ui.modal = null;
+  ui.qp = { kind, ...extra };
+  if (route() === "quiz") { render(); window.scrollTo(0, 0); } else { ui.qpPushed = true; location.hash = "#quiz"; }
+}
+function viewQuizPage() {
+  const m = ui.qp;
+  const body = data.learn && m && { concept: modalConcept, quiz: modalQuiz, quick: modalQuick }[m.kind]?.(m);
+  const title = !body ? "문제 풀기" : m.kind === "quick" ? "빠른 퀴즈" : esc(catName(conceptById(m.id)?.cat));
+  return `<header class="page-head">
+    <button class="icon-btn" data-act="qp-back" aria-label="뒤로">${ICON.back}</button>
+    <h1>${title}</h1>
+    <button class="icon-btn menu-btn" data-act="open-drawer" aria-label="목차 열기">${ICON.menu}</button>
+  </header>
+  <main class="scroll">
+    ${body ? `<section class="card form qpage">${body}</section>` : `<section class="card"><p class="hint" style="margin:0 0 10px">풀던 문제가 없어요. 공부에서 문제를 골라 주세요.</p><button class="btn" data-act="go-learn">공부로 가기</button></section>`}
+  </main>`;
 }
 function catName(id) { return data.learn?.categories.find((c) => c.id === id)?.name || ""; }
 
@@ -3802,14 +3821,14 @@ function viewOnboard() {
 function route() {
   if (!profile) return "onboard";
   const h = location.hash.slice(1);
-  return ["my", "news", "schedule", "learn", "benefits", "risktest", "money", "assets", "ledger", "layout", "watch", "letters", "etc", "solved", "review"].includes(h) ? h : "home";
+  return ["my", "news", "schedule", "learn", "benefits", "risktest", "money", "assets", "ledger", "layout", "watch", "letters", "etc", "solved", "review", "quiz"].includes(h) ? h : "home";
 }
 function render() {
   const r = route();
   const app = document.getElementById("app");
   const y = window.scrollY;
   const focusId = document.activeElement?.id;
-  app.innerHTML = ({ onboard: viewOnboard, my: viewMy, news: viewNews, schedule: viewSchedule, learn: viewLearn, benefits: viewBenefits, risktest: viewRiskTest, money: viewLedger, ledger: viewLedger, assets: viewAssets, layout: viewLayout, watch: viewWatch, letters: viewLetters, etc: viewEtc, solved: viewSolved, review: viewReview }[r] || viewHome)()
+  app.innerHTML = ({ onboard: viewOnboard, my: viewMy, news: viewNews, schedule: viewSchedule, learn: viewLearn, benefits: viewBenefits, risktest: viewRiskTest, money: viewLedger, ledger: viewLedger, assets: viewAssets, layout: viewLayout, watch: viewWatch, letters: viewLetters, etc: viewEtc, solved: viewSolved, review: viewReview, quiz: viewQuizPage }[r] || viewHome)()
     + (r !== "onboard" ? tabBar(r) : "")
     + (ui.drawer && r !== "onboard" ? viewDrawer() : "")
     + viewModal();
@@ -3900,12 +3919,13 @@ document.addEventListener("click", async (e) => {
     case "stage-open": ui.learnStage = el.dataset.c; render(); window.scrollTo(0, 0); break;
     case "stage-close": ui.learnStage = null; render(); window.scrollTo(0, 0); break;
     case "node-locked": toast("앞 개념의 1단계를 먼저 맞혀 보세요"); break;
-    case "concept-open": { const c = conceptById(el.dataset.id); if (c) openModal("concept", { id: c.id, lv: mastered(c) ? 2 : curLv(c) }); break; }
+    case "concept-open": { const c = conceptById(el.dataset.id); if (c) openQuizPage("concept", { id: c.id, lv: mastered(c) ? 2 : curLv(c) }); break; }
+    case "qp-back": if (ui.qpPushed) { ui.qpPushed = false; history.back(); } else go("#learn"); break;
     case "badges-open": openModal("badges"); break;
     case "notes-open": openModal("notes"); break;
-    case "qq-start": { const qs = pickQuick(); if (!qs.length) { toast("풀 수 있는 문제가 없어요"); break; } ui.modal = null; openModal("quick", { qs, i: 0, ok: 0, combo: 0, xp: 0, bonus: 0, res: [], picked: null }); break; }
+    case "qq-start": { const qs = pickQuick(); if (!qs.length) { toast("풀 수 있는 문제가 없어요"); break; } openQuizPage("quick", { qs, i: 0, ok: 0, combo: 0, xp: 0, bonus: 0, res: [], picked: null }); break; }
     case "qq-answer": {
-      const m = ui.modal; if (!m || m.picked) break;
+      const m = ui.qp; if (!m || m.picked) break;
       const cur = m.qs[m.i], c = conceptById(cur.id), q = quizzesOf(c)[cur.lv];
       const ok = el.dataset.o === q.a;
       m.picked = el.dataset.o; m.res[m.i] = ok; m.lastBonus = 0;
@@ -3919,9 +3939,9 @@ document.addEventListener("click", async (e) => {
       saveLearn(); markAttend(); checkProgress(); render();
       break;
     }
-    case "qq-next": { const m = ui.modal; if (!m) break; if (m.i + 1 < m.qs.length) { m.i++; m.picked = null; } else m.done = true; render(); break; }
-    case "quiz-open": openModal("quiz", { id: el.dataset.id, lv: Number(el.dataset.lv || 0) }); break;
-    case "quiz-next": { const c = conceptById(el.dataset.id); if (c && ui.modal && !mastered(c)) ui.modal.lv = curLv(c); render(); break; }
+    case "qq-next": { const m = ui.qp; if (!m) break; if (m.i + 1 < m.qs.length) { m.i++; m.picked = null; } else m.done = true; render(); break; }
+    case "quiz-open": openQuizPage("quiz", { id: el.dataset.id, lv: Number(el.dataset.lv || 0) }); break;
+    case "quiz-next": { const c = conceptById(el.dataset.id); if (c && ui.qp && !mastered(c)) ui.qp.lv = curLv(c); render(); break; }
     case "go-learn": go("#learn"); break;
     case "ledger-tab": ui.ledgerTab = el.dataset.v; render(); window.scrollTo(0, 0); break;
     case "asset-tab": ui.assetTab = el.dataset.v; render(); window.scrollTo(0, 0); break;
@@ -3980,7 +4000,7 @@ document.addEventListener("click", async (e) => {
     case "learn-sort": ui.learnSort = el.dataset.s; render(); break;
     case "learn-expand": ui.learnExpand = { ...ui.learnExpand, [el.dataset.c]: !ui.learnExpand[el.dataset.c] }; render(); break;
     case "toggle-concept": ui.learnOpen = ui.learnOpen === el.dataset.id ? null : el.dataset.id; render(); break;
-    case "open-concept": { const c = conceptById(el.dataset.id); ui.q = ""; ui.searchOpen = false; if (c) openModal("concept", { id: c.id, lv: mastered(c) ? 2 : curLv(c) }); break; }
+    case "open-concept": { const c = conceptById(el.dataset.id); ui.q = ""; ui.searchOpen = false; if (c) openQuizPage("concept", { id: c.id, lv: mastered(c) ? 2 : curLv(c) }); break; }
     case "go-schedule": ui.schedAll = el.dataset.all === "1"; ui.q = ""; ui.searchOpen = false; go("#schedule"); break;
     case "sched-all": ui.schedAll = el.dataset.v === "1"; render(); break;
     case "go-benefits": go("#benefits"); break;
