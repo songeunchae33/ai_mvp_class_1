@@ -813,6 +813,61 @@
   .solved-row .t { font-size: 15px; font-weight: 700; }
   .solved-row .d { font-size: 13px; color: var(--sub); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .modal .c-quiz, .qpage .c-quiz { display: flex; flex-direction: column; gap: 10px; }
+  /* 객관식 보기 · 단답식 입력 */
+  .mcq { display: flex; flex-direction: column; gap: 8px; }
+  .mcq button { display: flex; align-items: flex-start; gap: 10px; width: 100%; min-height: 48px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--card); color: var(--ink); font: inherit; font-size: 15px; line-height: 22px; text-align: left; cursor: pointer; }
+  .mcq .mcn { flex: 0 0 22px; height: 22px; border-radius: 6px; background: var(--soft); color: var(--sub); font-size: 13px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; }
+  .mcq button.right { border-color: var(--green); background: var(--mint); color: var(--green); font-weight: 700; }
+  .mcq button.right .mcn { background: var(--green); color: #fff; }
+  .mcq button.wrong { border-color: var(--up); background: var(--up-bg); color: var(--up); }
+  .mcq button.dim { color: var(--sub); }
+  .mcq button:disabled { cursor: default; }
+  .sa-form { display: flex; gap: 8px; }
+  .sa-form .field { flex: 1; min-height: 48px; font-size: 16px; }
+  .sa-form .field:disabled { opacity: 1; -webkit-text-fill-color: currentColor; }
+  .sa-form .field.ok { border-color: var(--green); color: var(--green); background: var(--mint); }
+  .sa-form .field.no { border-color: var(--up); color: var(--up); background: var(--up-bg); }
+  .sa-form .btn { min-width: 72px; }
+  /* 섬 (투자운용사) */
+  .isl-map { display: flex; flex-direction: column; }
+  .isl { display: flex; align-items: center; gap: 14px; width: calc(100% - 36px); min-height: 84px; padding: 16px; border: 1px solid #F0F2F5; border-radius: 20px; background: var(--card); color: inherit; font: inherit; text-align: left; cursor: pointer; }
+  .isl.r { margin-left: 36px; }
+  .isl.open { border: 2px solid var(--green); }
+  .isl.locked { background: var(--soft); }
+  .isl.locked .isl-body b { color: var(--sub); }
+  .isl-num { flex: 0 0 48px; height: 48px; border-radius: 50%; background: var(--mint); color: var(--green); font-size: 18px; font-weight: 800; display: flex; align-items: center; justify-content: center; }
+  .isl.done .isl-num { background: var(--green); color: #fff; }
+  .isl.locked .isl-num { background: #EBEEF2; color: var(--sub); }
+  .isl-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+  .isl-body b { font-size: 16px; line-height: 24px; }
+  .isl-bar { height: 6px; border-radius: 999px; background: var(--soft); overflow: hidden; }
+  .isl-bar i { display: block; height: 100%; border-radius: 999px; background: #3375D6; }
+  .isl-path { display: block; width: 0; height: 22px; margin-left: 50%; border-left: 2px dashed #D2D6DD; }
+  .isl-list { padding: 4px 16px !important; }
+  .isl-row { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 52px; padding: 8px 0; border: none; border-top: 1px solid #F0F2F5; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+  .isl-row:first-child { border-top: none; }
+  .isl-no { flex: 0 0 26px; height: 26px; border-radius: 8px; background: var(--soft); color: var(--sub); font-size: 13px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; }
+  .isl-t { flex: 1; min-width: 0; font-size: 15px; font-weight: 600; }
+  /* 해설 그림 */
+  .qfig { margin: 0; padding: 10px 10px 8px; background: var(--card); border: 1px solid #F0F2F5; border-radius: 12px; }
+  .qfig svg { display: block; width: 100%; height: auto; }
+  .qfig text { font-size: 11px; fill: var(--sub); font-family: inherit; }
+  .qfig .bt { font-size: 12px; font-weight: 700; fill: var(--ink); }
+  .qfig .hlt { fill: var(--green); font-weight: 700; }
+  .qfig .hlb { fill: var(--up); font-weight: 700; }
+  .qfig .bx { fill: var(--soft); stroke: #E5E8ED; }
+  .qfig .bx.hl { fill: var(--mint); stroke: var(--green); }
+  .qfig .ax { stroke: #D2D6DD; stroke-width: 1.5; }
+  .qfig .ar { stroke: var(--green); stroke-width: 1.8; }
+  .qfig .fa, .qfig .l1f { fill: var(--green); }
+  .qfig .fb, .qfig .l2f { fill: var(--up); }
+  .qfig .hlf { fill: #3375D6; }
+  .qfig .gf { fill: #D2D6DD; }
+  .qfig .fl { stroke: var(--green); stroke-opacity: 0.35; }
+  .qfig .l0 { fill: none; stroke: #B3B8C0; stroke-width: 2; stroke-dasharray: 5 4; }
+  .qfig .l1 { fill: none; stroke: var(--green); stroke-width: 2.5; }
+  .qfig .l2 { fill: none; stroke: var(--up); stroke-width: 2.5; }
+  .qfig figcaption { margin-top: 6px; font-size: 12px; line-height: 18px; color: var(--sub); }
   .quiz-done { align-self: flex-end; font-weight: 700; }
 
   /* ═════ 가계부: 달력 글씨 색 · 고정 · + 버튼 ═════ */
@@ -1544,15 +1599,90 @@ function attendRate() {
   const n = Object.keys(learnState.days).filter((k) => k.startsWith(pre)).length;
   return { n, of: t.getDate(), pct: Math.round((n / t.getDate()) * 100) };
 }
-// OX 퀴즈 (오늘의 퀴즈·팝업 공용). today면 답한 뒤 '옮겨둘게요' 버튼으로 치운다
+// 해설 그림: 그래프나 구조가 있어야 이해되는 개념(learn.json의 fig)에 답한 뒤 함께 보여준다
+const FIG_AH = `<defs><marker id="qfah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="fa"/></marker></defs>`;
+const fig = (cap, h, inner) => `<figure class="qfig"><svg viewBox="0 0 320 ${h}" role="img" aria-label="${cap}">${FIG_AH}${inner}</svg><figcaption>${cap}</figcaption></figure>`;
+const ft = (x, y, t, cls = "", a = "middle") => `<text x="${x}" y="${y}" text-anchor="${a}" class="${cls}">${t}</text>`;
+const fbox = (x, y, w, h, t, s = "", hl = false) => `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="8" class="bx ${hl ? "hl" : ""}"/>${ft(x + w / 2, y + (s ? h / 2 - 3 : h / 2 + 4), t, "bt")}${s ? ft(x + w / 2, y + h / 2 + 12, s) : ""}`;
+const farr = (x1, y1, x2, y2) => `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" class="ar" marker-end="url(#qfah)"/>`;
+const faxes = (h, yl, xl) => `<line x1="34" y1="${h - 26}" x2="306" y2="${h - 26}" class="ax"/><line x1="34" y1="12" x2="34" y2="${h - 26}" class="ax"/>${ft(38, 14, yl, "", "start")}${ft(306, h - 10, xl, "", "end")}`;
+const fsteps = (rows, cuts, hl) => rows.map((t, i) => fbox(70, 6 + i * 50, 180, 30, t, "", i === hl) + (cuts[i] ? farr(160, 36 + i * 50, 160, 54 + i * 50) + ft(172, 50 + i * 50, cuts[i], "", "start") : "")).join("");
+const FIGS = {
+  steep: () => fig("장기금리가 단기보다 더 올라 곡선이 가팔라져요. 금리가 오르면 채권값이 떨어지니, 더 많이 떨어질 장기채를 팔고 단기채를 사요.", 170,
+    faxes(170, "금리", "") + `<path d="M40 112C110 100 200 92 300 86" class="l0"/><path d="M40 118C110 96 200 66 300 36" class="l1"/>` + ft(300, 104, "지금", "", "end") + ft(240, 40, "스티프닝 후", "hlt", "end") + ft(60, 160, "단기") + ft(300, 160, "장기 (만기 →)", "", "end")),
+  roll: () => fig("백워데이션은 먼 만기가 더 싸서, 비싸진 가까운 계약을 팔고 싼 계약으로 갈아탈 때 이익(+)이에요. 콘탱고는 반대라 갈아탈 때마다 손해(−)예요.", 170,
+    ft(90, 18, "백워데이션", "bt") + ft(240, 18, "콘탱고", "bt") + `<line x1="20" y1="130" x2="160" y2="130" class="ax"/><line x1="170" y1="130" x2="310" y2="130" class="ax"/><path d="M50 50L130 105" class="l1"/><path d="M200 105L280 50" class="l2"/><circle cx="50" cy="50" r="4" class="fa"/><circle cx="130" cy="105" r="4" class="fa"/><circle cx="200" cy="105" r="4" class="fb"/><circle cx="280" cy="50" r="4" class="fb"/>`
+    + ft(50, 146, "근월물") + ft(130, 146, "원월물") + ft(200, 146, "근월물") + ft(280, 146, "원월물") + ft(90, 164, "+ 롤 수익", "hlt") + ft(240, 164, "− 롤 수익", "hlb")),
+  timevalue: () => fig("ELW 가격 = 내재가치 + 시간가치. 시간가치는 만기에 가까울수록 빠르게 0으로 줄어서, 콜·풋 모두 값이 떨어져요.", 160,
+    faxes(160, "시간가치", "") + `<path d="M40 36C160 42 240 66 300 132" class="l1"/>` + ft(50, 150, "많이 남음", "", "start") + ft(304, 150, "만기", "", "end") + ft(150, 100, "만기에 가까울수록 빠르게 줄어요", "hlt")),
+  parity: () => fig("패리티 = 기초자산 가격 ÷ 행사가격 × 100. 100%보다 크면 지금 권리를 써도 이익이라 내가격(ITM)이에요.", 110,
+    `<rect x="20" y="40" width="130" height="14" rx="7" class="bx"/><rect x="170" y="40" width="130" height="14" rx="7" class="bx hl"/><line x1="160" y1="30" x2="160" y2="64" class="ax"/>` + ft(85, 30, "외가격(OTM) · 100% 미만") + ft(235, 30, "내가격(ITM) · 100% 초과", "hlt") + ft(160, 82, "등가격(ATM) = 100%") + ft(160, 102, "패리티 = 기초자산 가격 ÷ 행사가격 × 100", "bt")),
+  tranche: () => fig("손실은 에쿼티부터 먼저 떠안아요. 위험이 큰 대신 수익을 먼저 받고, 만기에 남은 담보자산 원금도 가져가요.", 170,
+    fbox(100, 10, 160, 42, "시니어", "손실 마지막 · 수익 낮음") + fbox(100, 58, 160, 42, "메자닌", "중간") + fbox(100, 106, 160, 42, "에쿼티", "손실 먼저 · 수익 높음", true) + farr(60, 146, 60, 16) + ft(60, 164, "손실은 아래부터")),
+  cashflow: () => fig("위에서부터 하나씩 빼 내려가요. 순영업소득(NOI)은 대출 원리금을 갚기 전에 부동산이 번 돈이에요.", 240,
+    fsteps(["가능총소득", "유효총소득", "순영업소득(NOI)", "세전영업현금흐름", "세후영업현금흐름"], ["− 공실 + 기타소득", "− 영업경비", "− 부채서비스액(원리금)", "− 세금"], 2)),
+  gains: () => fig("양도가액에서 하나씩 빼서 과세표준을 만들고, 여기에 세율을 곱해요.", 190,
+    fsteps(["양도가액", "양도차익", "양도소득금액", "과세표준"], ["− 필요경비", "− 장기보유특별공제", "− 양도소득기본공제(250만원)"], 3)),
+  far: () => fig("건폐율은 땅 위에서 건물이 차지하는 바닥 비율, 용적률은 모든 층 바닥을 합친 넓이의 비율이에요.", 180,
+    `<line x1="90" y1="154" x2="310" y2="154" class="ax"/><rect x="145" y="34" width="110" height="120" class="bx hl"/>${Array.from({ length: 11 }, (_, i) => `<line x1="145" y1="${44 + i * 10}" x2="255" y2="${44 + i * 10}" class="fl"/>`).join("")}`
+    + ft(200, 28, "지상 12층 × 500㎡") + ft(200, 170, "대지 1,000㎡") + ft(46, 52, "건폐율 50%", "bt") + ft(46, 68, "500 ÷ 1,000") + ft(46, 110, "용적률 600%", "bt") + ft(46, 126, "6,000 ÷ 1,000")),
+  trust3: () => fig("운용(위탁자)과 보관(수탁자)을 나눠, 운용사가 투자자 돈을 직접 만지지 못하게 해요.", 170,
+    fbox(6, 8, 136, 44, "위탁자", "집합투자업자 · 운용") + fbox(178, 8, 136, 44, "수탁자", "신탁업자 · 보관·관리", true) + fbox(92, 118, 136, 44, "수익자", "투자자") + farr(142, 30, 176, 30) + ft(160, 22, "지시") + farr(196, 118, 230, 54) + ft(232, 92, "돈", "", "start") + farr(90, 54, 124, 116) + ft(86, 92, "수익증권", "", "end")),
+  abs: () => fig("자산을 SPC로 옮겨 두면, 원래 회사가 망해도 자산이 남아 있어 투자자에게 돈을 줄 수 있어요.", 140,
+    fbox(4, 46, 90, 44, "자산보유자") + fbox(115, 46, 90, 44, "SPC", "특수목적회사", true) + fbox(226, 46, 90, 44, "투자자") + farr(94, 58, 113, 58) + farr(205, 58, 224, 58) + farr(224, 80, 207, 80) + farr(113, 80, 96, 80)
+    + ft(80, 34, "① 자산 양도") + ft(240, 34, "② ABS 발행") + ft(240, 110, "③ 투자금") + ft(80, 110, "④ 자산 대금")),
+  cds: () => fig("보장을 사는 쪽이 프리미엄을 내고, 부도가 나면 보장을 판 쪽이 손실을 물어줘요. 대출은 넘기지 않고 위험만 넘겨요.", 140,
+    fbox(8, 44, 112, 46, "보장매수자", "은행 · 대출 보유") + fbox(200, 44, 112, 46, "보장매도자", "보험사 역할", true) + farr(120, 56, 198, 56) + farr(198, 80, 122, 80) + ft(160, 46, "프리미엄") + ft(160, 100, "부도 시 손실 보상") + ft(64, 116, "대출(준거자산)은 그대로")),
+  trs: () => fig("매입자는 자산을 사지 않고도 자산을 가진 것과 같은 수익과 위험(신용위험 + 시장위험)을 얻어요.", 140,
+    fbox(8, 44, 112, 46, "TRS 매입자", "위험을 사는 쪽") + fbox(200, 44, 112, 46, "TRS 매도자", "자산 보유 · 위험을 넘김", true) + farr(120, 56, 198, 56) + farr(198, 80, 122, 80) + ft(160, 46, "기준금리 + 스프레드") + ft(160, 100, "총수익(이자 + 가격 변동)")),
+  exposure: () => fig("Net = (80 − 20) ÷ 100 = 60%, Gross = (80 + 20) ÷ 100 = 100%, Long/Short = 80 ÷ 20 = 4", 150,
+    [["Long", 80, "l1f"], ["Short", 20, "l2f"], ["Net", 60, "hlf"], ["Gross", 100, "gf"]].map(([k, v, c], i) => `${ft(92, 26 + i * 32, k, "bt", "end")}<rect x="100" y="${12 + i * 32}" width="${v * 1.7}" height="20" rx="5" class="${c}"/>${ft(106 + v * 1.7, 26 + i * 32, v + "억", "", "start")}`).join("")),
+  dbdc: () => fig("운용 결과가 누구 몫인지가 핵심이에요. DB형은 회사, DC형은 근로자예요.", 150,
+    fbox(8, 8, 146, 46, "DB형 (확정급여)", "받을 돈이 정해짐") + fbox(166, 8, 146, 46, "DC형 (확정기여)", "낼 돈이 정해짐", true) + farr(81, 54, 81, 92) + farr(239, 54, 239, 92) + ft(87, 78, "운용 성과", "", "start") + ft(245, 78, "운용 성과", "", "start")
+    + fbox(8, 96, 146, 40, "회사가 덜 냄") + fbox(166, 96, 146, 40, "근로자가 더 받음", "", true)),
+  cycle: () => fig("불황엔 팔려는 사람이 많아 사는 사람이 가격을 주도해요(매수인 우위). 호황엔 반대로 매도인 우위예요.", 170,
+    faxes(170, "경기", "시간 →") + `<path d="M40 100C80 100 90 36 130 36C170 36 180 110 220 110C250 110 270 74 300 66" class="l1"/>` + ft(74, 64, "회복") + ft(130, 28, "호황") + ft(186, 70, "후퇴") + ft(220, 128, "불황 · 매수인 우위", "hlt")),
+};
+// 투자운용사처럼 개념마다 문제 하나(객관식 mc·단답식 short)인 과목. 나머지 과목은 OX 3단계
+function isSingle(c) { return !!c?.quiz?.type; }
+function lvName(c, lv) { return isSingle(c) ? "" : LV_NAME[lv]; }
+function quizLabel(c) { return isSingle(c) ? "오늘의 퀴즈" : "오늘의 OX 퀴즈"; }
+// 단답식 채점: 띄어쓰기·문장부호는 무시하고, 정답이 '숫자+단위'면 숫자만 써도 맞다
+function normAns(s) { return String(s ?? "").toLowerCase().replace(/[\s.,·'"()~]/g, ""); }
+function isRight(q, pick) {
+  if (q.type === "mc") return String(pick) === String(q.a);
+  if (q.type !== "short") return pick === q.a;
+  const p = normAns(pick);
+  return !!p && [q.a, ...(q.alts || [])].some((a) => { const n = normAns(a); return p === n || n.match(/^(\d+(?:\.\d+)?)\D*$/)?.[1] === p; });
+}
+function answerText(q) { return q.type === "mc" ? `${q.a + 1}번 ‘${q.choices[q.a]}’` : q.type === "short" ? `‘${q.a}’` : q.a; }
+// 보기·입력칸·OX 버튼 (act: 개념 화면은 answer, 빠른 퀴즈는 qq-answer)
+function answerInput(c, lv, pick, act, extra = "", dark = false, mini = false) {
+  const q = quizzesOf(c)[lv], done = pick !== undefined && pick !== null;
+  if (q.type === "mc") {
+    const cls = (i) => (!done ? "" : i === q.a ? "right" : String(i) === String(pick) ? "wrong" : "dim");
+    return `<div class="mcq">${q.choices.map((t, i) => `<button class="${cls(i)}" data-act="${act}" data-id="${c.id}" data-lv="${lv}" data-o="${i}" ${extra} ${done ? "disabled" : ""}><span class="mcn num">${i + 1}</span><span>${esc(t)}</span></button>`).join("")}</div>`;
+  }
+  if (q.type === "short") {
+    return `<form class="sa-form"><label class="sr" for="sa-${c.id}">답 입력</label><input class="field ${done ? (isRight(q, pick) ? "ok" : "no") : ""}" id="sa-${c.id}" autocomplete="off" enterkeyhint="done" placeholder="답을 입력하세요" value="${done ? esc(pick) : ""}" ${done ? "disabled" : ""}>
+      <button type="button" class="btn" data-act="${act}" data-id="${c.id}" data-lv="${lv}" ${extra} ${done ? "disabled" : ""}>확인</button></form>`;
+  }
+  const cls = (o) => (!done ? "" : o === q.a ? "right" : o === pick ? "wrong" : "dim");
+  return `<div class="ox ${dark ? "" : "light"} ${mini ? "mini" : ""}">${["O", "X"].map((o) => `<button class="${cls(o)}" data-act="${act}" data-id="${c.id}" data-lv="${lv}" data-o="${o}" ${extra} ${done ? "disabled" : ""} aria-label="${o === "O" ? "맞다" : "아니다"}">${o}</button>`).join("")}</div>`;
+}
+// 답한 뒤 해설 (그림이 있으면 함께)
+function answerEx(c, q, ok) {
+  return `<div class="ex-row">${mascot(34, ok ? "happy" : "reassure")}<p class="ex"><b>${ok ? "정답이에요!" : `정답은 ${answerText(q)}예요.`}</b> ${esc(q.ex)}</p></div>${c.fig && FIGS[c.fig] ? FIGS[c.fig]() : ""}`;
+}
+// 퀴즈 (오늘의 퀴즈·문제 화면 공용). today면 답한 뒤 '옮겨둘게요' 버튼으로 치운다
 function quizBox(c, lv, dark, mini = false, today = false) {
   const q = quizzesOf(c)[lv];
   const ans = qa(c, lv);
-  const cls = (o) => (!ans ? "" : o === q.a ? "right" : o === ans.pick ? "wrong" : "dim");
   const hasNext = lv + 1 < quizzesOf(c).length;
+  mini = mini && !isSingle(c);
   return `${mini ? `<div class="qrow">` : ""}<p class="q">${esc(q.q)}</p>
-    <div class="ox ${dark ? "" : "light"} ${mini ? "mini" : ""}">${["O", "X"].map((o) => `<button class="${cls(o)}" data-act="answer" data-id="${c.id}" data-lv="${lv}" data-o="${o}" ${today ? 'data-today="1"' : ""} ${ans ? "disabled" : ""} aria-label="${o === "O" ? "맞다" : "아니다"}">${o}</button>`).join("")}</div>${mini ? "</div>" : ""}
-    ${ans ? `<div class="ex-row">${mascot(34, ans.ok ? "happy" : "reassure")}<p class="ex"><b>${ans.ok ? "정답이에요!" : `정답은 ${q.a}예요.`}</b> ${esc(q.ex)}</p></div>
+    ${answerInput(c, lv, ans?.pick, "answer", today ? 'data-today="1"' : "", dark, mini)}${mini ? "</div>" : ""}
+    ${ans ? `${answerEx(c, q, ans.ok)}
       ${today ? `<button class="link-btn quiz-done" data-act="quiz-dismiss">${ans.ok ? "‘푼 문제’로 옮겨둘게요" : "‘복습할 문제’에 담아둘게요"} ›</button>`
         : !ans.ok ? `<button class="link-btn" style="padding-left:0;align-self:flex-start" data-act="retry" data-id="${c.id}" data-lv="${lv}">다시 풀기 ›</button>`
         : hasNext && curLv(c) === lv + 1 ? `<button class="btn" data-act="quiz-next" data-id="${c.id}">더 어려운 ${LV_NAME[lv + 1]} 풀기 ›</button>` : ""}` : ""}`;
@@ -1596,7 +1726,7 @@ function quizDayList(entries, empty) {
     return `<section class="card" style="padding:8px 16px">
       <div class="tx-day" style="display:flex;justify-content:space-between"><span>${dt.getMonth() + 1}월 ${dt.getDate()}일 (${"일월화수목금토"[dt.getDay()]})</span><span>${list.length}문제${ok && ok < list.length ? ` · 정답 ${ok}` : ""}</span></div>
       ${list.map(({ c, lv, a }) => `<button class="solved-row" data-act="quiz-open" data-id="${c.id}" data-lv="${lv}">
-        <div style="flex:1;min-width:0"><div class="t">${esc(c.term)} <span class="tagc">${LV_NAME[lv]}</span></div><div class="d">${esc(quizzesOf(c)[lv].q)}</div></div>
+        <div style="flex:1;min-width:0"><div class="t">${esc(c.term)} <span class="tagc">${lvName(c, lv) || esc(catName(c.cat))}</span></div><div class="d">${esc(quizzesOf(c)[lv].q)}</div></div>
         ${a.ok ? `<span class="badge b-green">정답</span>` : `<span class="badge b-up">오답</span>`}</button>`).join("")}
     </section>`;
   }).join("");
@@ -1681,8 +1811,14 @@ function nodeState(list, i) {
   if (mastered(c)) return "done";
   if (isWrong(c)) return "wrong";
   if (curLv(c) > 0) return "doing";
+  if (c.island) return islandOpen(c.cat, c.island) ? "open" : "locked";
   return i === 0 || curLv(list[i - 1]) > 0 ? "open" : "locked";
 }
+// 섬(투자운용사): 앞 섬의 개념을 모두 맞혀야 다음 섬이 열린다. 섬 안에서는 아무 개념이나 풀 수 있다
+function islandNames(catId) { return data.learn?.categories.find((x) => x.id === catId)?.islands || []; }
+function islandConcepts(catId, n) { return stageConcepts(catId).filter((c) => c.island === n); }
+function islandDone(catId, n) { const l = islandConcepts(catId, n); return l.length > 0 && l.every(mastered); }
+function islandOpen(catId, n) { for (let k = 1; k < n; k++) if (!islandDone(catId, k)) return false; return true; }
 // 빠른 퀴즈 5문제: 열린 개념의 지금 단계에서 무작위로 (틀린 것 먼저)
 function pickQuick() {
   const L = data.learn;
@@ -1708,14 +1844,14 @@ function modalQuick(m) {
       <div class="inline"><button class="btn ghost" data-act="qp-back" style="flex:1">닫기</button><button class="btn" data-act="qq-start" style="flex:2">한 번 더 도전</button></div>`;
   }
   const cur = m.qs[m.i], c = conceptById(cur.id), q = quizzesOf(c)[cur.lv];
-  const picked = m.picked;
-  const cls = (o) => (!picked ? "" : o === q.a ? "right" : o === picked ? "wrong" : "dim");
+  const picked = m.picked, ok = m.res[m.i];
+  const lvTag = lvName(c, cur.lv);
   return `<div class="qq-top"><span class="hint">빠른 퀴즈 ${m.i + 1}/${m.qs.length}</span>${m.combo >= 2 ? `<span class="qq-combo">🔥 ${m.combo}연속</span>` : ""}</div>
     <div class="qq-dots">${m.qs.map((_, k) => `<i class="${k < m.i ? (m.res[k] ? "ok" : "no") : k === m.i ? "cur" : ""}"></i>`).join("")}</div>
-    <div class="c-quiz"><span class="tagc">${esc(c.term)} · ${LV_NAME[cur.lv]}${cur.review ? " · 복습" : ""}</span>
+    <div class="c-quiz"><span class="tagc">${esc(c.term)}${lvTag ? ` · ${lvTag}` : ""}${cur.review ? " · 복습" : ""}</span>
       <p class="q">${esc(q.q)}</p>
-      <div class="ox light">${["O", "X"].map((o) => `<button class="${cls(o)}" data-act="qq-answer" data-o="${o}" ${picked ? "disabled" : ""} aria-label="${o === "O" ? "맞다" : "아니다"}">${o}</button>`).join("")}</div>
-      ${picked ? `<div class="ex-row">${mascot(34, picked === q.a ? "happy" : "reassure")}<p class="ex"><b>${picked === q.a ? `정답! +${XP_LV[cur.lv]} XP${m.lastBonus ? ` (콤보 +${m.lastBonus})` : ""}` : `정답은 ${q.a}예요.`}</b> ${esc(q.ex)}</p></div>` : ""}
+      ${answerInput(c, cur.lv, picked, "qq-answer")}
+      ${picked ? answerEx(c, q, ok).replace("정답이에요!", `정답! +${XP_LV[cur.lv]} XP${m.lastBonus ? ` (콤보 +${m.lastBonus})` : ""}`) : ""}
     </div>
     ${picked ? `<button class="btn" data-act="qq-next">${m.i + 1 < m.qs.length ? "다음 문제 ›" : "결과 보기"}</button>` : `<button class="link-btn" data-act="qp-back" style="align-self:center">그만하기</button>`}`;
 }
@@ -1723,6 +1859,15 @@ function modalConcept(m) {
   const c = conceptById(m.id);
   if (!c) return "";
   const done = mastered(c);
+  if (isSingle(c)) {
+    // 섬 안의 개념: 문제를 먼저 풀고, 답한 뒤 해설. '다음 문제'는 같은 섬의 다음 개념
+    const list = islandConcepts(c.cat, c.island), k = list.indexOf(c), next = list[k + 1];
+    const ans = qa(c, 0);
+    return `<div class="sec-title" style="margin:0"><h2>${esc(c.term)}</h2><span class="tagc">${c.island}섬 · ${k + 1}/${list.length}</span></div>
+      <div class="c-quiz">${quizBox(c, 0, false)}</div>
+      <div class="inline">${ans ? `<button class="btn ghost" data-act="qp-back" style="flex:1">섬으로</button>${next ? `<button class="btn" data-act="concept-open" data-id="${next.id}" style="flex:2">다음 문제 ›</button>` : ""}`
+        : `<button class="btn ghost" data-act="note-toggle" data-id="${c.id}" style="flex:1">${learnState.notes[c.id] ? "★ 노트에서 빼기" : "☆ 노트에 담기"}</button><button class="btn ghost" data-act="qp-back" style="flex:1">섬으로</button>`}</div>`;
+  }
   return `<div class="sec-title" style="margin:0"><h2>${esc(c.term)}</h2><span class="tagc">${esc(catName(c.cat))}</span></div>
     <p class="hint" style="margin:0">${esc(c.short)}</p>
     <p style="margin:0;font-size:15px;line-height:1.7">${esc(c.body)}</p>
@@ -1739,14 +1884,14 @@ function modalBadges() {
 function modalNotes() {
   const list = (data.learn?.concepts || []).filter((c) => learnState.notes[c.id]);
   return `<div class="sec-title" style="margin:0"><h2>내 노트</h2><span>${list.length}개</span></div>
-    ${list.map((c) => `<button class="solved-row" data-act="concept-open" data-id="${c.id}"><div style="flex:1;min-width:0"><div class="t">${esc(c.term)} <span class="tagc">${esc(catName(c.cat))}</span></div><div class="d">${esc(c.short)}</div></div><span aria-hidden="true">›</span></button>`).join("")
+    ${list.map((c) => `<button class="solved-row" data-act="concept-open" data-id="${c.id}"><div style="flex:1;min-width:0"><div class="t">${esc(c.term)} <span class="tagc">${esc(catName(c.cat))}</span></div><div class="d">${esc(c.short || c.quiz?.q || "")}</div></div><span aria-hidden="true">›</span></button>`).join("")
       || `<p class="hint">개념을 열고 ‘노트에 담기’를 누르면 여기 모여요.</p>`}
     <button class="btn ghost" data-act="modal-close">닫기</button>`;
 }
 function modalQuiz(m) {
   const c = conceptById(m.id);
   if (!c) return "";
-  return `<div class="sec-title" style="margin:0"><h2>${esc(c.term)}</h2><span class="tagc">${LV_NAME[m.lv]}</span></div>
+  return `<div class="sec-title" style="margin:0"><h2>${esc(c.term)}</h2><span class="tagc">${isSingle(c) ? `${c.island}섬` : LV_NAME[m.lv]}</span></div>
     <div class="c-quiz">${quizBox(c, m.lv, false)}</div>
     <button class="btn ghost" data-act="qp-back">닫기</button>`;
 }
@@ -1820,7 +1965,7 @@ function homeBlocks() {
 
   const tq = todayQuiz();
   const quizBlock = todayQuizShown(tq) ? `<section class="quiz" id="h-quiz">
-      <button class="quiz-head" data-act="go-learn"><span class="hand">오늘의 OX 퀴즈 · ${esc(catName(tq.c.cat))}</span><span>경제 공부 ›</span></button>
+      <button class="quiz-head" data-act="go-learn"><span class="hand">${quizLabel(tq.c)} · ${esc(catName(tq.c.cat))}</span><span>경제 공부 ›</span></button>
       ${quizBox(tq.c, tq.lv, true, true, true)}
     </section>` : "";
 
@@ -3010,8 +3155,10 @@ function viewLearn() {
     return `<button class="stage arc-card ${all ? "clear" : ""}" data-act="stage-open" data-c="${cat.id}" style="--abg:${th.bg};--agir:${th.gir}">
         <canvas class="arc-thumb" data-arc="thumb" data-c="${cat.id}" aria-hidden="true"></canvas>
         <span class="st-top"><b>${esc(cat.name)}</b>${all ? `<span class="st-badge">🏅</span>` : ""}</span>
-        <span class="arc-bar"><i style="width:${Math.round((stars / (list.length * 3)) * 100)}%"></i></span>
-        <span class="arc-sub">개념 ${done}/${list.length} · ★ ${stars}/${list.length * 3}</span>
+        ${cat.islands ? `<span class="arc-bar"><i style="width:${Math.round((done / list.length) * 100)}%"></i></span>
+        <span class="arc-sub">섬 ${cat.islands.filter((_, i) => islandDone(cat.id, i + 1)).length}/${cat.islands.length} · 개념 ${done}/${list.length}</span>`
+        : `<span class="arc-bar"><i style="width:${Math.round((stars / (list.length * 3)) * 100)}%"></i></span>
+        <span class="arc-sub">개념 ${done}/${list.length} · ★ ${stars}/${list.length * 3}</span>`}
       </button>`;
   }).join("");
   return `${tabHead("공부")}
@@ -3030,7 +3177,7 @@ function viewLearn() {
       <div class="msn-dots">${Array.from({ length: MISSION }, (_, k) => `<i class="${k < todayN ? "on" : ""}"></i>`).join("")}</div>
       <button class="btn block" data-act="qq-start">⚡ 빠른 퀴즈 도전 (5문제)</button>
     </section>
-    ${todayQuizShown(tq) ? `<section class="quiz"><span class="hand" style="font-size:14px;color:var(--sub)">오늘의 OX 퀴즈 · ${esc(tq.c.term)} · ${LV_NAME[tq.lv]}</span>${quizBox(tq.c, tq.lv, true, false, true)}</section>` : ""}
+    ${todayQuizShown(tq) ? `<section class="quiz"><span class="hand" style="font-size:14px;color:var(--sub)">${quizLabel(tq.c)} · ${esc(tq.c.term)}${lvName(tq.c, tq.lv) ? ` · ${lvName(tq.c, tq.lv)}` : ""}</span>${quizBox(tq.c, tq.lv, true, false, true)}</section>` : ""}
     <section class="card stats">
       <button data-act="nav" data-route="solved"><b class="num">${solved.length}<small>/${totalQ}</small></b><span>푼 문제 ›</span></button>
       <div><b class="num">${att.pct}%</b><span>출석률 · ${att.n}/${att.of}일</span></div>
@@ -3315,6 +3462,7 @@ function startArcade() {
   arcRaf = requestAnimationFrame(tick);
 }
 function viewStage(catId) {
+  if (islandNames(catId).length) return viewIslands(catId);
   const m = arcMap(catId);
   const done = m.list.filter(mastered).length;
   const word = { done: "완료", wrong: "틀림", doing: "진행 중", open: "시작", locked: "잠김" };
@@ -3331,6 +3479,38 @@ function viewStage(catId) {
       }).join("")}
     </div>
     <p class="foot">앞 개념의 1단계를 맞히면 다음 칸이 열려요. 틀린 칸이 있으면 공룡이 한 칸 다가와요.</p>
+  </main>`;
+}
+// 섬 화면: 섬 목록(지그재그로 이어진 큰 카드) → 섬을 누르면 그 안의 개념 목록 → 개념을 누르면 문제 화면(#quiz)
+function viewIslands(catId) {
+  const names = islandNames(catId);
+  const n = ui.learnIsland;
+  if (n && names[n - 1] && islandOpen(catId, n)) {
+    const list = islandConcepts(catId, n);
+    const ok = list.filter(mastered).length;
+    return `${tabHead("공부")}
+  <main class="scroll">
+    <div class="stage-head"><button class="icon-btn" data-act="island-close" aria-label="섬 목록으로">${ICON.back}</button><div><h2>${n}섬 · ${esc(names[n - 1])}</h2><span class="hint">맞힌 개념 ${ok}/${list.length} · 모두 맞히면 다음 섬이 열려요</span></div></div>
+    <section class="card isl-list">${list.map((c, i) => {
+      const [cls, word] = mastered(c) ? ["b-green", "맞힘"] : isWrong(c) ? ["b-up", "틀림"] : ["b-flat", "안 풀었음"];
+      return `<button class="isl-row" data-act="concept-open" data-id="${c.id}"><span class="isl-no num">${i + 1}</span><span class="isl-t">${esc(c.term)}</span><span class="badge ${cls}">${word}</span></button>`;
+    }).join("")}</section>
+  </main>`;
+  }
+  const all = stageConcepts(catId);
+  const cards = names.map((name, i) => {
+    const k = i + 1, list = islandConcepts(catId, k), ok = list.filter(mastered).length;
+    const done = ok === list.length, open = islandOpen(catId, k);
+    return `<button class="isl ${done ? "done" : open ? "open" : "locked"} ${i % 2 ? "r" : ""}" data-act="${open ? "island-open" : "island-locked"}" data-i="${k}" aria-label="${k}섬 ${esc(name)} ${done ? "완료" : open ? "열림" : "잠김"}">
+      <span class="isl-num num">${done ? "✓" : k}</span>
+      <span class="isl-body"><b>${esc(name)}</b><span class="hint">${open ? `맞힌 개념 ${ok}/${list.length}` : `앞 섬을 다 맞히면 열려요 · 개념 ${list.length}개`}</span>
+        <span class="isl-bar"><i style="width:${Math.round((ok / list.length) * 100)}%"></i></span></span></button>`;
+  }).join(`<span class="isl-path" aria-hidden="true"></span>`);
+  return `${tabHead("공부")}
+  <main class="scroll">
+    <div class="stage-head"><button class="icon-btn" data-act="stage-close" aria-label="공부로">${ICON.back}</button><div><h2>${esc(catName(catId))}</h2><span class="hint">섬 ${names.filter((_, i) => islandDone(catId, i + 1)).length}/${names.length} 완료 · 개념 ${all.filter(mastered).length}/${all.length}</span></div></div>
+    <div class="isl-map">${cards}</div>
+    <p class="foot">섬 안의 문제를 모두 맞히면 다음 섬이 열려요. 섬 안에서는 아무 개념이나 골라 풀 수 있어요.</p>
   </main>`;
 }
 
@@ -3426,7 +3606,7 @@ function searchResults() {
 
   // 경제 용어: 경제 공부 개념에서 찾기 → 누르면 그 개념 카드로
   group("경제 용어", (data.learn?.concepts || []).filter((c) => has(c.term) || has(c.short)).slice(0, 3)
-    .map((c) => `<button class="si" data-act="open-concept" data-id="${c.id}"><span><b>${esc(c.term)}</b> <span class="s2">${esc(c.short)}</span></span><span class="s2">›</span></button>`));
+    .map((c) => `<button class="si" data-act="open-concept" data-id="${c.id}"><span><b>${esc(c.term)}</b> <span class="s2">${esc(c.short || catName(c.cat))}</span></span><span class="s2">›</span></button>`));
 
   const pool = [...(data.news?.issues || []), ...(data.news?.forYou || []), ...(data.newsFull?.issues || []), ...(data.newsFull?.forYou || [])];
   const seen = new Set();
@@ -3900,8 +4080,10 @@ document.addEventListener("click", async (e) => {
       const c = conceptById(el.dataset.id), lv = Number(el.dataset.lv || 0);
       const q = c && quizzesOf(c)[lv];
       if (!q) break;
+      const pick = q.type === "short" ? el.closest("form")?.querySelector("input")?.value.trim() : el.dataset.o;
+      if (!pick) { toast("답을 입력해 주세요"); break; }
       const key = `${c.id}:${lv}`;
-      learnState.answers[key] = { pick: el.dataset.o, ok: el.dataset.o === q.a, at: Date.now() };
+      learnState.answers[key] = { pick, ok: isRight(q, pick), at: Date.now() };
       saveLearn(); markAttend(); checkProgress();
       render();
       break;
@@ -3917,7 +4099,10 @@ document.addEventListener("click", async (e) => {
       break;
     }
     case "stage-open": ui.learnStage = el.dataset.c; render(); window.scrollTo(0, 0); break;
-    case "stage-close": ui.learnStage = null; render(); window.scrollTo(0, 0); break;
+    case "stage-close": ui.learnStage = null; ui.learnIsland = null; render(); window.scrollTo(0, 0); break;
+    case "island-open": ui.learnIsland = Number(el.dataset.i); render(); window.scrollTo(0, 0); break;
+    case "island-close": ui.learnIsland = null; render(); window.scrollTo(0, 0); break;
+    case "island-locked": toast("앞 섬의 문제를 모두 맞히면 열려요"); break;
     case "node-locked": toast("앞 개념의 1단계를 먼저 맞혀 보세요"); break;
     case "concept-open": { const c = conceptById(el.dataset.id); if (c) openQuizPage("concept", { id: c.id, lv: mastered(c) ? 2 : curLv(c) }); break; }
     case "qp-back": if (ui.qpPushed) { ui.qpPushed = false; history.back(); } else go("#learn"); break;
@@ -3927,9 +4112,11 @@ document.addEventListener("click", async (e) => {
     case "qq-answer": {
       const m = ui.qp; if (!m || m.picked) break;
       const cur = m.qs[m.i], c = conceptById(cur.id), q = quizzesOf(c)[cur.lv];
-      const ok = el.dataset.o === q.a;
-      m.picked = el.dataset.o; m.res[m.i] = ok; m.lastBonus = 0;
-      if (!cur.review) learnState.answers[`${c.id}:${cur.lv}`] = { pick: el.dataset.o, ok, at: Date.now() };
+      const pick = q.type === "short" ? el.closest("form")?.querySelector("input")?.value.trim() : el.dataset.o;
+      if (!pick) { toast("답을 입력해 주세요"); break; }
+      const ok = isRight(q, pick);
+      m.picked = pick; m.res[m.i] = ok; m.lastBonus = 0;
+      if (!cur.review) learnState.answers[`${c.id}:${cur.lv}`] = { pick, ok, at: Date.now() };
       if (ok) {
         m.ok++; m.combo++;
         if (!cur.review) m.xp += XP_LV[cur.lv];
@@ -4353,6 +4540,8 @@ document.addEventListener("input", (e) => {
 });
 
 document.addEventListener("submit", (e) => {
+  // 단답식 입력칸에서 Enter를 누르면 '확인'을 누른 것과 같다
+  if (e.target.classList.contains("sa-form")) { e.preventDefault(); e.target.querySelector("button[data-act]:not([disabled])")?.click(); return; }
   if (e.target.id !== "searchform") return;
   e.preventDefault();
   const q = ui.q.trim();
