@@ -813,6 +813,8 @@
   .solved-row .t { font-size: 15px; font-weight: 700; }
   .solved-row .d { font-size: 13px; color: var(--sub); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .modal .c-quiz, .qpage .c-quiz { display: flex; flex-direction: column; gap: 10px; }
+  .loc-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .loc-row .btn { flex-shrink: 0; }
   /* 객관식 보기 · 단답식 입력 */
   .mcq { display: flex; flex-direction: column; gap: 8px; }
   .mcq button { display: flex; align-items: flex-start; gap: 10px; width: 100%; min-height: 48px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--card); color: var(--ink); font: inherit; font-size: 15px; line-height: 22px; text-align: left; cursor: pointer; }
@@ -3517,9 +3519,31 @@ function viewIslands(catId) {
 // ───────────────────────── 화면: 우리 지역 혜택 ─────────────────────────
 const SIDO = ["서울특별시", "부산광역시", "대구광역시", "인천광역시", "광주광역시", "대전광역시", "울산광역시", "세종특별자치시", "경기도", "강원특별자치도", "충청북도", "충청남도", "전북특별자치도", "전라남도", "경상북도", "경상남도", "제주특별자치도"];
 const STATUSES = ["대학생", "대학원생", "취준생", "직장인", "자영업", "기타"];
+// 내 위치로 동네 찾기 버튼 (홈 맞춤 질문·우리 지역 혜택·마이페이지 공용)
+const LOCATE_ROW = `<div class="loc-row"><button class="btn ghost" data-act="locate">내 위치로 찾기</button><span class="hint">위치는 동네 이름을 찾는 데만 쓰고 저장하지 않아요</span></div>`;
+// 버튼을 눌렀을 때만 위치를 묻는다. 좌표는 약 100m로 뭉개 서버에 보내고 버린다(시·도, 시·군·구 이름만 저장)
+async function locateRegion(btn) {
+  if (ui.locating || !profile) return;
+  if (!navigator.geolocation) { toast("이 기기에서는 위치를 쓸 수 없어요. 직접 골라 주세요"); return; }
+  ui.locating = true;
+  if (btn) { btn.disabled = true; btn.textContent = "찾는 중…"; }
+  const done = (msg) => { ui.locating = false; render(); if (msg) toast(msg); };
+  let pos;
+  try { pos = await new Promise((ok, no) => navigator.geolocation.getCurrentPosition(ok, no, { enableHighAccuracy: false, timeout: 10000, maximumAge: 600000 })); }
+  catch (e) { return done(e?.code === 1 ? "위치를 허용하지 않았어요. 직접 골라 주세요" : "위치를 찾지 못했어요. 직접 골라 주세요"); }
+  try {
+    const r = await getJson(`/api/region?lat=${pos.coords.latitude.toFixed(3)}&lng=${pos.coords.longitude.toFixed(3)}`);
+    if (r.available === false) return done("아직 위치 찾기를 쓸 수 없어요. 직접 골라 주세요");
+    if (!r.sido) return done(`${r.error || "동네 이름을 찾지 못했어요"}. 직접 골라 주세요`);
+    profile.region = { sido: r.sido, sigungu: r.sigungu || "" };
+    saveProfile();
+    data.benefitsApi = null; loadBenefits();
+    done(`사는 곳: ${r.sido}${r.sigungu ? " " + r.sigungu : ""} · 혜택을 찾고 있어요`);
+  } catch { done("동네 이름을 찾지 못했어요. 직접 골라 주세요"); }
+}
 function regionFields(p) {
   const r = p.region || {};
-  return `<div class="grid2">
+  return `${LOCATE_ROW}<div class="grid2">
       <div><label class="lb" for="f-sido">사는 곳 (시·도)</label><select class="field" id="f-sido" data-field="sido"><option value="">선택</option>${SIDO.map((s) => `<option ${r.sido === s ? "selected" : ""}>${s}</option>`).join("")}</select></div>
       <div><label class="lb" for="f-sigungu">시·군·구</label><input class="field" id="f-sigungu" data-field="sigungu" placeholder="예: 강남구" maxlength="10" value="${esc(r.sigungu || "")}"></div>
       <div><label class="lb" for="f-status">지금 나는</label><select class="field" id="f-status" data-field="status"><option value="">선택</option>${STATUSES.map((s) => `<option ${p.status === s ? "selected" : ""}>${s}</option>`).join("")}</select></div>
@@ -3678,7 +3702,7 @@ function moreQuestion(k) {
     <div class="inline"><button class="btn ghost" data-act="no-debt" style="flex:1">없어요</button><button class="btn" data-act="go-my" data-focus="debts" style="flex:1">있어요, 입력할게요</button></div>${skip}`;
   if (k === "region") return `${head}<p class="q">어느 지역에 사세요? 지자체 혜택을 찾아드려요</p>
     <div class="inline"><label for="q-sido" class="sr">시·도</label><select class="field" id="q-sido" style="flex:1.2"><option value="">시·도</option>${SIDO.map((x) => `<option>${x}</option>`).join("")}</select>
-      <label for="q-sgg" class="sr">시·군·구</label><input class="field" id="q-sgg" placeholder="시·군·구" maxlength="10" style="flex:1"><button class="btn" data-act="set-region">저장</button></div>${skip}`;
+      <label for="q-sgg" class="sr">시·군·구</label><input class="field" id="q-sgg" placeholder="시·군·구" maxlength="10" style="flex:1"><button class="btn" data-act="set-region">저장</button></div>${LOCATE_ROW}${skip}`;
   if (k === "status") return `${head}<p class="q">지금 어떤 상황이에요?</p>
     <div class="chips">${STATUSES.map((x) => `<button class="chip" data-act="set-status" data-v="${x}">${x}</button>`).join("")}</div>${skip}`;
   if (k === "income") return `${head}<p class="q">연 소득은 어느 구간인가요? (혜택 추천에 써요)</p>
@@ -4199,6 +4223,7 @@ document.addEventListener("click", async (e) => {
       commit(); loadBenefits(); toast("우리 지역 혜택을 찾고 있어요");
       break;
     }
+    case "locate": locateRegion(el); break;
     case "set-status": t.status = el.dataset.v; commit(); loadBenefits(); break;
     case "close-sheet": ui.sheet = null; render(); break;
     case "skip": t.skipped = { ...(t.skipped || {}), [el.dataset.k]: true }; commit(); break;

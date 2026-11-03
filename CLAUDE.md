@@ -15,7 +15,7 @@
 - 투자 성향 진단 (index.html · viewRiskTest): 7문항으로 투자 성향을 알려준다.
 - 뉴스 (index.html · viewNews, viewBrief / api/news.js, api/brief.js): 오늘의 경제 쉽게 풀이, 오늘의 이슈, 나를 위한 뉴스, 뉴스레터 붙여넣기 풀이를 본다.
 - 나를 위한 일정 (index.html · viewSchedule / data/calendar.json): 관심사에 맞는 세일·여행·정책·금리 일정을 모아 보여준다.
-- 우리 지역 혜택 (index.html · viewBenefits / api/benefits.js, api/rates.js): 사는 지역·나이·상황에 맞는 지자체·정부 혜택과 은행 정기예금 금리 TOP 3, 학교 장학 공지 검색 링크를 보여준다.
+- 우리 지역 혜택 (index.html · viewBenefits / api/benefits.js, api/rates.js, api/region.js): '내 위치로 찾기'(누를 때만 위치를 물어 시·도·시·군·구를 채움, 좌표는 저장 안 함, 홈 맞춤 질문·마이페이지에도 있음)와, 사는 지역·나이·상황에 맞는 지자체·정부 혜택과 은행 정기예금 금리 TOP 3, 학교 장학 공지 검색 링크를 보여준다.
 - 관심 종목 (index.html · viewWatch): 종목을 추가·삭제하고 보유 수량을 정한다. 종목 순서는 홈 화면 꾸미기에서 바꾼다.
 - 뉴스레터 (index.html · viewLetters): 구독 중인 뉴스레터를 관리한다.
 - 홈 화면 꾸미기 (index.html · viewLayout): 홈 칸과 관심 종목의 순서를 바꾸고 칸을 숨긴다.
