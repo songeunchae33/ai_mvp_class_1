@@ -1,10 +1,10 @@
-// 쉽게 풀이: 최근 3일 정부 경제 보도자료(정책브리핑, 공공저작물)를 모아 AI가 쉬운 말로 짧게 정리한다.
+// 쉽게 풀이: 최근 7일 정부 경제 보도자료(정책브리핑, 공공저작물)를 관심사 순으로 모아 AI가 쉬운 말로 짧게 정리한다.
 // 네이버 뉴스 검색 결과는 약관상 AI 요약에 쓸 수 없어서 쓰지 않는다. 근거 보도자료는 링크로 붙인다.
 // GET  /api/brief?interests=삼성전자,여행   → 오늘 경제 정책 풀이 (1시간 동안 같은 결과를 재사용해 비용 절약)
 // POST /api/brief { text }                  → 붙여넣은 뉴스레터 풀이 (저장하지 않음)
 import OpenAI from "openai";
 import { cache } from "./_util.js";
-import { pressReleases, isEcon } from "./_policy.js";
+import { pressReleases, isEcon, interestScore } from "./_policy.js";
 
 const MODEL = "gpt-6.1-sol";
 
@@ -80,13 +80,17 @@ export default async function handler(req, res) {
 
   const interests = String(req.query.interests || "").split(",").map((s) => s.trim()).filter(Boolean).slice(0, 5);
   try {
-    const pool = (await pressReleases(3)).filter(isEcon).slice(0, 30);
+    // 최근 7일 경제 보도자료 중 관심사와 겹치는 것을 앞에 두고 40개까지
+    const pool = (await pressReleases(7)).filter(isEcon)
+      .map((p, i) => ({ p, i, s: interestScore(p, interests) }))
+      .sort((a, b) => b.s - a.s || a.i - b.i)
+      .slice(0, 40).map((x) => x.p);
     if (pool.length < 3) return res.status(200).json({ available: true, mood: "", points: [] });
 
     const listText = pool.map((n, i) => `[${i}] (${n.org}) ${n.title} — ${n.sub} ${n.body.slice(0, 200)}`).join("\n");
     const out = await ask([
       { role: "system", content: RULES + `
-- 아래는 최근 3일 정부 보도자료야. 생활과 돈에 영향이 큰 흐름 3개를 골라 points로 정리해. 관심사(${interests.join(", ") || "없음"})와 관련된 게 있으면 하나는 꼭 포함해.
+- 아래는 최근 7일 정부 보도자료야(관심사와 관련된 것이 앞쪽에 있어). 생활과 돈에 영향이 큰 흐름 3개를 골라 points로 정리해. 관심사(${interests.join(", ") || "없음"})와 관련된 게 있으면 하나 이상 꼭 포함하고, 그 point의 forMe에서 관심사와 이어서 설명해.
 - sources에는 근거 보도자료 번호를 1~3개 넣어.` },
       { role: "user", content: listText },
     ]);
