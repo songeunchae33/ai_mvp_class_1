@@ -47,7 +47,7 @@ function allow(ip, n) {
   const day = new Date().toISOString().slice(0, 10);
   const h = hits.get(ip);
   const cur = h && h.day === day ? h.count : 0;
-  if (cur + n > 30) return false; // 캡처 하루 20장 + 피드백 여유분
+  if (cur + n > 20) return false; // 1인 최대 캡처 12장(무료 3 + 광고 9) + 피드백 4번에 여유분. 1인 한도는 앱이 지킨다
   hits.set(ip, { day, count: cur + n });
   return true;
 }
