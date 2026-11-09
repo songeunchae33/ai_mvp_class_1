@@ -35,7 +35,7 @@ async function gemini({ system, text, images, schema, maxTokens }) {
     body: JSON.stringify(body),
     signal: AbortSignal.timeout(20000),
   });
-  if (!r.ok) throw new Error(`gemini ${r.status}`);
+  if (!r.ok) throw new Error(`gemini ${r.status} ${(await r.text()).slice(0, 300)}`);
   const j = await r.json();
   if (j.status && j.status !== "completed") throw new Error(`gemini ${j.status}`);
   const out = (j.steps || []).filter((s) => s.type === "model_output")
@@ -69,8 +69,9 @@ export async function generate({ system, text, images = [], schema, schemaName, 
   const req = { system, text, images, schema, schemaName, maxTokens };
   if (process.env.GEMINI_API_KEY) {
     try { return { text: await gemini(req), ai: "gemini" }; }
-    catch (e) { console.error("gemini 실패 → openai:", e.message); }
+    catch (e) { console.error("gemini 실패 → openai:", e.message); var why = String(e.message).slice(0, 300); }
   }
   if (!process.env.OPENAI_API_KEY) throw new Error("AI 키가 없어요");
-  return { text: await openai(req), ai: "openai" };
+  // ai: 화면에는 안 보임. Gemini가 실패했으면 이유(오류 코드·메시지, 키는 없음)를 붙여 확인할 수 있게
+  return { text: await openai(req), ai: why ? `openai (${why})` : "openai" };
 }
