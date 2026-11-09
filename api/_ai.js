@@ -3,7 +3,8 @@
 // Gemini: Interactions API (https://aistudio.google.com/docs/text-generation · image-understanding · structured-output)
 import OpenAI from "openai";
 
-const GEMINI_MODEL = "gemini-3.8-flash";
+// 3.8 Flash는 사용량이 몰리면 503·20초 초과가 잦아서, 무료 등급이 있고 안정판인 3.5 Flash-Lite를 쓴다 (https://aistudio.google.com/docs/models)
+const GEMINI_MODEL = "gemini-3.5-flash-lite";
 const OPENAI_MODEL = "gpt-6.1-sol";
 const GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/interactions";
 

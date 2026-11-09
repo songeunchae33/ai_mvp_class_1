@@ -1,4 +1,5 @@
-// 시세: 코스피·코스닥 지수, 관심 종목 (공공데이터포털 금융위원회, 전일 종가) + 원/달러 환율 (한국수출입은행).
+// 시세: 코스피·코스닥 지수와 원/달러 환율은 한국은행 ECOS(ECOS_KEY), 관심 종목은 공공데이터포털 금융위원회(전일 종가).
+// ECOS_KEY가 아직 없으면 지수는 금융위원회, 환율은 한국수출입은행으로 예전처럼 받는다.
 // GET /api/market?stocks=삼성전자,카카오   → 홈 화면 데이터
 // GET /api/market?search=삼성              → 종목 이름 검색 (관심 종목 추가용)
 // 키가 없거나 호출이 실패하면 예시 데이터를 sample:true 로 돌려준다.
@@ -54,6 +55,21 @@ async function search(q) {
   return [...seen.values()].sort((a, b) => b.name.startsWith(q) - a.name.startsWith(q) || a.name.length - b.name.length).slice(0, 8);
 }
 
+// 한국은행 ECOS 통계 (https://ecos.bok.or.kr/api/). 키가 주소 안에 들어가므로 오류 메시지에 주소를 넣지 않는다.
+// 802Y001 주식시장(일): 0001000 KOSPI지수 · 0089000 KOSDAQ지수 / 731Y001 주요국 통화의 대원화환율: 0000001 원/미국달러(매매기준율)
+async function ecos(stat, item) {
+  const url = `https://ecos.bok.or.kr/api/StatisticSearch/${encodeURIComponent(process.env.ECOS_KEY)}/json/kr/1/10/${stat}/D/${kstYmd(14)}/${kstYmd(0)}/${item}`;
+  const r = await fetch(url, { signal: AbortSignal.timeout(6000) });
+  if (!r.ok) throw new Error(`ecos ${r.status}`);
+  const j = await r.json();
+  const rows = (j.StatisticSearch?.row || []).filter((x) => num(x.DATA_VALUE) != null).sort((a, b) => (a.TIME < b.TIME ? -1 : 1));
+  if (!rows.length) throw new Error(`ecos ${j.RESULT?.CODE || "빈 결과"}`);
+  const today = rows[rows.length - 1], prev = rows[rows.length - 2];
+  const v = num(today.DATA_VALUE), p = prev ? num(prev.DATA_VALUE) : null;
+  const vs = p != null ? Math.round((v - p) * 100) / 100 : 0;
+  return { v, vs, pct: p ? Math.round((vs / p) * 10000) / 100 : 0, date: today.TIME };
+}
+
 // 수출입은행은 영업일 오전 11시쯤 그날 환율을 올린다. 주말·공휴일·발표 전이면 빈 배열이라 며칠 거슬러 올라간다.
 async function usd() {
   const key = process.env.KOREAEXIM_KEY;
@@ -75,6 +91,7 @@ async function usd() {
 export default async function handler(req, res) {
   const hasData = !!process.env.DATA_GO_KR_KEY;
   const hasExim = !!process.env.KOREAEXIM_KEY;
+  const hasEcos = !!process.env.ECOS_KEY;
 
   if (req.query.search !== undefined) {
     const q = String(req.query.search).trim().slice(0, 20);
@@ -95,17 +112,23 @@ export default async function handler(req, res) {
     .filter(Boolean)
     .slice(0, 10);
 
-  const out = { sample: !hasData || !hasExim };
+  const out = { sample: !hasData || !(hasEcos || hasExim) };
   const tasks = [];
 
-  if (hasData) {
+  if (hasEcos) {
+    tasks.push(
+      ecos("802Y001", "0001000").then((v) => (out.kospi = v)).catch((e) => { console.error("kospi", e.message); out.note = String(e.message).slice(0, 80); }),
+      ecos("802Y001", "0089000").then((v) => (out.kosdaq = v)).catch((e) => console.error("kosdaq", e.message)),
+      ecos("731Y001", "0000001").then((v) => (out.usd = v)).catch((e) => console.error("usd", e.message))
+    );
+  } else if (hasData) {
     tasks.push(
       index("코스피").then((v) => (out.kospi = v)).catch((e) => { console.error("kospi", e.message); out.note = String(e.message).slice(0, 80); }),
-      index("코스닥").then((v) => (out.kosdaq = v)).catch((e) => console.error("kosdaq", e.message)),
-      Promise.all(names.map((n) => stock(n).catch(() => ({ name: n, missing: true })))).then((v) => (out.stocks = v))
+      index("코스닥").then((v) => (out.kosdaq = v)).catch((e) => console.error("kosdaq", e.message))
     );
   }
-  if (hasExim) tasks.push(usd().then((v) => (out.usd = v)).catch((e) => console.error("usd", e.message)));
+  if (hasData) tasks.push(Promise.all(names.map((n) => stock(n).catch(() => ({ name: n, missing: true })))).then((v) => (out.stocks = v)));
+  if (!hasEcos && hasExim) tasks.push(usd().then((v) => (out.usd = v)).catch((e) => console.error("usd", e.message)));
   await Promise.all(tasks);
 
   // 빠진 값은 예시로 채우고 sample 표시
