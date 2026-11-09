@@ -1,8 +1,6 @@
-// 하단 질문창: 사용자 상황(요약)과 오늘 시세를 붙여 짧게 답한다. OpenAI 사용 (충전 금액에서 차감).
+// 하단 질문창: 사용자 상황(요약)과 오늘 시세를 붙여 짧게 답한다. Gemini 무료 등급 먼저, 안 되면 OpenAI (api/_ai.js).
 // POST /api/ask { question, profile, market }
-import OpenAI from "openai";
-
-const MODEL = "gpt-6.1-sol";
+import { generate, aiReady } from "./_ai.js";
 
 const SYSTEM = `너는 '나만의 경제' 앱의 금융 길잡이 캐릭터 '루미'(이루미)야. 사용자의 길을 밝혀주는 다정한 친구 같은 말투로. 2030 사용자에게 경제를 친근한 존댓말(~요)로 설명해.
 - 4~6문장, 쉬운 말. 어려운 용어는 괄호로 한 번 풀어줘.
@@ -26,7 +24,7 @@ function allow(ip) {
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "POST만 지원해요" });
   const ip = String(req.headers["x-forwarded-for"] || "").split(",")[0] || "local";
-  if (!process.env.OPENAI_API_KEY) return res.status(503).json({ error: "AI 질문 기능이 아직 설정되지 않았어요" });
+  if (!aiReady()) return res.status(503).json({ error: "AI 질문 기능이 아직 설정되지 않았어요" });
 
   const { question, profile, market } = req.body || {};
   if (typeof question !== "string" || !question.trim() || question.length > 300) {
@@ -36,17 +34,8 @@ export default async function handler(req, res) {
   const context = JSON.stringify({ profile: profile || {}, market: market || {} }).slice(0, 2000);
 
   try {
-    const client = new OpenAI();
-    const response = await client.responses.create({
-      model: MODEL,
-      reasoning: { effort: "low" },
-      max_output_tokens: 700,
-      input: [
-        { role: "system", content: SYSTEM },
-        { role: "user", content: `[내 상황]\n${context}\n\n[질문]\n${question.trim()}` },
-      ],
-    });
-    res.status(200).json({ answer: response.output_text });
+    const out = await generate({ system: SYSTEM, text: `[내 상황]\n${context}\n\n[질문]\n${question.trim()}`, maxTokens: 700 });
+    res.status(200).json({ answer: out.text, ai: out.ai });
   } catch (e) {
     console.error(e);
     res.status(502).json({ error: "답변을 만들지 못했어요. 잠시 후 다시 시도해 주세요" });

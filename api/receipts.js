@@ -1,10 +1,8 @@
 // 내 돈 기록: 은행·카드 앱 '이용내역' 캡처를 AI가 읽어 거래 목록으로 바꾼다 + 소비 요약 피드백
 // POST /api/receipts { images: [dataURL...] }              → { transactions, usage }
 // POST /api/receipts { mode: "feedback", summary: {...} }   → { text, usage }
-// 사진은 저장하지 않고 읽는 데만 쓴다. OpenAI 사용 (충전 금액에서 차감)
-import OpenAI from "openai";
-
-const MODEL = "gpt-6.1-sol";
+// 사진은 저장하지 않고 읽는 데만 쓴다. Gemini 무료 등급 먼저, 안 되면 OpenAI (api/_ai.js)
+import { generate, aiReady } from "./_ai.js";
 export const CATS = ["식비", "카페·간식", "쇼핑", "교통", "주거·통신", "구독", "의료·건강", "문화·여가", "여행", "교육", "경조사·선물",
   "금융·수수료", "급여·수입", "내부이체", "기타"];
 
@@ -54,20 +52,16 @@ function allow(ip, n) {
 
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "POST만 지원해요" });
-  if (!process.env.OPENAI_API_KEY) return res.status(503).json({ error: "AI 기능이 아직 설정되지 않았어요" });
+  if (!aiReady()) return res.status(503).json({ error: "AI 기능이 아직 설정되지 않았어요" });
   const body = req.body || {};
   const ip = String(req.headers["x-forwarded-for"] || "").split(",")[0] || "local";
-  const client = new OpenAI();
 
   try {
     if (body.mode === "feedback") {
       const summary = JSON.stringify(body.summary || {}).slice(0, 3000);
       if (!allow(ip, 1)) return res.status(429).json({ error: "오늘은 더 이상 요청할 수 없어요. 내일 다시 해주세요" });
-      const r = await client.responses.create({
-        model: MODEL, reasoning: { effort: "low" }, max_output_tokens: 800,
-        input: [{ role: "system", content: FEEDBACK_RULES }, { role: "user", content: summary }],
-      });
-      return res.status(200).json({ text: r.output_text, usage: r.usage });
+      const r = await generate({ system: FEEDBACK_RULES, text: summary, maxTokens: 800 });
+      return res.status(200).json({ text: r.text, ai: r.ai });
     }
 
     const images = Array.isArray(body.images) ? body.images.filter((x) => typeof x === "string" && /^data:image\/(jpeg|png|webp);base64,/.test(x)) : [];
@@ -77,20 +71,13 @@ export default async function handler(req, res) {
     if (!allow(ip, images.length)) return res.status(429).json({ error: "오늘 읽을 수 있는 사진 수를 넘었어요. 내일 다시 해주세요" });
 
     const today = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
-    const r = await client.responses.create({
-      model: MODEL, reasoning: { effort: "low" }, max_output_tokens: 4000,
-      text: { format: { type: "json_schema", name: "transactions", schema: SCHEMA, strict: true } },
-      input: [
-        { role: "system", content: READ_RULES },
-        { role: "user", content: [{ type: "input_text", text: `오늘은 ${today}이야. 아래 캡처 ${images.length}장의 거래를 모두 뽑아줘.` + (body.pieces
-            ? ` 이 사진들은 스크롤해서 길게 찍은 캡처 한 장을 위에서 아래로 순서대로 자른 조각이야. 조각끼리 조금 겹쳐 있으니 겹친 거래는 한 번만 적어. 날짜 머리글이 앞 조각에 있으면 그 날짜를 다음 조각 거래에도 이어서 써.${/^\d{4}-\d{2}-\d{2}$/.test(String(body.lastDate || "")) ? ` 바로 앞 조각의 마지막 거래 날짜는 ${body.lastDate}였어.` : ""}`
-            : "") },
-          ...images.map((image_url) => ({ type: "input_image", image_url, detail: "high" }))] },
-      ],
-    });
-    const out = JSON.parse(r.output_text);
+    const text = `오늘은 ${today}이야. 아래 캡처 ${images.length}장의 거래를 모두 뽑아줘.` + (body.pieces
+      ? ` 이 사진들은 스크롤해서 길게 찍은 캡처 한 장을 위에서 아래로 순서대로 자른 조각이야. 조각끼리 조금 겹쳐 있으니 겹친 거래는 한 번만 적어. 날짜 머리글이 앞 조각에 있으면 그 날짜를 다음 조각 거래에도 이어서 써.${/^\d{4}-\d{2}-\d{2}$/.test(String(body.lastDate || "")) ? ` 바로 앞 조각의 마지막 거래 날짜는 ${body.lastDate}였어.` : ""}`
+      : "");
+    const r = await generate({ system: READ_RULES, text, images, schema: SCHEMA, schemaName: "transactions", maxTokens: 4000 });
+    const out = JSON.parse(r.text);
     const transactions = (out.transactions || []).filter((t) => t.amount > 0 && /^\d{4}-\d{2}-\d{2}$/.test(t.date)).slice(0, 300);
-    res.status(200).json({ transactions, usage: r.usage });
+    res.status(200).json({ transactions, ai: r.ai });
   } catch (e) {
     console.error(e);
     res.status(502).json({ error: "읽지 못했어요. 글씨가 잘 보이게 다시 캡처해 주세요" });

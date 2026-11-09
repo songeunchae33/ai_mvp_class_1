@@ -2,11 +2,9 @@
 // 네이버 뉴스 검색 결과는 약관상 AI 요약에 쓸 수 없어서 쓰지 않는다. 근거 보도자료는 링크로 붙인다.
 // GET  /api/brief?interests=삼성전자,여행   → 오늘 경제 정책 풀이 (1시간 동안 같은 결과를 재사용해 비용 절약)
 // POST /api/brief { text }                  → 붙여넣은 뉴스레터 풀이 (저장하지 않음)
-import OpenAI from "openai";
+import { generate, aiReady } from "./_ai.js";
 import { cache } from "./_util.js";
 import { pressReleases, isEcon, interestScore } from "./_policy.js";
-
-const MODEL = "gpt-6.1-sol";
 
 const SCHEMA = {
   type: "object",
@@ -36,23 +34,17 @@ const RULES = `너는 경제를 처음 공부하는 20대에게 설명하는 친
 - 숫자는 기사에 나온 것만 쓰고, 모르면 쓰지 마. 추측이나 투자 추천(사라/팔아라)은 하지 마.
 - 어려운 용어는 괄호로 한 번 풀어줘. 각 문장은 짧게.`;
 
-async function ask(input) {
-  const client = new OpenAI();
-  const r = await client.responses.create({
-    model: MODEL,
-    reasoning: { effort: "low" },
-    max_output_tokens: 900,
-    text: { format: { type: "json_schema", name: "brief", schema: SCHEMA, strict: true } },
-    input,
-  });
-  return JSON.parse(r.output_text);
+// Gemini 무료 등급 먼저, 안 되면 OpenAI (api/_ai.js). 어느 AI가 답했는지 ai로 돌려준다
+async function ask(system, text) {
+  const out = await generate({ system, text, schema: SCHEMA, schemaName: "brief", maxTokens: 900 });
+  return { ...JSON.parse(out.text), ai: out.ai };
 }
 
 // 뉴스레터 붙여넣기 풀이: 하루 5번 (IP 기준)
 const letterHits = new Map();
 
 export default async function handler(req, res) {
-  if (!process.env.OPENAI_API_KEY) return res.status(200).json({ available: false });
+  if (!aiReady()) return res.status(200).json({ available: false });
 
   // 뉴스레터 붙여넣기 풀이
   if (req.method === "POST") {
@@ -65,10 +57,7 @@ export default async function handler(req, res) {
     if (text.length < 50) return res.status(400).json({ error: "내용을 조금 더 붙여넣어 주세요" }); // 짧은 글은 횟수를 깎지 않는다
     letterHits.set(ip, { day, n: used + 1 });
     try {
-      const out = await ask([
-        { role: "system", content: RULES + "\n- 사용자가 구독하는 뉴스레터 내용을 붙여넣었어. 핵심 2~3개만 골라 points로 정리하고, sources는 빈 배열로 둬." },
-        { role: "user", content: text.slice(0, 6000) },
-      ]);
+      const out = await ask(RULES + "\n- 사용자가 구독하는 뉴스레터 내용을 붙여넣었어. 핵심 2~3개만 골라 points로 정리하고, sources는 빈 배열로 둬.", text.slice(0, 6000));
       return res.status(200).json({ available: true, ...out });
     } catch (e) {
       console.error(e);
@@ -88,18 +77,15 @@ export default async function handler(req, res) {
     if (pool.length < 3) return res.status(200).json({ available: true, mood: "", points: [] });
 
     const listText = pool.map((n, i) => `[${i}] (${n.org}) ${n.title} — ${n.sub} ${n.body.slice(0, 200)}`).join("\n");
-    const out = await ask([
-      { role: "system", content: RULES + `
+    const out = await ask(RULES + `
 - 아래는 최근 7일 정부 보도자료야(관심사와 관련된 것이 앞쪽에 있어). 생활과 돈에 영향이 큰 흐름 3개를 골라 points로 정리해. 관심사(${interests.join(", ") || "없음"})와 관련된 게 있으면 하나 이상 꼭 포함하고, 그 point의 forMe에서 관심사와 이어서 설명해.
-- sources에는 근거 보도자료 번호를 1~3개 넣어.` },
-      { role: "user", content: listText },
-    ]);
+- sources에는 근거 보도자료 번호를 1~3개 넣어.`, listText);
     const points = (out.points || []).slice(0, 3).map((p) => ({
       ...p,
       sources: (p.sources || []).filter((i) => pool[i]).slice(0, 3).map((i) => ({ title: pool[i].title, url: pool[i].url, source: pool[i].org || "정책브리핑" })),
     }));
     cache(res, 3600);
-    res.status(200).json({ available: true, mood: out.mood, points, count: pool.length, at: new Date().toISOString() });
+    res.status(200).json({ available: true, mood: out.mood, points, count: pool.length, at: new Date().toISOString(), ai: out.ai });
   } catch (e) {
     console.error(e);
     res.status(200).json({ available: true, mood: "", points: [], error: "풀이를 만들지 못했어요" });

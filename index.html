@@ -2683,7 +2683,7 @@ function moneyBody() {
       ${ledger.tx.length ? `<label class="sr" for="tx-q">기록 검색</label><input class="field" id="tx-q" type="search" placeholder="가게 이름이나 분류로 찾기 (예: 편의점, 식비)" value="${esc(ui.txQ || "")}" style="margin-bottom:4px">` : ""}
       <div id="m-list">${txListHtml()}</div>
     </section>
-        <p class="foot">기록은 이 기기에만 저장돼요. 캡처 사진은 AI가 읽는 데만 쓰고 저장하지 않아요(읽을 때 OpenAI로 전송돼요).</p>`;
+        <p class="foot">기록은 이 기기에만 저장돼요. 캡처 사진은 AI가 읽는 데만 쓰고 저장하지 않아요(읽을 때 Google Gemini 무료 등급(구글이 서비스 개선에 쓸 수 있음) 또는 OpenAI로 전송돼요).</p>`;
   return `${seg}
     <div class="sortbar" role="group" aria-label="기간">
       <button class="${kind === "week" ? "on" : ""}" data-act="money-kind" data-v="week">이번 주</button>
@@ -2704,7 +2704,7 @@ function moneyBody() {
       ${ui.moneyFb?.error ? `<p class="hint" style="color:var(--up)">${esc(ui.moneyFb.error)}</p>` : ""}
     </section>
     ${calBlock(kind)}
-    <p class="foot">기록은 이 기기에만 저장돼요. 캡처 사진은 AI가 읽는 데만 쓰고 저장하지 않아요(읽을 때 OpenAI로 전송돼요).</p>`;
+    <p class="foot">기록은 이 기기에만 저장돼요. 캡처 사진은 AI가 읽는 데만 쓰고 저장하지 않아요(읽을 때 Google Gemini 무료 등급(구글이 서비스 개선에 쓸 수 있음) 또는 OpenAI로 전송돼요).</p>`;
 }
 
 // ───────────────────────── 화면: 가계부 (하단 탭) ─────────────────────────
@@ -4037,7 +4037,7 @@ function viewEtc() {
     ${S.privacy}
     <section class="card">
       <div class="sec-title"><h2>앱 정보</h2><span>v0.5</span></div>
-      <p style="margin:0;font-size:14px;line-height:1.7">주가·지수: 공공데이터포털(금융위원회, 전일 종가) · 환율: 한국수출입은행 · 뉴스: 네이버(제목·링크) · 쉽게 풀이·화제순: 정책브리핑 정책뉴스 · 혜택: 정부24 공공서비스 정보 · AI: OpenAI</p>
+      <p style="margin:0;font-size:14px;line-height:1.7">주가·지수: 공공데이터포털(금융위원회, 전일 종가) · 환율: 한국수출입은행 · 뉴스: 네이버(제목·링크) · 쉽게 풀이·화제순: 정책브리핑 정책뉴스 · 혜택: 정부24 공공서비스 정보 · AI: Google Gemini(무료 등급 먼저, 보낸 내용을 구글이 서비스 개선에 쓸 수 있음) · OpenAI</p>
       <p class="hint" style="margin:8px 0 0">이 앱의 정보는 투자 권유가 아닌 참고용이에요.</p>
     </section>
   </main>`;
