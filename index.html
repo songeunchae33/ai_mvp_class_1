@@ -3115,7 +3115,7 @@ function sortConcepts(list) {
   const L = data.learn;
   const idx = (c) => L.concepts.indexOf(c);
   const sorts = {
-    // 화제순: 최근 7일 정부 보도자료에 많이 나온 순 (데이터가 없으면 '요즘 뜨는' 먼저, 원래 순서)
+    // 화제순: 최근 3일(적으면 7일) 정부 보도자료에 많이 나온 순 (데이터가 없으면 '요즘 뜨는' 먼저, 원래 순서)
     hot: (a, b) => (data.trending?.available ? hotCount(b) - hotCount(a) : 0) || (a.cat === "trend" ? 0 : 1) - (b.cat === "trend" ? 0 : 1) || idx(a) - idx(b),
     // 최신순: 새로 추가한 개념 먼저 (added 날짜, 같으면 목록 뒤쪽이 최신)
     new: (a, b) => String(b.added || "").localeCompare(String(a.added || "")) || idx(b) - idx(a),
@@ -3162,7 +3162,7 @@ function viewLearn() {
   const T = data.trending;
   const evs = T?.available ? T.events || [] : [];
   const hotBlock = evs.length ? `<section class="card" id="l-hot">
-      <div class="sec-title"><h2>이번 주 화제 TOP 5</h2><span>최근 7일 정부 보도자료</span></div>
+      <div class="sec-title"><h2>요즘 화제 TOP 5</h2><span>최근 ${data.trending?.days || 3}일 정부 보도자료</span></div>
       <div class="hot-list">${evs.map((e, i) => `<a class="hot-item" href="${esc(e.url)}" target="_blank" rel="noopener"><span class="hot-rank">${i + 1}</span><span class="hot-t">${esc(e.title)}<small class="hint">#${esc(e.word)} · 관련 보도자료 ${e.count}건</small></span>${ICON.out}</a>`).join("")}</div>
     </section>` : "";
   const stages = L.categories.map((cat) => {
@@ -3209,7 +3209,7 @@ function viewLearn() {
       ${[["news", "", "뉴스 쉽게 풀이", "오늘의 경제를 쉬운 말로"], ["letters", "", "뉴스레터", "구독 관리·붙여넣기 풀이"], ["watch", "", "관심 종목", "추가·순서·보유 수량"]]
         .map(([r, t, n, d]) => `<button class="hub-item" data-act="nav" data-route="${r}" data-target="${t}"><b>${n}</b><span>${d}</span></button>`).join("")}
     </section>
-    <p class="foot">앞 개념의 1단계를 맞히면 다음 칸이 열리고, 틀리면 공룡이 한 칸 다가와요. 화제 TOP 5는 최근 7일 정부 보도자료 기준이에요. 기록은 이 기기(연결하면 내 계정)에 저장돼요.</p>
+    <p class="foot">앞 개념의 1단계를 맞히면 다음 칸이 열리고, 틀리면 공룡이 한 칸 다가와요. 화제 TOP 5는 최근 3일 정부 보도자료 기준이에요(적은 날은 7일). 기록은 이 기기(연결하면 내 계정)에 저장돼요.</p>
   </main>`;
 }
 // 탈출 지도: 과목마다 다른 게임 그림(레트로 오락실·옛날 게임·블록 점프·겨울 숲)에서 아래에서 위로 올라가 공룡에게서 탈출한다.
@@ -3651,7 +3651,7 @@ const SPOTS = [
   ["달력으로 보기", "ledger", "m-cal", ["달력", "캘린더"]],
   ["오늘의 미션 · 빠른 퀴즈", "learn", "l-mission", ["미션", "빠른 퀴즈", "퀴즈", "출석", "레벨", "경험치", "칭호"]],
   ["탈출 지도 · 투자운용사 섬", "learn", "l-map", ["탈출 지도", "지도", "섬", "투자운용사", "국제금융", "금융경제", "베이지안", "과목", "개념"]],
-  ["이번 주 화제 TOP 5", "learn", "l-hot", ["화제", "top", "보도자료"]],
+  ["요즘 화제 TOP 5", "learn", "l-hot", ["화제", "top", "보도자료", "이번 주 화제"]],
   ["배지 보관함", "learn", "", ["배지", "뱃지"], "badges-open"],
   ["내 노트", "learn", "", ["노트", "메모"], "notes-open"],
   ["푼 문제", "solved", "", ["푼 문제"]],

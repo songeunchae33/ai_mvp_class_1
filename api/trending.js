@@ -1,7 +1,8 @@
-// 경제 공부 '화제순': 개념마다 최근 7일 정부 보도자료(정책브리핑)에 몇 번 나왔는지 센다.
+// 경제 공부 '화제순': 개념마다 최근 3일 정부 보도자료(정책브리핑)에 몇 번 나왔는지 센다.
+// 주말 뒤처럼 경제 보도자료가 15건이 안 되면 7일로 넓힌다 (몇 건으로 순위를 매기면 1~2건 차이로 갈려서).
 // 앱 사용자 기록을 모으는 서버가 없어서 '요즘 많이 나오는 개념'을 보도자료 언급량으로 대신한다.
 // (네이버 검색 결과는 약관상 '그대로 보여주기'에만 쓸 수 있어서 집계에 쓰지 않는다)
-// GET /api/trending → { available, counts: { 개념id: 언급 횟수 }, keywords: [{ word, count, concept }] 화제 키워드 5개, events: [{ title, word, count, url, org }] 화제 TOP 5(대표 보도자료 제목), total: 본 보도자료 수, at }
+// GET /api/trending → { available, counts: { 개념id: 언급 횟수 }, keywords: [{ word, count, concept }] 화제 키워드 5개, events: [{ title, word, count, url, org }] 화제 TOP 5(대표 보도자료 제목), total: 본 보도자료 수, days: 센 기간(3 또는 7), at }
 import { cache } from "./_util.js";
 import { pressReleases, isEcon } from "./_policy.js";
 
@@ -32,10 +33,12 @@ export default async function handler(req, res) {
   if (!process.env.DATA_GO_KR_KEY) return res.status(200).json({ available: false });
   try {
     const proto = req.headers["x-forwarded-proto"] || "https";
-    const [learn, docs] = await Promise.all([
+    const [learn, docs3] = await Promise.all([
       fetch(`${proto}://${req.headers.host}/data/learn.json`).then((r) => r.json()),
-      pressReleases(7),
+      pressReleases(3),
     ]);
+    let days = 3, docs = docs3;
+    if (docs3.filter(isEcon).length < 15) { days = 7; docs = await pressReleases(7); }
     if (!docs.length) return res.status(200).json({ available: false });
     const texts = docs.map((d) => `${d.title} ${d.sub} ${d.body}`);
     const counts = {};
@@ -65,8 +68,8 @@ export default async function handler(req, res) {
       used.add(pick.d.title);
       events.push({ title: shortTitle(pick.d.title), word: k.word, count: k.count, url: pick.d.url, org: pick.d.org });
     }
-    cache(res, 21600); // 6시간마다 다시 셈
-    res.status(200).json({ available: true, counts, keywords, events, total: docs.length, at: new Date().toISOString() });
+    cache(res, 10800); // 3시간마다 다시 셈
+    res.status(200).json({ available: true, counts, keywords, events, total: docs.length, days, at: new Date().toISOString() });
   } catch (e) {
     console.error(e);
     res.status(200).json({ available: false });
