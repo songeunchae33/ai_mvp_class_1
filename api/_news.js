@@ -67,6 +67,19 @@ export async function naver(query, { display = 10, sort = "date" } = {}) {
   });
 }
 
+// 출처 등급: 0 공식 기관(정부·한국은행 등) · 1 주요 언론(SOURCES) · 2 그 밖. 같은 등급 안에서는 원래 순서를 지킨다
+const OFFICIAL = /(\.go\.kr|korea\.kr|bok\.or\.kr|fss\.or\.kr|kdi\.re\.kr|krx\.co\.kr)$/;
+export function tier(it) {
+  try {
+    const host = new URL(it.url).hostname;
+    if (OFFICIAL.test(host)) return 0;
+    return Object.keys(SOURCES).some((d) => host === d || host.endsWith("." + d)) ? 1 : 2;
+  } catch { return 2; }
+}
+export function byTrust(items) {
+  return items.map((it, i) => ({ it, i, t: tier(it) })).sort((a, b) => a.t - b.t || a.i - b.i).map((x) => x.it);
+}
+
 // 거의 같은 제목(같은 사건을 여러 언론이 쓴 것) 걸러내기
 export function dedupe(items) {
   const out = [];

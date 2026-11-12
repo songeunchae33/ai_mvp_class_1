@@ -1360,6 +1360,7 @@ async function loadAll(manual = false) {
   const jobs = [
     getJson(`/api/market?stocks=${encodeURIComponent(names)}`).then((j) => (data.market = j)).catch(() => {}),
     getJson(`/api/news?interests=${encodeURIComponent(interests)}`).then((j) => (data.news = j)).catch(() => {}),
+    Promise.resolve(ensureTrending()),
     getJson(`/api/news?full=1&q=${encodeURIComponent("환율")}`).then((j) => (data.fxNews = j.sample ? [] : j.items || [])).catch(() => {}),
   ];
   if (!data.calendar.length) jobs.push(getJson("/data/calendar.json").then((j) => (data.calendar = j.events || [])).catch(() => {}));
@@ -1439,14 +1440,16 @@ function impacts() {
     else text = up ? "수입품 가격과 해외결제 비용이 조금 오를 수 있어요." : "해외결제·수입품 비용 부담이 조금 줄어요.";
     const fxSrc = m.src?.usd === "ecos" ? ["한국은행 경제통계(ECOS) 원/달러 환율", "https://ecos.bok.or.kr"] : ["한국수출입은행 환율", "https://www.koreaexim.go.kr"];
     const fxNews = (data.fxNews || []).find((n) => /환율/.test(n.title) && /^https?:\/\//.test(n.url));
-    out.push({ tag: `환율 ${arrow(vs)} ${fmt(m.usd.v, 1)}원`, tone: tone(vs), text, src: fxNews ? [`${fxNews.source || "뉴스"} 기사`, fxNews.url] : fxSrc });
+    out.push({ kind: "fx", score: 1 + (p.prefs.includes("여행") || p.prefs.includes("쇼핑") ? 2 : 0) + Math.min(2, Math.abs(m.usd.pct || 0)),
+      tag: `환율 ${arrow(vs)} ${fmt(m.usd.v, 1)}원`, tone: tone(vs), text, num: fxSrc[0], src: fxNews ? [`${fxNews.source || "뉴스"} 기사`, fxNews.url] : fxSrc });
   }
   const rateEvent = upcoming(20).find((e) => (e.tags || []).includes("금리"));
   const isBok = !rateEvent || rateEvent.title.includes("한국은행");
+  const rateSoon = rateEvent && dayDiff(rateEvent.d) <= 7 ? 2 : 0;
   const when = rateEvent ? `${rateEvent.d.getMonth() + 1}/${rateEvent.d.getDate()} ${isBok ? "금통위" : "FOMC"}` : "다음 금리 결정";
   const rateSrc = isBok ? ["한국은행 기준금리 추이", "https://www.bok.or.kr/portal/singl/baseRate/list.do?dataSeCd=01&menuNo=200643"] : ["미국 연준 FOMC 일정", "https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm"];
   if (p.debts === null) {
-    out.push({ tag: "금리", tone: "flat", text: "대출이 있다면 알려주세요. 금리가 바뀔 때 내 이자가 얼마나 달라지는지 계산해드려요.", src: rateSrc });
+    out.push({ tag: "금리", tone: "flat", text: "대출이 있다면 알려주세요. 금리가 바뀔 때 내 이자가 얼마나 달라지는지 계산해드려요.", kind: "rate", score: 1 + rateSoon, num: "금리 일정: 한국은행·연준 발표", src: rateSrc });
   } else {
     const variable = p.debts.filter((d) => d.kind === "변동").reduce((s, d) => s + (Number(d.amount) || 0), 0);
     let text;
@@ -1454,19 +1457,35 @@ function impacts() {
     else if (p.debts.length) text = "대출이 고정금리라 금리가 바뀌어도 당장 이자는 그대로예요.";
     else if (p.assets.cash) text = `${when}에서 금리가 0.25%p 바뀌면, 예금 ${man(p.assets.cash)}의 1년 이자가 약 ${won(p.assets.cash * 1e4 * 0.0025)} 달라질 수 있어요.`;
     else text = "대출이 없으니 금리 변화는 예금·적금 이자 쪽으로 영향을 줘요.";
-    out.push({ tag: rateEvent ? `금리 · ${when}` : "금리", tone: "flat", text, src: rateSrc });
+    out.push({ kind: "rate", score: 1 + rateSoon + (variable > 0 ? 3 : 0), num: variable > 0 ? "대출: 내가 입력한 금액" : p.assets.cash ? "예금: 내가 입력한 금액" : "", tag: rateEvent ? `금리 · ${when}` : "금리", tone: "flat", text, src: rateSrc });
   }
   const stocks = (m.stocks || []).filter((s) => !s.missing && s.vs !== null);
   const held = stocks.filter((s) => qtyOf(s.name) > 0);
   if (held.length) {
     const sum = held.reduce((t, s) => t + qtyOf(s.name) * s.vs, 0);
     const big = held.reduce((a, b) => (Math.abs(qtyOf(b.name) * b.vs) > Math.abs(qtyOf(a.name) * a.vs) ? b : a));
-    out.push({ tag: `내 종목 ${sum >= 0 ? "▲" : "▼"}`, tone: tone(sum), text: `보유 종목 평가액이 전일보다 약 ${won(sum)} ${sum >= 0 ? "늘었어요" : "줄었어요"}.`, src: stockSrc(big) });
+    out.push({ tag: `내 종목 ${sum >= 0 ? "▲" : "▼"}`, tone: tone(sum), text: `보유 종목 평가액이 전일보다 약 ${won(sum)} ${sum >= 0 ? "늘었어요" : "줄었어요"}.`, kind: "stock", score: 4 + Math.abs(big.pct || 0) / 2, num: "금융위원회 전일 종가", src: stockSrc(big) });
   } else {
     const top = biggestMover();
-    if (top) out.push({ tag: `${top.name} ${pct(top.pct)}`, tone: tone(top.pct), text: `관심 종목 중 ${top.name}${josa(top.name, "이", "가")} 가장 크게 움직였어요. 보유 수량을 넣으면 내 손익으로 보여드려요.`, src: stockSrc(top) });
+    if (top) out.push({ tag: `${top.name} ${pct(top.pct)}`, tone: tone(top.pct), text: `관심 종목 중 ${top.name}${josa(top.name, "이", "가")} 가장 크게 움직였어요. 보유 수량을 넣으면 내 손익으로 보여드려요.`, kind: "stock", score: 1 + Math.min(3, Math.abs(top.pct || 0) / 2), num: "금융위원회 전일 종가", src: stockSrc(top) });
   }
-  return out;
+  // 코스피가 크게 움직인 날
+  const kp = m.kospi?.pct;
+  if (kp !== null && kp !== undefined && Math.abs(kp) >= 1.5) {
+    const ecos = m.src?.index === "ecos";
+    out.push({ kind: "index", score: 1 + Math.abs(kp), tag: `코스피 ${pct(kp)}`, tone: tone(kp),
+      text: `코스피가 전일보다 ${fmt(Math.abs(kp), 2)}% ${kp > 0 ? "올랐어요" : "내렸어요"}.${p.watch.length ? " 내 관심 종목도 함께 움직였을 수 있어요." : ""}`,
+      num: "",
+      src: ecos ? ["출처 한국은행 경제통계(ECOS)", "https://ecos.bok.or.kr"] : ["출처 금융위원회 지수시세", "https://www.data.go.kr/data/15094807/openapi.do"] });
+  }
+  // 3일 안에 있는 내 관심사 일정 (금리 일정은 위 카드에 있으니 빼고, 원문 주소가 있는 것만)
+  const ev = upcoming(10).find((e) => !(e.tags || []).includes("금리") && e.url && dayDiff(e.d) <= 3 && (e.tags || []).some((t) => p.prefs.includes(t)));
+  if (ev) {
+    const dd = dayDiff(ev.d);
+    out.push({ kind: "event", score: 2 + (3 - dd), tag: dd === 0 ? "오늘 일정" : `D-${dd} 일정`, tone: "flat", text: `관심 있는 ‘${ev.title}’ 일정이 ${dd === 0 ? "오늘" : `${dd}일 뒤`}예요.`, num: "", src: ["일정 원문", ev.url] });
+  }
+  // 하루 3개만: 나와 더 관련 있고 많이 움직인 것부터
+  return out.sort((x, y) => y.score - x.score).slice(0, 3);
 }
 
 function bubbleLines() {
@@ -1476,7 +1495,7 @@ function bubbleLines() {
   L.push({ text: `${esc(name)}님, ${greet()}! ${m ? `${{ 상승: "오늘 시장은 ‘오르는’ 분위기예요.", 하락: "오늘 시장은 ‘내리는’ 분위기예요." }[marketMood()] || "오늘 시장은 크게 오르지도 내리지도 않고 지켜보는 분위기예요."}` : "오늘 경제 소식을 모으고 있어요."}` });
   const top = biggestMover();
   if (top) L.push({ text: `관심 종목 ${esc(top.name)}${josa(top.name, "이", "가")} 전일보다 ${fmt(Math.abs(top.pct), 2)}% ${top.pct >= 0 ? "올랐어요" : "내렸어요"}.` });
-  const fx = impacts()[0];
+  const fx = impacts().find((x) => x.kind === "fx");
   if (fx && m?.usd) L.push({ text: `원/달러 환율은 ${fmt(m.usd.v, 1)}원이에요. ${fx.text}` });
   const ev = upcoming(5).find((e) => dayDiff(e.d) <= 14);
   if (ev) {
@@ -1720,12 +1739,20 @@ function todayQuiz() {
   if (!list.length) return null;
   const day = ymd(today0());
   let T = learnState.today;
-  if (!T || T.day !== day || !conceptById(T.id)) {
-    const pool = list.filter((c) => !mastered(c));
-    if (!pool.length) return null;
-    const dayIdx = Math.floor((today0() - new Date(2026, 0, 1)) / 86400e3);
-    const c = pool[((dayIdx % pool.length) + pool.length) % pool.length];
-    T = learnState.today = { day, id: c.id, lv: curLv(c) };
+  // 요즘 보도자료에 많이 나온 개념 (아직 다 못 푼 것 중)
+  const hot = data.trending?.available ? list.filter((c) => !mastered(c) && (data.trending.counts?.[c.id] || 0) > 0)
+    .sort((a, b) => data.trending.counts[b.id] - data.trending.counts[a.id])[0] : null;
+  // 아침에 화제 자료가 늦게 오면, 아직 안 푼 오늘 문제는 화제 개념으로 바꾼다
+  const untouched = T && T.day === day && !T.hot && !qa(conceptById(T.id) || {}, T.lv) && !T.dismissed;
+  if (!T || T.day !== day || !conceptById(T.id) || (hot && untouched && hot.id !== T.id)) {
+    let c = hot;
+    if (!c) {
+      const pool = list.filter((x) => !mastered(x));
+      if (!pool.length) return null;
+      const dayIdx = Math.floor((today0() - new Date(2026, 0, 1)) / 86400e3);
+      c = pool[((dayIdx % pool.length) + pool.length) % pool.length];
+    }
+    T = learnState.today = { day, id: c.id, lv: curLv(c), hot: !!hot && c === hot, word: hot && c === hot ? c.term : "" };
     saveLearn();
   }
   return { c: conceptById(T.id), lv: T.lv };
@@ -1958,7 +1985,7 @@ function homeBlocks() {
 
   // 누르면 그 정보를 가져온 곳(환율은 관련 기사, 금리는 한국은행·연준, 종목은 네이버 증권)으로 바로 간다
   const imp = impacts().map((c) => `<a class="impact" href="${esc(c.src[1])}" target="_blank" rel="noopener" style="cursor:pointer;color:inherit;text-decoration:none" aria-label="${esc(c.tag)} · ${esc(c.src[0])} 열기">
-      <span class="badge b-${c.tone}" style="align-self:flex-start">${esc(c.tag)}</span><p>${esc(c.text)}</p><span class="hint" style="margin-top:auto">${esc(c.src[0])} ${ICON.out}</span></a>`).join("");
+      <span class="badge b-${c.tone}" style="align-self:flex-start">${esc(c.tag)}</span><p>${esc(c.text)}</p><span class="hint" style="margin-top:auto">${c.num && c.num !== c.src[0] ? `출처 ${esc(c.num)} · ` : ""}${esc(c.src[0])} ${ICON.out}</span></a>`).join("");
 
   // 뉴스: 진짜 중요한 것 두 줄 (오늘의 이슈 1 + 나를 위한 1) + 키워드·뉴스레터 한 줄
   const n = data.news;
@@ -1993,7 +2020,7 @@ function homeBlocks() {
 
   const tq = todayQuiz();
   const quizBlock = todayQuizShown(tq) ? `<section class="quiz" id="h-quiz">
-      <button class="quiz-head" data-act="go-learn"><span class="hand">${quizLabel(tq.c)} · ${esc(catName(tq.c.cat))}</span><span>경제 공부 ›</span></button>
+      <button class="quiz-head" data-act="go-learn"><span class="hand">${quizLabel(tq.c)} · ${learnState.today?.hot ? "요즘 보도자료에 많이 나온 말" : esc(catName(tq.c.cat))}</span><span>경제 공부 ›</span></button>
       ${quizBox(tq.c, tq.lv, true, true, true)}
     </section>` : "";
 
@@ -2017,11 +2044,11 @@ function homeBlocks() {
     market: `<section id="h-market">
       <div class="mkt line bleed">${tiles}${addTile}</div>
       <div class="hint" style="margin:6px 4px 0;display:flex;gap:6px;align-items:center;flex-wrap:wrap">
-        ${m ? `주가 ${ymdLabel(m.kospi?.date)} 종가 · 환율 ${ymdLabel(m.usd?.date)} 고시` : ""}
+        ${m ? `주가 ${ymdLabel(m.kospi?.date)} 종가 · 환율 ${ymdLabel(m.usd?.date)} 고시 · 출처 ${m.src?.index === "ecos" ? "한국은행 ECOS" : "금융위원회"}(지수)·${m.src?.usd === "ecos" ? "한국은행 ECOS" : "한국수출입은행"}(환율)·금융위원회(종목)` : ""}
         ${m?.sample ? `<span class="badge b-sample">예시 데이터</span>` : ""}
       </div>
     </section>`,
-    impact: imp ? `<section id="h-impact"><div class="sec-title"><h2>오늘, 나에게 미치는 영향</h2></div><div class="strip bleed">${imp}</div></section>` : "",
+    impact: imp ? `<section id="h-impact"><div class="sec-title"><h2>오늘 나에게 중요한 3가지</h2></div><div class="strip bleed">${imp}</div></section>` : "",
     news: newsBlock,
     links: linksBlock,
     quiz: quizBlock,
@@ -3200,7 +3227,7 @@ function ensureTrending() {
   getJson("/api/trending")
     .then((j) => (data.trending = j))
     .catch(() => (data.trending = { available: false }))
-    .finally(() => { ui.trLoading = false; if (route() === "learn") render(); });
+    .finally(() => { ui.trLoading = false; if (["learn", "home"].includes(route())) render(); });
 }
 function hotCount(c) { return data.trending?.available ? data.trending.counts?.[c.id] ?? 0 : null; }
 function sortConcepts(list) {

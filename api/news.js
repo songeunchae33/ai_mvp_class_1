@@ -3,7 +3,7 @@
 // GET /api/news?q=FOMC                     → { items: 해당 키워드 뉴스 3 }
 // 둘 다 &full=1 을 붙이면 '뉴스 더보기' 화면용으로 더 많이 돌려준다
 import { cache } from "./_util.js";
-import { PREF_QUERY, naver, dedupe, keywords, searchUrl, newsReady } from "./_news.js";
+import { PREF_QUERY, naver, dedupe, keywords, searchUrl, newsReady, byTrust } from "./_news.js";
 
 // 화면에는 제목·링크만 보낸다
 const strip = (list) => list;
@@ -25,7 +25,7 @@ export default async function handler(req, res) {
     const q = String(req.query.q).slice(0, 30);
     if (!ready) return res.status(200).json({ sample: true, items: [{ title: `${q} 뉴스 검색 결과 보기`, url: searchUrl(q), source: "네이버 뉴스" }] });
     try {
-      const items = dedupe(await naver(q + " 경제", { display: full ? 40 : 15, sort: "sim" })).slice(0, full ? 15 : 3);
+      const items = byTrust(dedupe(await naver(q + " 경제", { display: full ? 40 : 15, sort: "sim" }))).slice(0, full ? 15 : 3); // 출처가 약한 기사는 뒤로
       cache(res, 3600); // 네이버 사용량을 아끼려고 1시간 동안 같은 결과를 재사용
       return res.status(200).json({ items: strip(items) });
     } catch (e) {
@@ -43,7 +43,7 @@ export default async function handler(req, res) {
     const dayAgo = Date.now() - 36 * 3600e3;
     const pool = dedupe([...(await naver("경제", { display: 50, sort: "sim" })), ...(await naver("증시 금리 환율", { display: 30, sort: "date" }))]);
     const fresh = pool.filter((n) => new Date(n.at).getTime() > dayAgo);
-    const issues = (fresh.length >= 3 ? fresh : pool).slice(0, full ? 15 : 3);
+    const issues = byTrust(fresh.length >= 3 ? fresh : pool).slice(0, full ? 15 : 3); // 출처가 약한 기사는 뒤로
 
     // 관심 종목·선호마다 최신 뉴스 1개씩, 모자라면 앞쪽 관심사에서 더
     const queries = interests.map((i) => ({ tag: i, q: PREF_QUERY[i] || i }));
@@ -53,7 +53,7 @@ export default async function handler(req, res) {
     const want = full ? 20 : 3;
     for (let round = 0; round < (full ? 6 : 3) && forYou.length < want; round++) {
       perQuery.forEach((list, i) => {
-        const pick = dedupe(list).filter((n) => !taken.has(n.url))[0];
+        const pick = byTrust(dedupe(list)).filter((n) => !taken.has(n.url))[0];
         if (pick && forYou.length < want) {
           taken.add(pick.url);
           forYou.push({ ...pick, tag: queries[i].tag });
