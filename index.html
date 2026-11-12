@@ -1353,6 +1353,7 @@ async function loadAll(manual = false) {
   const jobs = [
     getJson(`/api/market?stocks=${encodeURIComponent(names)}`).then((j) => (data.market = j)).catch(() => {}),
     getJson(`/api/news?interests=${encodeURIComponent(interests)}`).then((j) => (data.news = j)).catch(() => {}),
+    getJson(`/api/news?full=1&q=${encodeURIComponent("환율")}`).then((j) => (data.fxNews = j.sample ? [] : j.items || [])).catch(() => {}),
   ];
   if (!data.calendar.length) jobs.push(getJson("/data/calendar.json").then((j) => (data.calendar = j.events || [])).catch(() => {}));
   if (!data.learn) jobs.push(getJson("/data/learn.json").then((j) => (data.learn = j)).catch(() => {}));
@@ -1430,15 +1431,15 @@ function impacts() {
     else if (p.prefs.includes("쇼핑")) text = `쇼핑을 좋아하는 당신, 해외직구 100달러 결제 시 약 ${won(Math.abs(vs * 100))} ${up ? "더 내요" : "덜 내요"}.`;
     else text = up ? "수입품 가격과 해외결제 비용이 조금 오를 수 있어요." : "해외결제·수입품 비용 부담이 조금 줄어요.";
     const fxSrc = m.src?.usd === "ecos" ? ["한국은행 경제통계(ECOS) 원/달러 환율", "https://ecos.bok.or.kr"] : ["한국수출입은행 환율", "https://www.koreaexim.go.kr"];
-    out.push({ tag: `환율 ${arrow(vs)} ${fmt(m.usd.v, 1)}원`, tone: tone(vs), text, kw: "환율", src: fxSrc });
+    const fxNews = (data.fxNews || []).find((n) => /환율/.test(n.title) && /^https?:\/\//.test(n.url));
+    out.push({ tag: `환율 ${arrow(vs)} ${fmt(m.usd.v, 1)}원`, tone: tone(vs), text, src: fxNews ? [`${fxNews.source || "뉴스"} 기사`, fxNews.url] : fxSrc });
   }
   const rateEvent = upcoming(20).find((e) => (e.tags || []).includes("금리"));
   const isBok = !rateEvent || rateEvent.title.includes("한국은행");
   const when = rateEvent ? `${rateEvent.d.getMonth() + 1}/${rateEvent.d.getDate()} ${isBok ? "금통위" : "FOMC"}` : "다음 금리 결정";
-  const rateKw = isBok ? "기준금리" : "FOMC";
-  const rateSrc = isBok ? ["한국은행 기준금리·통화정책방향", rateEvent?.url || "https://www.bok.or.kr"] : ["미국 연준 FOMC 일정", "https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm"];
+  const rateSrc = isBok ? ["한국은행 기준금리 추이", "https://www.bok.or.kr/portal/singl/baseRate/list.do?dataSeCd=01&menuNo=200643"] : ["미국 연준 FOMC 일정", "https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm"];
   if (p.debts === null) {
-    out.push({ tag: "금리", tone: "flat", text: "대출이 있다면 알려주세요. 금리가 바뀔 때 내 이자가 얼마나 달라지는지 계산해드려요.", kw: rateKw, src: rateSrc });
+    out.push({ tag: "금리", tone: "flat", text: "대출이 있다면 알려주세요. 금리가 바뀔 때 내 이자가 얼마나 달라지는지 계산해드려요.", src: rateSrc });
   } else {
     const variable = p.debts.filter((d) => d.kind === "변동").reduce((s, d) => s + (Number(d.amount) || 0), 0);
     let text;
@@ -1446,17 +1447,17 @@ function impacts() {
     else if (p.debts.length) text = "대출이 고정금리라 금리가 바뀌어도 당장 이자는 그대로예요.";
     else if (p.assets.cash) text = `${when}에서 금리가 0.25%p 바뀌면, 예금 ${man(p.assets.cash)}의 1년 이자가 약 ${won(p.assets.cash * 1e4 * 0.0025)} 달라질 수 있어요.`;
     else text = "대출이 없으니 금리 변화는 예금·적금 이자 쪽으로 영향을 줘요.";
-    out.push({ tag: rateEvent ? `금리 · ${when}` : "금리", tone: "flat", text, kw: rateKw, src: rateSrc });
+    out.push({ tag: rateEvent ? `금리 · ${when}` : "금리", tone: "flat", text, src: rateSrc });
   }
   const stocks = (m.stocks || []).filter((s) => !s.missing && s.vs !== null);
   const held = stocks.filter((s) => qtyOf(s.name) > 0);
   if (held.length) {
     const sum = held.reduce((t, s) => t + qtyOf(s.name) * s.vs, 0);
     const big = held.reduce((a, b) => (Math.abs(qtyOf(b.name) * b.vs) > Math.abs(qtyOf(a.name) * a.vs) ? b : a));
-    out.push({ tag: `내 종목 ${sum >= 0 ? "▲" : "▼"}`, tone: tone(sum), text: `보유 종목 평가액이 전일보다 약 ${won(sum)} ${sum >= 0 ? "늘었어요" : "줄었어요"}.`, kw: big.name, src: stockSrc(big) });
+    out.push({ tag: `내 종목 ${sum >= 0 ? "▲" : "▼"}`, tone: tone(sum), text: `보유 종목 평가액이 전일보다 약 ${won(sum)} ${sum >= 0 ? "늘었어요" : "줄었어요"}.`, src: stockSrc(big) });
   } else {
     const top = biggestMover();
-    if (top) out.push({ tag: `${top.name} ${pct(top.pct)}`, tone: tone(top.pct), text: `관심 종목 중 ${top.name}${josa(top.name, "이", "가")} 가장 크게 움직였어요. 보유 수량을 넣으면 내 손익으로 보여드려요.`, kw: top.name, src: stockSrc(top) });
+    if (top) out.push({ tag: `${top.name} ${pct(top.pct)}`, tone: tone(top.pct), text: `관심 종목 중 ${top.name}${josa(top.name, "이", "가")} 가장 크게 움직였어요. 보유 수량을 넣으면 내 손익으로 보여드려요.`, src: stockSrc(top) });
   }
   return out;
 }
@@ -1948,9 +1949,9 @@ function homeBlocks() {
     : ["코스피", "코스닥", "원/달러", ...profile.watch.map((w) => w.name)].map((n) => `<div><span class="k">${esc(n)}</span><span class="v">…</span></div>`).join("");
   const addTile = profile.watch.length < 10 ? `<button class="add" data-act="go-my" data-focus="watch">+ 종목</button>` : "";
 
-  // 누르면 그 주제의 관련 뉴스(언론사 원문 링크)와, 숫자를 가져온 곳(정보 원천)을 보여준다
-  const imp = impacts().map((c) => `<button data-act="impact-open" data-k="${esc(c.kw)}" data-sn="${esc(c.src[0])}" data-su="${esc(c.src[1])}" style="cursor:pointer" class="impact" aria-label="${esc(c.tag)} 관련 뉴스 보기">
-      <span class="badge b-${c.tone}" style="align-self:flex-start">${esc(c.tag)}</span><p>${esc(c.text)}</p><span class="hint" style="margin-top:auto">관련 뉴스 · 정보 원천 ›</span></button>`).join("");
+  // 누르면 그 정보를 가져온 곳(환율은 관련 기사, 금리는 한국은행·연준, 종목은 네이버 증권)으로 바로 간다
+  const imp = impacts().map((c) => `<a class="impact" href="${esc(c.src[1])}" target="_blank" rel="noopener" style="cursor:pointer;color:inherit;text-decoration:none" aria-label="${esc(c.tag)} · ${esc(c.src[0])} 열기">
+      <span class="badge b-${c.tone}" style="align-self:flex-start">${esc(c.tag)}</span><p>${esc(c.text)}</p><span class="hint" style="margin-top:auto">${esc(c.src[0])} ${ICON.out}</span></a>`).join("");
 
   // 뉴스: 진짜 중요한 것 두 줄 (오늘의 이슈 1 + 나를 위한 1) + 키워드·뉴스레터 한 줄
   const n = data.news;
@@ -2113,7 +2114,6 @@ function viewNews() {
   return `${pageHead("뉴스", f?.sample ? `<span class="badge b-sample" style="margin-left:8px">예시 데이터</span>` : "")}
   <main class="scroll">
     <div class="tabs" role="tablist">${tabs.map(([id, label]) => `<button class="chip ${N.tab === id ? "on" : ""}" role="tab" aria-selected="${N.tab === id}" data-act="news-tab" data-t="${esc(id)}">${esc(label)}</button>`).join("")}</div>
-    ${N.tab.startsWith("kw:") && N.src?.k === N.tab.slice(3) && /^https:\/\//.test(N.src.url) ? `<section class="card"><div class="sec-title" style="margin:0"><h2>정보 원천</h2></div><a class="lrow" href="${esc(N.src.url)}" target="_blank" rel="noopener"><span class="lv">${esc(N.src.name)}</span><span aria-hidden="true">${ICON.out}</span></a></section>` : ""}
     ${N.tab === "brief" ? viewBrief() : `<section class="card"><div class="news">${items ? newsList(items, N.tab === "issues") || `<p class="hint">뉴스가 없어요</p>` : `<p class="hint">불러오는 중…</p>`}</div></section>`}
     ${letters.length ? `<div class="chips"><span class="hint">구독 중</span>${letters.map((l) => `<a class="chip small" href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.name)} ${ICON.out}</a>`).join("")}</div>` : ""}
     <p class="foot">제목을 누르면 언론사 원문으로 이동해요.</p>
@@ -4254,7 +4254,6 @@ document.addEventListener("click", async (e) => {
       break;
     }
     case "kw": ui.q = ""; ui.searchOpen = false; openNews("kw:" + el.dataset.k); break;
-    case "impact-open": ui.news.src = { k: el.dataset.k, name: el.dataset.sn, url: el.dataset.su }; openNews("kw:" + el.dataset.k); break;
     case "answer": {
       const c = conceptById(el.dataset.id), lv = Number(el.dataset.lv || 0);
       const q = c && quizzesOf(c)[lv];
