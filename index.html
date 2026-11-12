@@ -1361,6 +1361,7 @@ async function loadAll(manual = false) {
   await Promise.all(jobs);
   data.loading = false;
   if (!["onboard", "my"].includes(route())) render();
+  if (route() === "news") openNews(ui.news.tab); // 뉴스 화면에서 새로 고친 경우 지운 목록을 다시 받는다
   if (manual) toast(data.market ? `업데이트했어요 · ${ymdLabel(data.market.kospi?.date)} 종가 기준` : "불러오지 못했어요. 잠시 후 다시 시도해 주세요");
 }
 
@@ -1429,7 +1430,7 @@ function impacts() {
   const rateEvent = upcoming(20).find((e) => (e.tags || []).includes("금리"));
   const when = rateEvent ? `${rateEvent.d.getMonth() + 1}/${rateEvent.d.getDate()} ${rateEvent.title.includes("한국은행") ? "금통위" : "FOMC"}` : "다음 금리 결정";
   if (p.debts === null) {
-    out.push({ tag: "금리", tone: "flat", text: "대출이 있다면 알려주세요. 금리가 바뀔 때 내 이자가 얼마나 달라지는지 계산해드려요.", act: "go-my" });
+    out.push({ tag: "금리", tone: "flat", text: "대출이 있다면 알려주세요. 금리가 바뀔 때 내 이자가 얼마나 달라지는지 계산해드려요.", act: "go-my", focus: "debts" });
   } else {
     const variable = p.debts.filter((d) => d.kind === "변동").reduce((s, d) => s + (Number(d.amount) || 0), 0);
     let text;
@@ -1446,7 +1447,7 @@ function impacts() {
     out.push({ tag: `내 종목 ${sum >= 0 ? "▲" : "▼"}`, tone: tone(sum), text: `보유 종목 평가액이 전일보다 약 ${won(sum)} ${sum >= 0 ? "늘었어요" : "줄었어요"}.` });
   } else {
     const top = biggestMover();
-    if (top) out.push({ tag: `${top.name} ${pct(top.pct)}`, tone: tone(top.pct), text: `관심 종목 중 ${top.name}${josa(top.name, "이", "가")} 가장 크게 움직였어요. 보유 수량을 넣으면 내 손익으로 보여드려요.`, act: "go-my" });
+    if (top) out.push({ tag: `${top.name} ${pct(top.pct)}`, tone: tone(top.pct), text: `관심 종목 중 ${top.name}${josa(top.name, "이", "가")} 가장 크게 움직였어요. 보유 수량을 넣으면 내 손익으로 보여드려요.`, act: "go-my", focus: "watch" });
   }
   return out;
 }
@@ -1938,7 +1939,7 @@ function homeBlocks() {
     : ["코스피", "코스닥", "원/달러", ...profile.watch.map((w) => w.name)].map((n) => `<div><span class="k">${esc(n)}</span><span class="v">…</span></div>`).join("");
   const addTile = profile.watch.length < 10 ? `<button class="add" data-act="go-my" data-focus="watch">+ 종목</button>` : "";
 
-  const imp = impacts().map((c) => `<${c.act ? `button data-act="${c.act}" style="cursor:pointer"` : "div"} class="impact">
+  const imp = impacts().map((c) => `<${c.act ? `button data-act="${c.act}"${c.focus ? ` data-focus="${c.focus}"` : ""} style="cursor:pointer"` : "div"} class="impact">
       <span class="badge b-${c.tone}" style="align-self:flex-start">${esc(c.tag)}</span><p>${esc(c.text)}</p></${c.act ? "button" : "div"}>`).join("");
 
   // 뉴스: 진짜 중요한 것 두 줄 (오늘의 이슈 1 + 나를 위한 1) + 키워드·뉴스레터 한 줄
@@ -2073,6 +2074,7 @@ const TARGET_TAB = { "m-capture": ["ledgerTab", "rec"], "m-quick": ["ledgerTab",
   "sec-diag": ["assetTab", "invest"], "sec-goals": ["assetTab", "invest"], "sec-assets": ["assetTab", "invest"], "sec-debts": ["assetTab", "invest"], "sec-analysis": ["assetTab", "analysis"] };
 function navTo(to, target, sub) {
   ui.drawer = false;
+  if (to === "news" && profile) { openNews("brief"); return; } // 뉴스는 열 때 받아와야 '불러오는 중'에 멈추지 않는다
   if (TARGET_TAB[target]) ui[TARGET_TAB[target][0]] = TARGET_TAB[target][1];
   if (target === "m-quick") ui.modal = { kind: "tx-add", route: "ledger" };
   if (["sec-assets", "sec-debts"].includes(target) && profile) ui.modal = { kind: "assets", route: "assets", draft: assetDraft() };
@@ -2696,7 +2698,7 @@ function moneyBody() {
       ${cats.length ? `<div class="donut-wrap"><div class="donut" style="background:conic-gradient(${donutStops(cats)})" role="img" aria-label="분류별 지출 비율"><span>${esc(cats[0][0])}<b class="num">${Math.round((cats[0][1] / sumCats) * 100)}%</b></span></div>
           <p class="hint" style="margin:0">${kind === "week" ? "지난주" : "지난달"}와 비교하면<br>${compareLine(cats, p.byCat, kind)}</p></div>`
         + cats.map(([c, v]) => { const d = v - (p.byCat[c] || 0); return `<button class="cat-row cat-row-btn" data-act="cat-detail" data-c="${esc(c)}" aria-label="${esc(c)} 내역 보기"><span class="cat-name"><i class="tx-dot" style="background:${catColor(c)}"></i>${esc(c)}</span><div class="cat-bar"><i style="width:${Math.max(4, (v / max) * 100)}%;background:${catColor(c)}"></i></div><span class="num cat-v">${won(v)}<small class="${d > 0 ? "up" : d < 0 ? "down" : "flat"}">${Math.round((v / sumCats) * 100)}% · ${!p.byCat[c] ? "새로 씀" : d === 0 ? "같음" : `${d > 0 ? "▲" : "▼"}${shortWon(Math.abs(d))}`}</small></span><span class="tx-pen" aria-hidden="true">›</span></button>`; }).join("")
-        : `<p class="hint" style="margin:0">아직 기록이 없어요. 아래에서 캡처를 올려보세요.</p>`}
+        : `<p class="hint" style="margin:0">${s.list.length ? `${kind === "week" ? "이번 주" : "이번 달"}에 쓴 돈 기록이 없어요.` : "아직 기록이 없어요."} '기록' 탭에서 캡처를 올리거나 직접 기록하면, 여기서 루미에게 피드백도 받을 수 있어요.</p>`}
       ${s.top.length ? `<div class="hint" style="margin-top:10px">많이 쓴 곳: ${s.top.map(([m, v]) => `${esc(m)} ${won(v)}`).join(" · ")}</div>` : ""}
       ${s.count ? `<button class="btn ghost" style="margin-top:12px;width:100%" data-act="money-feedback" ${ui.moneyFb?.loading || !aiLeft() ? "disabled" : ""}>${ui.moneyFb?.loading ? "생각하는 중…" : "루미에게 피드백 받기"}</button>
         <p class="hint" style="margin:6px 0 0">${fbLeftText()}</p>${!aiLeft() && !ui.moneyFb?.loading ? `<p class="hint" style="margin:4px 0 8px">${outOfFb()}</p>${adButton("fb")}` : ""}` : ""}
@@ -3587,16 +3589,22 @@ function viewBenefits() {
 
 async function loadBrief() {
   // 쉽게 풀이는 하루 2번까지 새로 부른다(이미 받아 둔 풀이를 다시 보는 건 세지 않음)
+  const interests = [...profile.watch.map((w) => w.name).slice(0, 2), ...profile.prefs.slice(0, 3)].join(",");
+  const saved = lastGet().brief;
+  if (saved?.day === ymd(today0()) && saved.interests === interests) {
+    data.brief = saved.data;
+    if (["home", "news"].includes(route())) render();
+    return;
+  }
   const used = aiUse();
   if (used.brief >= AI_LIMIT.brief) {
     data.brief = { available: true, points: [], error: `오늘 쉽게 풀이는 ${AI_LIMIT.brief}번 다 봤어요. 내일 아침에 새로 풀어 드릴게요.` };
     if (["home", "news"].includes(route())) render();
     return;
   }
-  const interests = [...profile.watch.map((w) => w.name).slice(0, 2), ...profile.prefs.slice(0, 3)].join(",");
   try {
     data.brief = await getJson(`/api/brief?interests=${encodeURIComponent(interests)}`);
-    if (data.brief?.points?.length) { const v = aiUse(); v.brief++; aiSave(v); }
+    if (data.brief?.points?.length) { const v = aiUse(); v.brief++; aiSave(v); lastSet("brief", { day: ymd(today0()), interests, data: data.brief }); }
   } catch { data.brief = null; }
   if (["home", "news"].includes(route())) render();
 }
@@ -3696,6 +3704,11 @@ function aiUse() {
   return out;
 }
 function aiSave(v) { try { localStorage.setItem(AI_KEY, JSON.stringify(v)); } catch {} }
+// 루미의 마지막 답·가계부 피드백·오늘의 쉽게 풀이는 이 기기에 남겨 둔다 (횟수를 이미 썼으니 새로 고쳐도 다시 보이게)
+const LAST_KEY = "myeco.last.v1";
+function lastGet() { try { return JSON.parse(localStorage.getItem(LAST_KEY)) || {}; } catch { return {}; } }
+function lastSet(k, v) { const o = lastGet(); if (v === null) delete o[k]; else o[k] = v; try { localStorage.setItem(LAST_KEY, JSON.stringify(o)); } catch {} }
+function lastFb(kind) { const f = lastGet()["fb-" + kind]; return f && f.from === periodRange(kind)[0] ? { text: f.text } : null; }
 function aiLeft() { const v = aiUse(); return Math.max(0, AI_LIMIT.fb + v.adFb * AD_BONUS.fb - v.fb); }
 function aiCount() { const v = aiUse(); v.fb++; aiSave(v); }
 function adLeft(kind) { const v = aiUse(); return Math.max(0, AD_MAX - (kind === "fb" ? v.adFb : v.adCap)); }
@@ -3771,6 +3784,7 @@ async function askAi(q) {
     const j = await getJson("/api/ask", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ question: q, ...summaryForAi() }) });
     aiCount();
     ui.sheet = { q, a: j.answer || "답을 만들지 못했어요." };
+    if (j.answer) lastSet("sheet", { day: ymd(today0()), q, a: j.answer });
   } catch (err) {
     ui.sheet = { q, a: err.body?.error || "지금은 답할 수 없어요. 잠시 후 다시 시도해 주세요." };
   }
@@ -4319,7 +4333,7 @@ document.addEventListener("click", async (e) => {
     case "ad-reward": rewardAd(); break;
     case "ad-close": clearInterval(ui.adTimer); ui.modal = null; render(); break;
     case "set-status": t.status = el.dataset.v; commit(); loadBenefits(); break;
-    case "close-sheet": ui.sheet = null; render(); break;
+    case "close-sheet": ui.sheet = null; lastSet("sheet", null); render(); break;
     case "skip": t.skipped = { ...(t.skipped || {}), [el.dataset.k]: true }; commit(); break;
     case "no-debt": t.debts = []; commit(); toast("대출 없음으로 저장했어요"); break;
     case "set-income": t.income = Number(el.dataset.v); commit(); break;
@@ -4338,7 +4352,7 @@ document.addEventListener("click", async (e) => {
     case "save-my": saveMy(); break;
     case "go-money": ui.capture = null; go("#ledger"); break;
     case "tab": ui.drawer = false; go(el.dataset.t === "home" ? "#home" : "#" + el.dataset.t); break;
-    case "money-kind": ui.moneyKind = el.dataset.v; ui.moneyFb = null; render(); break;
+    case "money-kind": ui.moneyKind = el.dataset.v; ui.moneyFb = lastFb(el.dataset.v); render(); break;
     case "money-all": ui.moneyAll = true; render(); break;
     case "cap-cancel": ui.capture = null; render(); break;
     case "cap-save": {
@@ -4384,7 +4398,7 @@ document.addEventListener("click", async (e) => {
     case "cat-pick": {
       const v = el.dataset.v, P = ui.catPick;
       const input = document.getElementById(P.forId), btn = document.querySelector(`[data-act="cat-open"][data-for="${P.forId}"]`);
-      if (input) input.value = v;
+      if (input) { input.value = v; input.dataset.picked = "1"; }
       if (btn) { btn.querySelector("span").textContent = v; btn.querySelector(".tx-dot").style.background = catColor(v); }
       ui.catPick = null; drawCatPicker();
       break;
@@ -4471,6 +4485,7 @@ document.addEventListener("click", async (e) => {
         const j = await getJson("/api/receipts", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode: "feedback", summary }) });
         aiCount();
         ui.moneyFb = { text: j.text };
+        if (j.text) lastSet("fb-" + kind, { from: periodRange(kind)[0], text: j.text });
       } catch (err) { ui.moneyFb = { error: err.body?.error || "피드백을 만들지 못했어요" }; }
       if (["money", "ledger"].includes(route())) render();
       break;
@@ -4530,7 +4545,7 @@ document.addEventListener("click", async (e) => {
     case "wipe":
       if (confirm(sync.on ? "이 기기와 구글 계정에 저장된 내 정보를 모두 지우고 연결도 끊을까요? 되돌릴 수 없어요." : "이 기기에 저장된 내 정보를 모두 지울까요? 되돌릴 수 없어요.")) {
         await deleteRemote();
-        try { [STORE_KEY, UI_KEY, LEARN_KEY, LEDGER_KEY, AI_KEY].forEach((k) => localStorage.removeItem(k)); } catch {}
+        try { [STORE_KEY, UI_KEY, LEARN_KEY, LEDGER_KEY, AI_KEY, LAST_KEY].forEach((k) => localStorage.removeItem(k)); } catch {}
         ledger.tx = []; ledger.uploads = {}; ledger.fixed = []; ledger.cats = { added: [], hidden: [] }; learnState.answers = {}; learnState.notes = {}; learnState.days = {}; learnState.today = null;
         profile = null; ui.onb = { step: 0, draft: null }; location.hash = ""; render();
       }
@@ -4544,6 +4559,16 @@ document.addEventListener("click", async (e) => {
 });
 
 // 값 입력 (바꾼 뒤 칸을 벗어날 때 저장)
+// 나간 돈/들어온 돈을 바꾸면 분류도 맞춰 바꾼다 (직접 고른 분류는 건드리지 않음)
+document.addEventListener("change", (e) => {
+  const pair = { "q-dir": ["q-cat", "식비"], "fx-dir": ["fx-cat", "주거·통신"] }[e.target.id];
+  if (!pair) return;
+  const input = document.getElementById(pair[0]), btn = document.querySelector(`[data-act="cat-open"][data-for="${pair[0]}"]`);
+  if (!input || input.dataset.picked) return;
+  const v = e.target.value === "in" ? "급여·수입" : input.value === "급여·수입" ? pair[1] : input.value;
+  input.value = v;
+  if (btn) { btn.querySelector("span").textContent = v; btn.querySelector(".tx-dot").style.background = catColor(v); }
+});
 document.addEventListener("change", (e) => {
   if (e.target.id === "cap-files") { readCaptures(e.target.files); e.target.value = ""; return; }
   if (e.target.dataset.cap && ui.capture?.items) {
@@ -4682,10 +4707,12 @@ document.addEventListener("pointerdown", (e) => {
 
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape" && ui.drawer) { ui.drawer = false; render(); }
-  else if (e.key === "Escape" && ui.sheet) { ui.sheet = null; render(); }
+  else if (e.key === "Escape" && ui.sheet) { ui.sheet = null; lastSet("sheet", null); render(); }
   else if (e.key === "Escape" && ui.searchOpen) { ui.searchOpen = false; document.getElementById("searchwrap")?.classList.remove("open"); document.getElementById("q")?.blur(); }
 });
 
+// 새로 고치기 전에 보던 루미의 답(오늘 것, 닫지 않았을 때)과 이번 기간 가계부 피드백을 되살린다
+{ const L = lastGet(); if (profile && L.sheet?.day === ymd(today0())) ui.sheet = { q: L.sheet.q, a: L.sheet.a }; ui.moneyFb = lastFb(ui.moneyKind || "week"); }
 render();
 loadAll();
 // 로딩 화면은 최소 0.7초 보여주고 부드럽게 사라짐
