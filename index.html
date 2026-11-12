@@ -2065,7 +2065,7 @@ function viewDrawer() {
         ${g.items.map(item).join("")}</div>`).join("")}
     </nav></div>`;
 }
-const TARGET_TAB = { "m-capture": ["ledgerTab", "rec"], "m-quick": ["ledgerTab", "rec"], "m-recent": ["ledgerTab", "rec"], "m-summary": ["ledgerTab", "stat"], "m-cal": ["ledgerTab", "stat"],
+const TARGET_TAB = { "m-capture": ["ledgerTab", "rec"], "m-quick": ["ledgerTab", "rec"], "m-recent": ["ledgerTab", "rec"], "m-summary": ["ledgerTab", "stat"], "m-cal": ["ledgerTab", "stat"], "m-fixed": ["ledgerTab", "rec"], "sec-net": ["assetTab", "invest"], "sec-budget": ["assetTab", "analysis"],
   "sec-diag": ["assetTab", "invest"], "sec-goals": ["assetTab", "invest"], "sec-assets": ["assetTab", "invest"], "sec-debts": ["assetTab", "invest"], "sec-analysis": ["assetTab", "analysis"] };
 function navTo(to, target, sub) {
   ui.drawer = false;
@@ -3150,7 +3150,7 @@ function viewLearn() {
   const tq = todayQuiz();
   const T = data.trending;
   const evs = T?.available ? T.events || [] : [];
-  const hotBlock = evs.length ? `<section class="card">
+  const hotBlock = evs.length ? `<section class="card" id="l-hot">
       <div class="sec-title"><h2>이번 주 화제 TOP 5</h2><span>최근 7일 정부 보도자료</span></div>
       <div class="hot-list">${evs.map((e, i) => `<a class="hot-item" href="${esc(e.url)}" target="_blank" rel="noopener"><span class="hot-rank">${i + 1}</span><span class="hot-t">${esc(e.title)}<small class="hint">#${esc(e.word)} · 관련 보도자료 ${e.count}건</small></span>${ICON.out}</a>`).join("")}</div>
     </section>` : "";
@@ -3179,7 +3179,7 @@ function viewLearn() {
         <span class="hint">경험치 ${xp} XP · 다음 레벨까지 ${LEVEL_XP - inLv} XP</span>
       </div>
     </section>
-    <section class="card mission">
+    <section class="card mission" id="l-mission">
       <div class="sec-title" style="margin:0"><h2>오늘의 미션</h2><span>${learnState.missionDay === ymd(today0()) ? "완료 ✓" : `+${MISSION_XP} XP`}</span></div>
       <p style="margin:0;font-size:14px">문제 ${MISSION}개 풀기 · <b class="num">${todayN}/${MISSION}</b></p>
       <div class="msn-dots">${Array.from({ length: MISSION }, (_, k) => `<i class="${k < todayN ? "on" : ""}"></i>`).join("")}</div>
@@ -3191,7 +3191,7 @@ function viewLearn() {
       <div><b class="num">${att.pct}%</b><span>출석률 · ${att.n}/${att.of}일</span></div>
       <button data-act="nav" data-route="review"><b class="num" style="color:${wrong.length ? "var(--up)" : "inherit"}">${wrong.length}</b><span>복습할 문제 ›</span></button>
     </section>
-    <div class="sec-title" style="margin:6px 2px 0"><h2 style="font-size:20px">탈출 지도</h2><button class="link-btn" data-act="notes-open">내 노트 ${Object.keys(learnState.notes).length} ›</button></div>
+    <div class="sec-title" style="margin:6px 2px 0" id="l-map"><h2 style="font-size:20px">탈출 지도</h2><button class="link-btn" data-act="notes-open">내 노트 ${Object.keys(learnState.notes).length} ›</button></div>
     <div class="stage-grid">${stages}</div>
     ${hotBlock}
     <section class="hub">
@@ -3614,21 +3614,47 @@ async function loadBenefits() {
 }
 
 // ───────────────────────── 상단 검색 ─────────────────────────
-const MENU = [
-  { label: "내 자산 진단", keys: ["자산", "진단", "순자산", "비상금"], focus: "diag" },
-  { label: "내 자산 입력", keys: ["자산", "예금", "현금", "월급"], focus: "assets" },
-  { label: "대출(부채) 입력", keys: ["대출", "부채", "이자", "빚"], focus: "debts" },
-  { label: "투자 성향·관심사", keys: ["성향", "위험", "관심", "선호", "쇼핑", "여행", "부동산"], focus: "risk" },
-  { label: "관심 종목 편집", keys: ["종목", "주식", "관심"], focus: "watch" },
-  { label: "목표 저축", keys: ["목표", "저축", "모으기", "여행"], focus: "goals" },
-  { label: "홈 화면 꾸미기 (순서·숨기기)", keys: ["홈", "화면", "순서", "꾸미기", "편집", "배치", "숨기"], focus: "layout" },
-  { label: "뉴스레터 관리", keys: ["뉴스레터", "구독", "머니레터", "뉴닉"], focus: "letters" },
-  { label: "기본 정보 (닉네임·나이·소득·지역)", keys: ["닉네임", "이름", "나이", "소득", "성별", "연봉", "지역", "학교"], focus: "basic" },
-  { label: "개인정보·데이터 지우기", keys: ["개인정보", "삭제", "데이터", "지우기"], focus: "privacy" },
-];
 const SUGGEST = ["내 대출, 금리 오르면 이자 얼마?", "지금 환전해도 될까?", "FOMC가 뭐야?", "내 성향에 맞는 저축 방법은?"];
 
-const SEARCH_PAGES = [{ label: "내 돈 기록 (가계부·캡처 기록)", keys: ["가계부", "소비", "지출", "기록", "캡처", "영수증", "카드", "내역"], route: "ledger" }];
+const PAGE_NAME = { my: "마이페이지", risktest: "마이페이지", home: "홈", assets: "나의 자산관리", ledger: "가계부", learn: "공부", solved: "공부", review: "공부", news: "뉴스", letters: "뉴스레터", watch: "관심 종목", schedule: "일정", benefits: "우리 지역 혜택", layout: "홈 화면 꾸미기", etc: "기타" };
+// 검색창 바로 가기: 화면 안의 칸·버튼까지. [이름, 화면, 위치(id), 찾는 말들, 누르면 할 일(없으면 그 위치로 이동)]
+const SPOTS = [
+  ["로그아웃 · 기기 연결", "my", "sec-sync", ["로그아웃", "로그인", "기기 연결", "기기", "연결", "구글", "계정", "동기화", "다른 기기"]],
+  ["기본 정보 (닉네임·나이·성별·소득·지역)", "my", "sec-basic", ["기본 정보", "닉네임", "이름", "나이", "성별", "소득", "연봉", "사는 곳", "지역", "학교"]],
+  ["투자 성향 · 관심사", "my", "sec-risk", ["관심사", "관심", "투자 성향", "성향", "선호", "위험", "쇼핑", "여행", "부동산"]],
+  ["투자 성향 정밀 진단 (7문항)", "risktest", "", ["진단", "성향 진단", "성향 테스트", "테스트", "7문항"]],
+  ["지수·주가 (코스피·코스닥)", "home", "h-market", ["코스피", "코스닥", "지수", "주가", "시세"]],
+  ["오늘, 나에게 미치는 영향 (환율·금리)", "home", "h-impact", ["영향", "환율", "환전", "달러", "금리 영향"]],
+  ["오늘의 퀴즈", "home", "h-quiz", ["오늘의 퀴즈", "ox", "오엑스"]],
+  ["순자산 변화 그래프", "assets", "sec-net", ["순자산", "그래프", "자산 변화"]],
+  ["내 자산 진단", "assets", "sec-diag", ["자산 진단", "진단", "비상금"]],
+  ["목표 저축", "assets", "sec-goals", ["목표", "저축", "모으기"]],
+  ["자산·대출 입력", "assets", "sec-assets", ["자산 입력", "자산", "예금", "현금", "대출", "부채", "빚", "이자"]],
+  ["이번 달 예산", "assets", "sec-budget", ["예산", "한 달 예산", "분류별 예산"]],
+  ["소비 분석 · 소비 점검", "assets", "sec-analysis", ["소비 분석", "소비 점검", "점검", "합리", "돈 흐름"]],
+  ["캡처로 기록하기", "ledger", "m-capture", ["캡처", "영수증", "사진", "스크린샷", "카드 내역"]],
+  ["직접 기록하기", "ledger", "m-quick", ["직접 기록", "직접", "현금", "수기"]],
+  ["고정 수입·지출", "ledger", "m-fixed", ["고정", "월세", "월급", "통신비", "자동 기록", "매달"]],
+  ["최근 기록 (고치기·검색)", "ledger", "m-recent", ["최근 기록", "내역", "기록 검색", "기록 고치기", "기록 삭제"]],
+  ["지출 통계 · 루미 피드백", "ledger", "m-summary", ["통계", "지출", "도넛", "차트", "주간", "월간", "소비 피드백", "피드백"]],
+  ["달력으로 보기", "ledger", "m-cal", ["달력", "캘린더"]],
+  ["오늘의 미션 · 빠른 퀴즈", "learn", "l-mission", ["미션", "빠른 퀴즈", "퀴즈", "출석", "레벨", "경험치", "칭호"]],
+  ["탈출 지도 · 투자운용사 섬", "learn", "l-map", ["탈출 지도", "지도", "섬", "투자운용사", "국제금융", "금융경제", "베이지안", "과목", "개념"]],
+  ["이번 주 화제 TOP 5", "learn", "l-hot", ["화제", "top", "보도자료"]],
+  ["배지 보관함", "learn", "", ["배지", "뱃지"], "badges-open"],
+  ["내 노트", "learn", "", ["노트", "메모"], "notes-open"],
+  ["푼 문제", "solved", "", ["푼 문제"]],
+  ["복습할 문제", "review", "", ["복습", "틀린 문제", "오답"]],
+  ["오늘의 경제 쉽게 풀이", "news", "", ["쉽게 풀이", "풀이", "오늘의 경제", "정책"]],
+  ["구독 중인 뉴스레터", "letters", "sec-letters", ["뉴스레터", "구독", "머니레터", "뉴닉"]],
+  ["관심 종목 (추가·보유 수량)", "watch", "sec-watch", ["관심 종목", "종목", "보유 수량", "수량", "주식"]],
+  ["나를 위한 일정", "schedule", "", ["일정", "세일", "금통위", "fomc", "스케줄"]],
+  ["우리 지역 혜택 · 내 위치로 찾기", "benefits", "sec-region", ["혜택", "지원금", "청년", "위치", "내 위치", "동네", "장학", "정기예금", "예금 금리"]],
+  ["홈 화면 꾸미기 (순서·숨기기)", "layout", "sec-layout", ["꾸미기", "순서", "숨기기", "숨기", "배치", "홈 편집"]],
+  ["루미 움직임 켜기·끄기", "etc", "sec-lumi", ["루미 움직임", "움직임", "애니메이션", "멈추기"]],
+  ["내 정보 전부 지우기", "etc", "sec-privacy", ["지우기", "삭제", "초기화", "탈퇴", "개인정보", "데이터"]],
+  ["앱 정보 (데이터 출처)", "etc", "sec-info", ["앱 정보", "버전", "출처", "데이터 출처"]],
+];
 function searchResults() {
   const q = ui.q.trim();
   if (!q) return `<div class="sg">이렇게 물어볼 수 있어요</div>${SUGGEST.map((s) => `<button class="si" data-act="ask" data-q="${esc(s)}"><span>${esc(s)}</span><span class="s2">질문</span></button>`).join("")}`;
@@ -3667,20 +3693,27 @@ function searchResults() {
   group("우리 지역 혜택", (data.benefitsApi?.items || []).filter((b) => has(b.name) || has(b.summary) || has(b.org)).slice(0, 3)
     .map((b) => `<a class="si" href="${esc(b.url || "https://www.gov.kr")}" target="_blank" rel="noopener"><span>${esc(b.name)}</span><span class="s2">${b.local ? "지역" : "정부"} ${ICON.out}</span></a>`));
 
-  // 목차에 있는 화면·칸: 묶음 이름(예: 마이페이지)이나 항목 이름(예: 기본 정보)에 맞으면 → 누르면 그곳으로
-  const menuRows = [];
+  // 바로 가기: 화면 안의 칸·버튼(SPOTS)과 목차 항목. 이름이 딱 맞는 것부터
+  const norm = (x) => String(x).toLowerCase().replace(/\s+/g, "");
+  const qq = norm(q);
+  const score = (label, keys) => {
+    const L = norm(label), K = keys.map(norm);
+    if (K.includes(qq) || L === qq) return 3;
+    if (L.includes(qq) || K.some((k) => k.startsWith(qq))) return 2;
+    if (K.some((k) => k.includes(qq) || (k.length >= 2 && qq.includes(k)))) return 1;
+    return 0;
+  };
+  const jumps = [];
+  SPOTS.forEach(([label, route, target, keys, act]) => { const sc = score(label, keys); if (sc) jumps.push({ sc, label, route, target, act }); });
   drawerMenu().forEach((g) => {
-    if (g.route && has(g.title)) menuRows.push([g.title, g.route, "", "", ""]);
-    g.items.filter(([label]) => has(label)).forEach(([label, route, target, sub]) => menuRows.push([label, route, target, sub, g.title]));
+    if (g.route) { const sc = score(g.title, []); if (sc) jumps.push({ sc, label: g.title, route: g.route, target: "" }); }
+    g.items.forEach(([label, route, target, sub]) => { const sc = score(label, []); if (sc) jumps.push({ sc, label, route, target, sub, from: g.title }); });
   });
-  const menuLabels = new Set(menuRows.map((r) => r[0]));
-  group("목차", menuRows.slice(0, 6).map(([label, route, target, sub, from]) =>
-    `<button class="si" data-act="nav" data-route="${route}" data-target="${target || ""}" ${sub ? `data-sub="${sub}"` : ""}><span>${esc(label)}</span><span class="s2">${from ? esc(from) + " " : ""}›</span></button>`));
-
-  const menuRoutes = new Set(menuRows.map((r) => r[1]));
-  group("화면", SEARCH_PAGES.filter((x) => !menuRoutes.has(x.route)).filter((x) => x.keys.some((k) => k.includes(q) || q.includes(k))).map((x) => `<button class="si" data-act="nav" data-route="${x.route}" data-target=""><span>${esc(x.label)}</span><span class="s2">›</span></button>`));
-  group("메뉴", MENU.filter((x) => ![...menuLabels].some((l) => x.label.startsWith(l))).filter((x) => has(x.label) || x.keys.some((k) => k.includes(q) || q.includes(k))).slice(0, 3)
-    .map((x) => `<button class="si" data-act="go-my" data-focus="${x.focus}"><span>${esc(x.label)}</span><span class="s2">마이페이지 ›</span></button>`));
+  const seenJump = new Set();
+  const jumpRows = jumps.sort((x, y) => y.sc - x.sc)
+    .filter((j) => { const k = j.act || j.route + "#" + (j.target || ""); return !seenJump.has(k) && seenJump.add(k); }).slice(0, 6)
+    .map((j) => `<button class="si" data-act="${j.act || "nav"}" data-route="${j.route}" data-target="${j.target || ""}" ${j.sub ? `data-sub="${j.sub}"` : ""} data-jump="1"><span>${esc(j.label)}</span><span class="s2">${esc(j.from || PAGE_NAME[j.route] || "")} ›</span></button>`);
+  if (jumpRows.length) out.unshift(`<div class="sg">바로 가기</div>${jumpRows.join("")}`); // 화면 이동은 맨 위에
 
   out.push(`<button class="si ask" data-act="ask" data-q="${esc(q)}"><span style="display:flex;align-items:center;gap:8px">${mascot(22)} 루미에게 ‘${esc(q.length > 16 ? q.slice(0, 16) + "…" : q)}’ 물어보기</span><span>›</span></button>`);
   return out.join("");
@@ -4050,12 +4083,12 @@ function viewEtc() {
   const S = mySections();
   return `${pageHead("기타")}
   <main class="scroll">
-    <section class="card form">
+    <section class="card form" id="sec-lumi">
       <div class="sec-title"><h2>루미 움직임</h2><span>홈에서 코스피 분위기대로 움직여요</span></div>
       <button class="btn ${ui.lumiStill ? "" : "ghost"}" data-act="lumi-move">${ui.lumiStill ? "움직이게 하기" : "멈추기"}</button>
     </section>
     ${S.privacy}
-    <section class="card">
+    <section class="card" id="sec-info">
       <div class="sec-title"><h2>앱 정보</h2><span>v0.5</span></div>
       <p style="margin:0;font-size:14px;line-height:1.7">주가·지수: 공공데이터포털(금융위원회, 전일 종가) · 환율: 한국수출입은행 · 뉴스: 네이버(제목·링크) · 쉽게 풀이·화제순: 정책브리핑 정책뉴스 · 혜택: 정부24 공공서비스 정보 · AI: Google Gemini(무료 등급 먼저, 보낸 내용을 구글이 서비스 개선에 쓸 수 있음) · OpenAI</p>
       <p class="hint" style="margin:8px 0 0">이 앱의 정보는 투자 권유가 아닌 참고용이에요.</p>
@@ -4240,8 +4273,8 @@ document.addEventListener("click", async (e) => {
     case "node-locked": toast("앞 개념의 1단계를 먼저 맞혀 보세요"); break;
     case "concept-open": { const c = conceptById(el.dataset.id); if (c) openQuizPage("concept", { id: c.id, lv: mastered(c) ? 2 : curLv(c) }); break; }
     case "qp-back": if (ui.qpPushed) { ui.qpPushed = false; history.back(); } else go("#learn"); break;
-    case "badges-open": openModal("badges"); break;
-    case "notes-open": openModal("notes"); break;
+    case "badges-open": if (el.dataset.jump) { ui.q = ""; ui.searchOpen = false; } openModal("badges"); break;
+    case "notes-open": if (el.dataset.jump) { ui.q = ""; ui.searchOpen = false; } openModal("notes"); break;
     case "qq-start": { const qs = pickQuick(); if (!qs.length) { toast("풀 수 있는 문제가 없어요"); break; } openQuizPage("quick", { qs, i: 0, ok: 0, combo: 0, xp: 0, bonus: 0, res: [], picked: null }); break; }
     case "qq-answer": {
       const m = ui.qp; if (!m || m.picked) break;
