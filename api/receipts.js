@@ -34,10 +34,21 @@ const READ_RULES = `너는 한국 은행·카드·간편결제 앱의 '이용내
 - 월급·용돈·이자 입금 등 들어온 돈은 cat="급여·수입".
 - 계좌번호, 카드번호, 잔액, 이름 같은 개인정보는 어떤 칸에도 쓰지 마.`;
 
-const FEEDBACK_RULES = `너는 '나만의 경제' 앱의 금융 길잡이 캐릭터 '루미'(이루미)야. 2030 사용자의 소비 요약을 보고 쉬운 존댓말(~요)로 피드백해.
-- 5~6문장. ① 이번 기간 소비의 특징 한 가지 ② 지난 기간과 달라진 점 ③ 이번 주(thisWeek) 쓴 돈·번 돈 흐름
-  ④ 고정 수입·지출(fixedMonthly)을 빼고 나면 매달 자유롭게 쓸 수 있는 돈이 어느 정도인지 ⑤ 나이대·자산(assetsMan, 만원)·부채(debts)에 비춰 지금 소비가 괜찮은지와 선호·목표에 연결한 실천 팁 한 가지.
-- 주어지지 않은 항목은 언급하지 마. 숫자는 주어진 값만 쓰고, 혼내지 말고 응원하는 말투로. 투자 상품 추천은 하지 마.`;
+const FEEDBACK_RULES = `너는 '나만의 경제' 앱의 금융 길잡이 캐릭터 '루미'(이루미)야. 2030 사용자의 소비 요약을 보고, 경제 뉴스레터의 '머니 프로필' 사연 풀이처럼 피드백해. 쉬운 존댓말(~요).
+- good: 이번 기간에 잘하고 있는 점 1~2문장. 지난 기간(previous*)과 달라진 점이나 남는 돈 흐름을 숫자로.
+- worry: 지금 가장 큰 돈 걱정 딱 한 문장. 쓴 돈이 수입보다 많음, 한 분류에 너무 몰림(guidePercentOfIncome 기준보다 큼), 비상금 부족, 목표 저축이 모자람, 이자 부담 중 실제로 해당하는 것 하나. 해당하는 게 없으면 빈 문자열.
+- actions: 루미의 처방 2~3개. 각각 title은 '무엇을 얼마나'(예: "배달 한 달 6만원 줄이기"), detail은 내 숫자로 된 이유와 방법 한두 문장(예: "이번 달 배달이 8번이라 2번만 줄이면 돼요"). 기준 비율은 이유로만 짧게.
+- 주어진 숫자만 쓰고 새 숫자를 지어내지 마. 금액은 원 단위 값을 '만원'으로 읽기 쉽게. 주어지지 않은 항목은 말하지 마.
+- 혼내지 말고 응원하는 말투로. 특정 투자 상품·종목 추천은 하지 마.`;
+
+const FB_SCHEMA = {
+  type: "object", additionalProperties: false, required: ["good", "worry", "actions"],
+  properties: {
+    good: { type: "string" },
+    worry: { type: "string" },
+    actions: { type: "array", minItems: 1, maxItems: 3, items: { type: "object", additionalProperties: false, required: ["title", "detail"], properties: { title: { type: "string" }, detail: { type: "string" } } } },
+  },
+};
 
 // 아주 단순한 남용 방지 (서버 인스턴스마다 IP별 하루 사진 수 제한)
 const hits = new Map();
@@ -60,8 +71,11 @@ export default async function handler(req, res) {
     if (body.mode === "feedback") {
       const summary = JSON.stringify(body.summary || {}).slice(0, 3000);
       if (!allow(ip, 1)) return res.status(429).json({ error: "오늘은 더 이상 요청할 수 없어요. 내일 다시 해주세요" });
-      const r = await generate({ system: FEEDBACK_RULES, text: summary, maxTokens: 800 });
-      return res.status(200).json({ text: r.text, ai: r.ai });
+      const r = await generate({ system: FEEDBACK_RULES, text: summary, schema: FB_SCHEMA, schemaName: "money_feedback", maxTokens: 900 });
+      const fb = JSON.parse(r.text);
+      // 예전 화면용 글도 함께 (고민 → 처방 순서)
+      const text = [fb.good, fb.worry, ...fb.actions.map((x, i) => `${i + 1}. ${x.title} — ${x.detail}`)].filter(Boolean).join("\n");
+      return res.status(200).json({ fb, text, ai: r.ai });
     }
 
     const images = Array.isArray(body.images) ? body.images.filter((x) => typeof x === "string" && /^data:image\/(jpeg|png|webp);base64,/.test(x)) : [];

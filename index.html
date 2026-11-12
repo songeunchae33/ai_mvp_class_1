@@ -2715,7 +2715,7 @@ function moneyBody() {
       ${s.top.length ? `<div class="hint" style="margin-top:10px">많이 쓴 곳: ${s.top.map(([m, v]) => `${esc(m)} ${won(v)}`).join(" · ")}</div>` : ""}
       ${s.count ? `<button class="btn ghost" style="margin-top:12px;width:100%" data-act="money-feedback" ${ui.moneyFb?.loading || !aiLeft() ? "disabled" : ""}>${ui.moneyFb?.loading ? "생각하는 중…" : "루미에게 피드백 받기"}</button>
         <p class="hint" style="margin:6px 0 0">${fbLeftText()}</p>${!aiLeft() && !ui.moneyFb?.loading ? `<p class="hint" style="margin:4px 0 8px">${outOfFb()}</p>${adButton("fb")}` : ""}` : ""}
-      ${ui.moneyFb?.text ? `<div class="ans" style="display:flex;gap:10px;margin-top:10px">${mascot(36)}<p style="margin:0;font-size:14px;line-height:1.7;background:var(--soft);border-radius:6px 16px 16px 16px;padding:10px 12px;flex:1">${esc(ui.moneyFb.text)}</p></div>` : ""}
+      ${ui.moneyFb?.text ? `<div class="ans" style="display:flex;gap:10px;margin-top:10px;align-items:flex-start">${mascot(36)}${moneyFbHtml(ui.moneyFb, kind)}</div>` : ""}
       ${ui.moneyFb?.error ? `<p class="hint" style="color:var(--up)">${esc(ui.moneyFb.error)}</p>` : ""}
     </section>
     ${calBlock(kind)}
@@ -3850,7 +3850,19 @@ function aiSave(v) { try { localStorage.setItem(AI_KEY, JSON.stringify(v)); } ca
 const LAST_KEY = "myeco.last.v1";
 function lastGet() { try { return JSON.parse(localStorage.getItem(LAST_KEY)) || {}; } catch { return {}; } }
 function lastSet(k, v) { const o = lastGet(); if (v === null) delete o[k]; else o[k] = v; try { localStorage.setItem(LAST_KEY, JSON.stringify(o)); } catch {} }
-function lastFb(kind) { const f = lastGet()["fb-" + kind]; return f && f.from === periodRange(kind)[0] ? { text: f.text } : null; }
+function lastFb(kind) { const f = lastGet()["fb-" + kind]; return f && f.from === periodRange(kind)[0] ? { text: f.text, fb: f.fb } : null; }
+// AI 피드백을 머니 프로필 모양으로: 돈 고민(가장 큰 걱정은 표시) → 루미의 처방
+function moneyFbHtml(F, kind) {
+  const who = esc(profile.nickname || "나");
+  if (!F.fb) return `<p style="margin:0;font-size:14px;line-height:1.7;white-space:pre-line">${esc(F.text)}</p>`;
+  const f = F.fb;
+  return `<div style="flex:1;min-width:0">
+      <h3 class="mp-h" style="margin-top:0">${who}님의 ${kind === "week" ? "이번 주" : "이번 달"} 돈 고민</h3>
+      <p class="mp-story">${esc(f.good || "")} ${f.worry ? `<mark class="worry">${esc(f.worry)}</mark>` : ""}</p>
+      <h3 class="mp-h">루미의 처방</h3>
+      <ol class="mp-acts">${(f.actions || []).slice(0, 3).map((x) => `<li><b>${esc(String(x.title).replace(/[.。]$/, ""))}.</b> ${esc(x.detail)}</li>`).join("")}</ol>
+    </div>`;
+}
 function aiLeft() { const v = aiUse(); return Math.max(0, AI_LIMIT.fb + v.adFb * AD_BONUS.fb - v.fb); }
 function aiCount() { const v = aiUse(); v.fb++; aiSave(v); }
 function adLeft(kind) { const v = aiUse(); return Math.max(0, AD_MAX - (kind === "fb" ? v.adFb : v.adCap)); }
@@ -4609,6 +4621,8 @@ document.addEventListener("click", async (e) => {
       const summary = {
         period: kind === "week" ? "이번 주" : "이번 달", total: s.total, previousTotal: pv.total, income: s.income,
         byCategory: s.byCat, previousByCategory: pv.byCat, topPlaces: s.top,
+        countByCategory: s.list.filter((x) => x.dir === "out").reduce((o, x) => ((o[x.cat] = (o[x.cat] || 0) + 1), o), {}),
+        guidePercentOfIncome: GUIDE_INCOME, job: profile.status || undefined,
         values: profile.prefs, riskType: riskType(profile.avert),
         goals: (profile.goals || []).map((g) => ({ name: g.name, leftMan: goalCalc(g).left, monthlyMan: goalCalc(g).monthly })),
         // 이번 주(월~일) 쓴 돈·번 돈
@@ -4626,8 +4640,8 @@ document.addEventListener("click", async (e) => {
       try {
         const j = await getJson("/api/receipts", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode: "feedback", summary }) });
         aiCount();
-        ui.moneyFb = { text: j.text };
-        if (j.text) lastSet("fb-" + kind, { from: periodRange(kind)[0], text: j.text });
+        ui.moneyFb = { text: j.text, fb: j.fb };
+        if (j.text) lastSet("fb-" + kind, { from: periodRange(kind)[0], text: j.text, fb: j.fb });
       } catch (err) { ui.moneyFb = { error: err.body?.error || "피드백을 만들지 못했어요" }; }
       if (["money", "ledger"].includes(route())) render();
       break;
