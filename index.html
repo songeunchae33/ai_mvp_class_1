@@ -156,6 +156,13 @@
   .debt { background: var(--soft); border-radius: 14px; padding: 10px; display: flex; flex-direction: column; gap: 8px; }
   .bar { height: 10px; border-radius: 5px; background: var(--flat-bg); display: flex; overflow: hidden; }
   .diag { display: flex; flex-direction: column; gap: 10px; }
+  .mp-list { margin: 0; padding-left: 20px; font-size: 14px; line-height: 1.75; }
+  .mp-list ul { padding-left: 18px; list-style: circle; }
+  .mp-h { margin: 16px 0 6px; font-size: 16px; }
+  .mp-story { margin: 0; font-size: 14px; line-height: 1.75; }
+  .mp-story .worry { background: #FBE3E5; color: inherit; padding: 1px 2px; border-radius: 3px; }
+  .mp-acts { margin: 0; padding-left: 20px; font-size: 14px; line-height: 1.7; display: flex; flex-direction: column; gap: 6px; }
+  .mp-acts .hint { font-size: 12px; }
   .diag-line { display: flex; gap: 10px; align-items: flex-start; font-size: 14px; line-height: 1.55; }
   .diag-line .badge { flex-shrink: 0; margin-top: 2px; }
   .legend { display: flex; gap: 12px; flex-wrap: wrap; font-size: 12px; color: var(--sub); }
@@ -3006,11 +3013,96 @@ function analysisHtml() {
       ${span < 21 ? `<p class="hint" style="margin:6px 0 0">기록이 ${span}일치라 실제 한 달 지출보다 적게 잡혔을 수 있어요.</p>` : ""}
       <div class="ans" style="display:flex;gap:10px;margin-top:10px">${mascot(36, cnt("warn") ? "reassure" : "happy")}<p style="margin:0;font-size:14px;line-height:1.7;background:var(--soft);border-radius:6px 16px 16px 16px;padding:10px 12px;flex:1">잘하고 있는 점 <b>${cnt("good")}개</b>, 점검할 점 <b>${cnt("warn")}개</b>예요.${cnt("warn") ? " 점검할 곳부터 위에 모아뒀어요." : " 지금처럼만 하면 돼요!"}</p></div>
     </section>
-    <section class="card">
-      <div class="sec-title"><h2>소비 점검</h2><span>좋아요 · 보통 · 점검</span></div>
-      <div class="diag">${items.sort((x, y) => order[x[0]] - order[y[0]]).map(([lv, title, text]) => `<div class="diag-line"><span class="badge ${BADGE[lv]}">${esc(title)}</span><span>${esc(text)}</span></div>`).join("")}</div>
-    </section>
+    ${moneyProfileHtml({ p, a, income, incomeRec, spend, outs, total, over, baseName, small, need, interest })}
     ${foot}`;
+}
+
+// 소비 점검: 뉴스레터의 '머니 프로필'처럼 ① 이 사람의 돈 상황 → ② 돈 고민 → ③ 루미의 처방 순서로 보여준다.
+// 숫자는 모두 내 입력값과 가계부 최근 30일 기록이고, 비율 기준은 처방의 근거로만 덧붙인다.
+function moneyProfileHtml({ p, a, income, incomeRec, spend, outs, total, over, baseName, small, need, interest }) {
+  const nick = esc(p.nickname || "나");
+  const left = income ? income - spend : null;
+  const rate = income ? Math.round((left / income) * 100) : null;
+  const cash = a.cash === null || a.cash === undefined ? null : Number(a.cash) * 1e4;
+  const months = cash !== null && spend > 0 ? cash / spend : null;
+  const debtSum = (p.debts || []).reduce((t, d) => t + (Number(d.amount) || 0), 0);
+  const goalsOpen = (p.goals || []).filter((g) => !goalCalc(g).done);
+  // 자주 쓰는 곳: 30일에 4번 이상 결제한 곳
+  const freq = {};
+  outs.forEach((x) => { const k = x.merchant || x.cat; freq[k] = freq[k] || { n: 0, v: 0 }; freq[k].n++; freq[k].v += x.amount; });
+  const habits = Object.entries(freq).filter(([, f]) => f.n >= 4).sort((x, y) => y[1].n - x[1].n).slice(0, 2);
+  const ss = small.reduce((t, x) => t + x.amount, 0);
+  const wonJ = (v, a1, a2) => { const w = won(v); return w + josa(w, a1, a2); };
+  // 목표에 남은 금액을 이미 예금·현금으로 갖고 있으면 '모자람'이 아니다
+  const goalLeft = goalsOpen.reduce((t, g) => t + goalCalc(g).left, 0) * 1e4;
+  const goalCovered = goalLeft > 0 && cash !== null && cash >= goalLeft;
+  // 작은 결제가 대부분 이미 짚은 분류(예: 카페)면 같은 이야기를 두 번 하지 않는다
+  const smallSame = over.length && small.length && small.filter((x) => x.cat === over[0][0]).length >= small.length * 0.7;
+  const smallIssue = small.length >= 5 && ss > spend * 0.15 && !smallSame;
+
+  // ① 머니 프로필
+  const rows = [
+    p.age && ["나이", `만 ${p.age}세`],
+    p.status && ["하는 일", esc(p.status)],
+    p.income && ["세전 연봉", INCOME[p.income]],
+    income && ["한 달 들어온 돈", `${won(income)}${incomeRec ? "" : " (연 소득으로 추정)"}`],
+    ["한 달 쓴 돈", won(spend)],
+    left !== null && ["한 달 남은 돈", `${won(left)} (${rate}%)`],
+    total > 0 && ["현재 자산", man(total), [a.cash && `예금·현금 ${man(a.cash)}`, a.invest && `투자 ${man(a.invest)}`, a.other && `기타 ${man(a.other)}`].filter(Boolean)],
+    debtSum > 0 && ["대출", man(debtSum)],
+    habits.length && ["자주 쓰는 소비", habits.map(([k, f]) => `${esc(k)} ${f.n}번 · ${won(f.v)}`).join(", ")],
+    goalsOpen.length && ["재무 목표", goalsOpen.slice(0, 2).map((g) => `${esc(g.name)} ${man(g.target)}${g.due ? ` (${String(g.due).slice(0, 4)}년 ${Number(String(g.due).slice(5, 7))}월까지)` : ""}`).join(", ")],
+  ].filter(Boolean);
+
+  // ② 돈 고민: 잘하는 점은 담담하게, 가장 큰 걱정 하나는 표시
+  const goods = [], worries = [], acts = [];
+  if (rate !== null) {
+    if (rate >= 20) goods.push(`들어온 돈의 ${rate}%를 남기고 있어요.`);
+    else if (rate >= 10) goods.push(`들어온 돈의 ${rate}%를 남기고 있어요.`);
+    else if (rate >= 0) worries.push(`들어온 돈의 ${rate}%만 남아서 돈이 잘 모이지 않아요.`);
+    else worries.push(`쓴 돈이 들어온 돈보다 ${won(-left)} 많아서, 모아 둔 돈을 꺼내 쓰고 있어요.`);
+  }
+  if (months !== null) {
+    if (months < 3) worries.push(`예금·현금으로는 지금 소비를 약 ${fmt(months, 1)}개월만 버틸 수 있어서, 수입이 갑자기 끊기면 불안해요.`);
+    else if (months >= 24) goods.push(`예금·현금만으로 2년 넘게 버틸 만큼 비상금이 넉넉해요.`);
+    else if (months >= 6) goods.push(`비상금은 약 ${fmt(months, 1)}개월 치로 넉넉해요.`);
+  }
+  if (over.length) {
+    const [c, v] = over[0];
+    worries.push(`${esc(c)}에 한 달 ${wonJ(v, "을", "를")} 써서, ${baseName}의 ${Math.round((v / (income || spend)) * 100)}%가 여기로 나가요.`);
+  }
+  if (goalCovered) goods.push(`목표 저축에 남은 ${won(goalLeft)}은 이미 예금·현금으로 갖고 있어요.`);
+  else if (need && income && left < need) worries.push(`목표 저축에 매달 ${won(need)}이 필요한데, 지금 남는 돈은 ${won(Math.max(0, left))}이에요.`);
+  if (interest && income && interest / income >= 0.2) worries.push(`대출 이자가 한 달 약 ${won(interest)}로 들어온 돈의 ${fmt((interest / income) * 100, 1)}%예요.`);
+  if (smallIssue) worries.push(`1만원 미만 결제가 ${small.length}건 모여 ${wonJ(ss, "이", "가")} 됐어요.`);
+
+  // ③ 루미의 처방: 걱정마다 할 일 하나, 내 숫자로 (기준 비율은 괄호 속 근거로만)
+  over.slice(0, 2).forEach(([c, v, lim, cut]) => {
+    const n = outs.filter((x) => x.cat === c).length, per = n ? v / n : 0;
+    const k = per ? Math.max(1, Math.ceil(cut / per)) : 0;
+    acts.push(`<b>${esc(c)} 한 달 ${won(cut)} 줄이기.</b> ${n >= 3 ? `30일에 ${n}번 썼으니 ${k}번만 덜 쓰면 돼요.` : `한두 번의 큰 지출이라, 다음 달에는 꼭 필요한지 한 번 더 생각해 보세요.`} <span class="hint">(보통 ${baseName}의 ${lim}% 안쪽이면 적당해요)</span>`);
+  });
+  if (months !== null && months < 3) {
+    const gap = spend * 3 - cash;
+    acts.push(`<b>비상금 ${won(gap)} 더 모으기.</b> 3개월 치(${won(spend * 3)})가 있으면 수입이 끊겨도 버틸 수 있어요.${left > 0 ? ` 지금 남는 돈이면 약 ${Math.ceil(gap / left)}달 걸려요.` : ""}`);
+  }
+  if (rate !== null && rate < 10 && !over.length) acts.push(`<b>쓴 돈을 한 달 ${won(Math.max(0, spend - income * 0.8))} 줄이기.</b> 그러면 들어온 돈의 20%가 남아요. 고정 지출부터 살펴보면 쉬워요.`);
+  if (!goalCovered && need && income && left < need) acts.push(`<b>목표 저축 다시 맞추기.</b> 매달 ${won(need - Math.max(0, left))}이 모자라요. 위에서 줄인 돈을 목표로 옮기거나 기한을 늘려 보세요.`);
+  if (interest && income && interest / income >= 0.2) acts.push(`<b>금리가 높은 대출부터 갚기.</b> 이자가 줄면 매달 남는 돈이 바로 늘어요.`);
+  if (smallIssue) acts.push(`<b>작은 결제 절반 줄이기.</b> 1만원 미만 ${small.length}건 중 절반만 줄여도 한 달 약 ${won(ss / 2)}이 남아요.`);
+  if (!acts.length) acts.push(`<b>지금 흐름 그대로 유지하기.</b>${left > 0 ? ` 남는 돈 ${won(left)} 중 일부를 월급날 목표 저축으로 먼저 옮겨 두면 더 쉽게 모여요.` : " 수입 기록을 넣으면 더 정확하게 알려드릴게요."}`);
+
+  const story = `${nick}님은 최근 30일 동안 ${wonJ(spend, "을", "를")} 썼어요. ${goods.join(" ")} `
+    + (worries.length ? `<mark class="worry">${worries[0]}</mark> ${worries.slice(1).join(" ")}` : "지금은 크게 걱정할 부분이 없어요.");
+
+  return `<section class="card" id="sec-check">
+      <div class="sec-title"><h2>${nick}님의 머니 프로필</h2><span>최근 30일 기준</span></div>
+      <ul class="mp-list">${rows.map(([k, v, sub]) => `<li><b>${k}:</b> ${v}${sub?.length ? `<ul>${sub.map((x) => `<li>${x}</li>`).join("")}</ul>` : ""}</li>`).join("")}</ul>
+      <h3 class="mp-h">${nick}님의 돈 고민</h3>
+      <p class="mp-story">${story}</p>
+      <h3 class="mp-h">루미의 처방</h3>
+      <ol class="mp-acts">${acts.slice(0, 3).map((x) => `<li>${x}</li>`).join("")}</ol>
+    </section>`;
 }
 
 // 사진을 폰에서 줄여서(긴 변 1400px, JPEG) 보내기 → AI 비용·전송량 절약
