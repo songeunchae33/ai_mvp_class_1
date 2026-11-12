@@ -113,6 +113,7 @@ export default async function handler(req, res) {
     .slice(0, 10);
 
   const out = { sample: !hasData || !(hasEcos || hasExim) };
+  out.src = { usd: hasEcos ? "ecos" : "exim" }; // 화면의 '정보 원천' 링크용
   const tasks = [];
 
   if (hasEcos) {
