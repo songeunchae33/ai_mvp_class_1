@@ -1,0 +1,16 @@
+user_id,cat,budget_man
+u_student,식비,30
+u_student,카페·간식,8
+u_student,쇼핑,10
+u_student,교통,6
+u_student,문화·여가,5
+u_junior,식비,45
+u_junior,카페·간식,10
+u_junior,쇼핑,25
+u_junior,교통,8
+u_junior,문화·여가,15
+u_junior,여행,30
+u_saver,식비,25
+u_saver,카페·간식,3
+u_saver,쇼핑,8
+u_saver,교통,7

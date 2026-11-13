@@ -2852,7 +2852,7 @@ function viewAssets() {
       <button class="${tab === "invest" ? "on" : ""}" role="tab" aria-selected="${tab === "invest"}" data-act="asset-tab" data-v="invest">투자</button>
       <button class="${tab === "analysis" ? "on" : ""}" role="tab" aria-selected="${tab === "analysis"}" data-act="asset-tab" data-v="analysis">분석</button>
     </div>
-    ${tab === "analysis" ? budgetHtml() + analysisHtml() : (recordNet(), investHtml())}
+    ${tab === "analysis" ? budgetHtml() + intelHtml() + analysisHtml() : (recordNet(), investHtml())}
   </main>`;
 }
 
@@ -2948,6 +2948,150 @@ function modalBudget() {
 // 기준은 흔히 쓰는 생활 재무 참고값이에요. 수입이 있으면 수입 대비, 없으면 전체 지출 대비로 본다.
 const GUIDE_INCOME = { 식비: 15, "카페·간식": 5, 쇼핑: 10, "문화·여가": 8, 여행: 10, 교통: 8, 구독: 3 };
 const GUIDE_SPEND = { 식비: 30, "카페·간식": 10, 쇼핑: 20, "문화·여가": 15, 여행: 20, 교통: 15, 구독: 5 };
+// ── METRICS:START ── 소비 인텔리전스 1단계 계산 (analysis/sql의 05·06·08과 같은 규칙)
+// 이 블록은 거래 목록만 읽고 앱의 다른 값에 기대지 않는다. scripts/check-metrics.mjs가 이 블록만 꺼내 SQL 결과와 비교한다.
+// 세는 기준(analysis/sql/00_schema.sql의 tx_class와 같음): 지출=나간 돈·내부이체 아님 / 수입=들어온 돈·급여·수입 /
+// 환불=들어온 돈·그 밖(총지출에서만 뺌) / 내부이체=뺌 / 고정비=src '고정' 또는 fixed 있음
+const MX = {
+  kind(t) { return t.cat === "내부이체" ? "transfer" : t.dir === "out" ? "spend" : t.cat === "급여·수입" ? "income" : "refund"; },
+  fixed(t) { return t.src === "고정" || !!(t.fixed || t.fixed_id); },
+  dn(s) { const [y, m, d] = s.split("-").map(Number); return Date.UTC(y, m - 1, d) / 864e5; },   // 날짜 → 날 번호
+  ds(n) { return new Date(n * 864e5).toISOString().slice(0, 10); },
+  // DuckDB quantile_cont와 같은 선형 보간 백분위수
+  q(arr, p) { const a = [...arr].sort((x, y) => x - y); if (!a.length) return null; const pos = (a.length - 1) * p, lo = Math.floor(pos), hi = Math.ceil(pos); return a[lo] + (a[hi] - a[lo]) * (pos - lo); },
+  sd(arr) { if (arr.length < 2) return 0; const m = arr.reduce((x, y) => x + y, 0) / arr.length; return Math.sqrt(arr.reduce((x, y) => x + (y - m) ** 2, 0) / arr.length); },
+};
+// 이번 달 1일~오늘 vs 지난달 같은 기간 (analysis/sql/08_month_to_date.sql)
+function monthToDate(tx, asOf) {
+  const [y, m, d] = asOf.split("-").map(Number);
+  const curStart = `${asOf.slice(0, 8)}01`;
+  const py = m === 1 ? y - 1 : y, pm = m === 1 ? 12 : m - 1;
+  const prevStart = `${py}-${String(pm).padStart(2, "0")}-01`;
+  const prevLast = new Date(Date.UTC(py, pm, 0)).getUTCDate();
+  const prevEnd = `${prevStart.slice(0, 8)}${String(Math.min(d, prevLast)).padStart(2, "0")}`;
+  const cats = {}, tot = { cur: 0, prev: 0, curRefund: 0, prevRefund: 0, curFixed: 0 };
+  for (const t of tx) {
+    const k = MX.kind(t);
+    if (k !== "spend" && k !== "refund") continue;
+    const per = t.date >= curStart && t.date <= asOf ? "cur" : t.date >= prevStart && t.date <= prevEnd ? "prev" : null;
+    if (!per) continue;
+    if (k === "refund") { tot[per + "Refund"] += t.amount; continue; }
+    const c = (cats[t.cat] = cats[t.cat] || { cat: t.cat, cur: 0, prev: 0, curFixed: 0 });
+    c[per] += t.amount; tot[per] += t.amount;
+    if (per === "cur" && MX.fixed(t)) { c.curFixed += t.amount; tot.curFixed += t.amount; }
+  }
+  return {
+    cur: Math.max(tot.cur - tot.curRefund, 0), prev: Math.max(tot.prev - tot.prevRefund, 0), curFixed: tot.curFixed,
+    curStart, prevStart, prevEnd,
+    cats: Object.values(cats).sort((a, b) => b.cur - a.cur || a.cat.localeCompare(b.cat)),
+  };
+}
+// 반복 결제: 최근 180일, 같은 가게 3번 이상, 금액이 중앙값 ±10%, 간격이 매주(6~8일)·매달(27~33일)로 일정 (analysis/sql/05_recurring.sql)
+function recurringPayments(tx, asOf) {
+  const end = MX.dn(asOf), start = end - 179, by = {};
+  const list = tx.filter((t) => MX.kind(t) === "spend" && MX.dn(t.date) >= start && MX.dn(t.date) <= end)
+    .sort((a, b) => a.date.localeCompare(b.date) || String(a.id).localeCompare(String(b.id)));
+  for (const t of list) (by[t.merchant] = by[t.merchant] || []).push(t);
+  const out = [];
+  for (const [merchant, ts] of Object.entries(by)) {
+    if (ts.length < 3) continue;
+    const amts = ts.map((t) => t.amount), typical = MX.q(amts, 0.5);
+    if (Math.min(...amts) < typical * 0.9 || Math.max(...amts) > typical * 1.1) continue;
+    const gaps = ts.slice(1).map((t, i) => MX.dn(t.date) - MX.dn(ts[i].date));
+    const mg = MX.q(gaps, 0.5), sd = MX.sd(gaps);
+    if (!((mg >= 6 && mg <= 8) || (mg >= 27 && mg <= 33)) || sd > 3) continue;
+    const last = ts[ts.length - 1].date;
+    out.push({ merchant, cat: ts[0].cat, n: ts.length, typical, cycle: mg <= 8 ? "매주" : "매달", medianGap: mg,
+      last, next: MX.ds(MX.dn(last) + Math.round(mg)), isFixed: ts.some(MX.fixed) });
+  }
+  return out.sort((a, b) => b.typical - a.typical || a.merchant.localeCompare(b.merchant));
+}
+// 평소보다 큰 지출: 같은 분류의 그 전날까지 90일 기록이 3번 이상, 3만원 이상, 금액 > 그 기록의 P95 × 2 (analysis/sql/06_anomaly.sql)
+function unusualSpends(tx, from = "0000-00-00") {
+  const spend = tx.filter((t) => MX.kind(t) === "spend"), byCat = {};
+  for (const t of spend) (byCat[t.cat] = byCat[t.cat] || []).push(t);
+  const out = [];
+  for (const t of spend) {
+    if (t.date < from || t.amount < 30000) continue;
+    const d = MX.dn(t.date);
+    const prior = byCat[t.cat].filter((x) => { const k = MX.dn(x.date); return k >= d - 90 && k <= d - 1; }).map((x) => x.amount);
+    if (prior.length < 3) continue;
+    const p95 = MX.q(prior, 0.95);
+    if (t.amount > p95 * 2) out.push({ id: t.id, date: t.date, merchant: t.merchant, cat: t.cat, amount: t.amount, nPrior: prior.length, median: MX.q(prior, 0.5), p95 });
+  }
+  return out.sort((a, b) => a.date.localeCompare(b.date) || String(a.id).localeCompare(String(b.id)));
+}
+// ── METRICS:END
+// 나의 자산관리 → 분석 탭: 소비 인텔리전스 1단계 (이번 달 현황 · 반복 결제 · 평소보다 큰 지출 · 내보내기)
+// 거래는 읽기만 한다(저장·삭제 없음). 기록이 모자라면 숫자를 지어내지 않고 안내만 보여준다
+function intelHtml() {
+  const tx = ledger.tx, asOf = ymd(today0());
+  if (!tx.length) return "";
+  const firstDay = tx.reduce((m, t) => (t.date < m ? t.date : m), asOf);
+  const spanDays = MX.dn(asOf) - MX.dn(firstDay) + 1;
+  const M = monthToDate(tx, asOf);
+  const md = (s) => `${Number(s.slice(5, 7))}/${Number(s.slice(8, 10))}`;
+  // 이번 달 현황
+  let status;
+  if (!M.cur && !M.prev) status = `<p class="hint" style="margin:0">이번 달과 지난달 같은 기간에 쓴 돈 기록이 아직 없어요.</p>`;
+  else {
+    const diff = M.cur - M.prev;
+    const cmp = M.prev ? `지난달 같은 기간(${md(M.prevStart)}~${md(M.prevEnd)})보다 <b class="${diff > 0 ? "up" : diff < 0 ? "down" : ""}">${won(Math.abs(diff))} ${diff >= 0 ? "더" : "덜"}</b> 썼어요${diff ? ` (${diff > 0 ? "+" : "−"}${Math.round(Math.abs(diff) / M.prev * 100)}%)` : ""}.`
+      : `지난달 같은 기간 기록이 없어서 비교는 다음 달부터 보여드려요.`;
+    const rise = M.cats.filter((c) => c.cur - c.prev >= 10000).sort((a, b) => (b.cur - b.prev) - (a.cur - a.prev))[0];
+    status = `<div class="flow3">
+        <div><span>이번 달 쓴 돈</span><b class="num">${won(M.cur)}</b></div>
+        <div><span>고정비</span><b class="num">${won(M.curFixed)}</b></div>
+        <div><span>변동비</span><b class="num">${won(Math.max(M.cur - M.curFixed, 0))}</b></div>
+      </div>
+      <p class="hint" style="margin:8px 0 0">${md(M.curStart)}~${md(asOf)} 기준 · ${cmp}${M.prev && rise ? ` 가장 많이 늘어난 곳은 <b>${esc(rise.cat)}</b>(+${won(rise.cur - rise.prev)})예요.` : ""}</p>
+      ${M.cats.length ? `<div class="diag" style="margin-top:10px">${M.cats.slice(0, 5).map((c) => { const dd = c.cur - c.prev; return `<div class="diag-line"><span class="badge ${dd > 0 ? "b-up" : dd < 0 ? "b-down" : "b-flat"}">${esc(c.cat)}</span><span>${won(c.cur)}${M.prev ? ` · 지난달 같은 기간 ${won(c.prev)}` : ""}</span></div>`; }).join("")}</div>` : ""}`;
+  }
+  // 반복 결제
+  const R = recurringPayments(tx, asOf);
+  const rec = spanDays < 60 ? `<p class="hint" style="margin:0">반복 결제를 찾으려면 두 달 이상 기록이 필요해요. 지금은 ${spanDays}일치예요.</p>`
+    : !R.length ? `<p class="hint" style="margin:0">최근 180일에서 매주·매달 같은 금액으로 반복되는 결제를 찾지 못했어요.</p>`
+    : `<div class="diag">${R.map((r) => `<div class="diag-line"><span class="badge ${r.isFixed ? "b-flat" : "b-down"}">${r.cycle}</span><span><b>${esc(r.merchant)}</b> ${won(r.typical)} · ${r.n}번 · 다음 예상 ${md(r.next)}${r.isFixed ? " · 고정 등록됨" : ""}</span></div>`).join("")}</div>
+      <p class="hint" style="margin:8px 0 0">고정으로 등록하지 않은 구독이 있다면 가계부 '고정 수입·지출'에 넣어 두면 매달 자동으로 기록돼요.</p>`;
+  // 평소보다 큰 지출 (이번 달)
+  const U = unusualSpends(tx, M.curStart);
+  const unusual = spanDays < 30 ? `<p class="hint" style="margin:0">분류마다 지난 90일 기록이 3번 이상 쌓이면 평소보다 큰 지출을 알려드려요.</p>`
+    : !U.length ? `<p class="hint" style="margin:0">이번 달엔 평소보다 크게 쓴 지출이 없어요.</p>`
+    : `<div class="diag">${U.map((u) => `<div class="diag-line"><span class="badge b-up">${md(u.date)}</span><span><b>${esc(u.merchant)}</b> ${won(u.amount)} · ${esc(u.cat)} 평소(중앙값) ${won(u.median)}의 약 ${fmt(u.amount / u.median, 1)}배</span></div>`).join("")}</div>
+      <p class="hint" style="margin:8px 0 0">같은 분류의 최근 90일 기록 중 큰 쪽(상위 5%) 금액의 2배가 넘는 지출이에요. 꼭 잘못 쓴 건 아니니 확인만 해 보세요.</p>`;
+  return `<section class="card" id="sec-intel">
+      <div class="sec-title"><h2>이번 달 소비 현황</h2><span>가계부 기준</span></div>
+      ${status}
+    </section>
+    <section class="card">
+      <div class="sec-title"><h2>반복 결제</h2><span>최근 180일</span></div>
+      ${rec}
+    </section>
+    <section class="card">
+      <div class="sec-title"><h2>평소보다 큰 지출</h2><span>이번 달</span></div>
+      ${unusual}
+    </section>
+    <section class="card">
+      <div class="sec-title"><h2>가계부 내보내기</h2><span>CSV</span></div>
+      <p class="hint" style="margin:0 0 10px">거래 기록을 이 기기에 CSV 파일로 저장해요. 엑셀이나 분석 도구에서 열 수 있어요.</p>
+      <button class="btn ghost" data-act="ledger-export" style="width:100%">가계부 CSV로 내보내기</button>
+    </section>`;
+}
+// 가계부 CSV 내보내기: 동의를 받은 뒤 이 기기에만 파일로 저장 (어디에도 보내지 않음). analysis/python/run_sql.py --tx 로 바로 분석 가능
+function exportLedgerCsv() {
+  if (!ledger.tx.length) { toast("내보낼 가계부 기록이 없어요"); return; }
+  if (!confirm(`가계부 거래 ${ledger.tx.length}건을 이 기기에 CSV 파일로 저장해요.\n파일에는 날짜·가게 이름·금액·분류가 들어 있어요. 다른 곳으로 보내지 않아요.\n저장할까요?`)) return;
+  const cell = (v) => { const s2 = String(v ?? ""); return /[",\n]/.test(s2) ? `"${s2.replace(/"/g, '""')}"` : s2; };
+  const head = ["user_id", "id", "date", "merchant", "amount", "dir", "cat", "src", "fixed_id"];
+  const rows = [...ledger.tx].sort((a, b) => a.date.localeCompare(b.date)).map((t) => ["me", t.id, t.date, t.merchant, t.amount, t.dir, t.cat, t.src || "", t.fixed || ""].map(cell).join(","));
+  const blob = new Blob(["\ufeff" + [head.join(","), ...rows].join("\n")], { type: "text/csv;charset=utf-8" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob); a.download = `가계부_${ymd(today0())}.csv`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  toast("가계부를 CSV로 저장했어요");
+}
+
 function analysisHtml() {
   const p = profile, a = p.assets;
   const t = today0();
@@ -4408,6 +4552,7 @@ document.addEventListener("click", async (e) => {
     case "quiz-dismiss": if (learnState.today) { learnState.today.dismissed = true; saveLearn(); } render(); break;
     case "net-sel": ui.netSel = Number(el.dataset.i); render(); break;
     case "budget-edit": openModal("budget"); break;
+    case "ledger-export": exportLedgerCsv(); break;
     case "budget-save": {
       const B = {};
       document.querySelectorAll(".bud-form input[data-c]").forEach((inp) => { const v = parseInt(inp.value.replace(/[^0-9]/g, ""), 10); if (v > 0) B[inp.dataset.c] = v; });

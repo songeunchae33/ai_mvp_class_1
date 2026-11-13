@@ -1,0 +1,10 @@
+user_id,fixed_id,name,amount,day,dir,cat
+u_student,f_allow,용돈·알바,900000,25,in,급여·수입
+u_student,f_phone,통신비,55000,10,out,주거·통신
+u_junior,f_salary,월급,2800000,25,in,급여·수입
+u_junior,f_rent,월세,450000,1,out,주거·통신
+u_junior,f_phone,통신비,70000,12,out,주거·통신
+u_junior,f_saving,적금 이체,500000,26,out,내부이체
+u_saver,f_salary,월급,2300000,10,in,급여·수입
+u_saver,f_rent,관리비,120000,20,out,주거·통신
+u_saver,f_phone,통신비,33000,5,out,주거·통신
