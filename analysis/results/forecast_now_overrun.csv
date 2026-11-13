@@ -1,0 +1,4 @@
+user_id,budget,to_date,fixed_remaining,remaining_days,n_windows,prob_over
+u_junior,1330000,246750,0,18,67,0.0
+u_saver,430000,145250,0,18,67,0.0299
+u_student,590000,469600,0,18,67,1.0

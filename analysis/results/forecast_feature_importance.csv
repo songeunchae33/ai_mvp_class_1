@@ -1,0 +1,16 @@
+feature,xgb_gain_share,permutation_mae_increase
+fixed_month,0.93,225247.0
+prev_total,0.03,31256.0
+weekend_rate28,0.011,13956.0
+rate56,0.001,5922.0
+rate28,0.005,5619.0
+weekday_rate28,0.004,5501.0
+prev3_avg,0.014,3280.0
+rate7,0.002,1754.0
+fixed_remaining,0.0,267.0
+to_date,0.0,250.0
+var_to_date,0.0,170.0
+days_in_month,0.001,129.0
+remaining,0.0,10.0
+weekend_left,0.001,-2.0
+c,0.0,-237.0

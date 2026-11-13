@@ -16,8 +16,8 @@ const html = fs.readFileSync(path.join(ROOT, "index.html"), "utf8");
 const block = html.slice(html.indexOf("// ── METRICS:START"), html.indexOf("// ── METRICS:END"));
 const ctx = {};
 vm.createContext(ctx);
-vm.runInContext(block + "\nthis.api = { MX, monthToDate, recurringPayments, unusualSpends };", ctx);
-const { monthToDate, recurringPayments, unusualSpends } = ctx.api;
+vm.runInContext(block + "\nthis.api = { MX, monthToDate, recurringPayments, unusualSpends, monthEndForecast, categoryForecast, overrunProbability };", ctx);
+const { monthToDate, recurringPayments, unusualSpends, monthEndForecast, categoryForecast, overrunProbability } = ctx.api;
 
 // 기존 spendSummary를 그대로 꺼내, 필요한 것(ledger·periodRange)만 넣어 돌린다
 const ssStart = html.indexOf("function spendSummary(");
@@ -58,6 +58,11 @@ const check = (ok, msg) => { if (ok) pass++; else { fail++; console.log("✗", m
 const sql08 = readCsv(path.join(RES, "08_month_to_date.csv"));
 const sql05 = readCsv(path.join(RES, "05_recurring.csv"));
 const sql06 = readCsv(path.join(RES, "06_anomaly.csv"));
+const fcNow = readCsv(path.join(RES, "forecast_now.csv"));
+const fcCats = readCsv(path.join(RES, "forecast_now_categories.csv"));
+const fcOver = readCsv(path.join(RES, "forecast_now_overrun.csv"));
+const fixedAll = readCsv(path.join(DATA, "synthetic_fixed.csv"));
+const budgetsAll = readCsv(path.join(DATA, "synthetic_budgets.csv"));
 
 for (const u of users) {
   const tx = all.filter((t) => t.user === u);
@@ -97,6 +102,23 @@ for (const u of users) {
 
   // 4) 읽기만 하는지
   check(JSON.stringify(tx) === before, `${u} 계산 뒤 거래 목록이 바뀜`);
+
+  // 6) 월말 예상 · 분류별 예상 · 예산 초과 가능성 = analysis/python/forecast.py (1원 이내)
+  const fixedItems = fixedAll.filter((f) => f.user_id === u).map((f) => ({ amount: Number(f.amount), day: Number(f.day), dir: f.dir, cat: f.cat }));
+  const F = monthEndForecast(tx, fixedItems, asOf), pf = fcNow.find((r) => r.user_id === u);
+  check(Math.abs(F.forecast - num(pf.forecast)) < 1 && F.toDate === num(pf.to_date) && F.fixedRemaining === num(pf.fixed_remaining)
+    && F.nPrev === num(pf.n_prev_months) && F.historyDays === num(pf.history_days),
+    `${u} 월말 예상: 앱 ${F.forecast.toFixed(1)}/${F.toDate}/${F.fixedRemaining}/${F.nPrev} · 파이썬 ${pf.forecast}/${pf.to_date}/${pf.fixed_remaining}/${pf.n_prev_months}`);
+  const CF = categoryForecast(tx, fixedItems, asOf), pc = fcCats.filter((r) => r.user_id === u);
+  check(CF.length === pc.length, `${u} 분류별 예상 수: 앱 ${CF.length} · 파이썬 ${pc.length}`);
+  for (const r of pc) {
+    const a = CF.find((x) => x.cat === r.cat);
+    check(a && Math.abs(a.forecast - num(r.forecast)) < 1 && a.toDate === num(r.to_date), `${u} ${r.cat} 예상: 앱 ${a?.forecast} · 파이썬 ${r.forecast}`);
+  }
+  const bud = Object.fromEntries(budgetsAll.filter((b) => b.user_id === u).map((b) => [b.cat, Number(b.budget_man)]));
+  const P = overrunProbability(tx, fixedItems, bud, asOf), pp = fcOver.find((r) => r.user_id === u);
+  check(P && Math.abs(P.prob - num(pp.prob_over)) < 1e-4 && P.nWindows === num(pp.n_windows) && P.toDate === num(pp.to_date),
+    `${u} 예산 초과 가능성: 앱 ${P?.prob}/${P?.nWindows} · 파이썬 ${pp.prob_over}/${pp.n_windows}`);
 
   // 5) 기존 spendSummary('이번 달')와 같은지
   const sctx = { ledger: { tx }, periodRange: () => [M.curStart, asOf], Math };

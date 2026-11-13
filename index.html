@@ -163,6 +163,19 @@
   .debt { background: var(--soft); border-radius: 14px; padding: 10px; display: flex; flex-direction: column; gap: 8px; }
   .bar { height: 10px; border-radius: 5px; background: var(--flat-bg); display: flex; overflow: hidden; }
   .diag { display: flex; flex-direction: column; gap: 10px; }
+  .fc-bars { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+  .fc-row { display: grid; grid-template-columns: 64px 1fr 64px; align-items: center; gap: 8px; font-size: 13px; }
+  .fc-name { color: var(--sub); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .fc-val { text-align: right; font-weight: 700; }
+  .fc-track { position: relative; height: 12px; background: var(--soft); border-radius: 6px; display: flex; overflow: visible; }
+  .fc-now { display: block; height: 100%; background: var(--green); border-radius: 6px 0 0 6px; }
+  .fc-pred { display: block; height: 100%; background: var(--mint); }
+  .fc-bud { position: absolute; top: -3px; width: 2px; height: 18px; background: var(--ink); }
+  .fc-key { display: inline-block; width: 10px; height: 10px; border-radius: 3px; background: var(--green); margin: 0 4px -1px 0; }
+  .fc-key.pred { background: var(--mint); margin-left: 8px; }
+  .wk-chart { width: 100%; height: auto; display: block; }
+  .wk-bar { fill: var(--mint); } .wk-now { fill: var(--green); }
+  .wk-t { font-size: 10px; fill: var(--sub); }
   .mp-list { margin: 0; padding-left: 20px; font-size: 14px; line-height: 1.75; }
   .mp-list ul { padding-left: 18px; list-style: circle; }
   .mp-h { margin: 16px 0 6px; font-size: 16px; }
@@ -3021,6 +3034,79 @@ function unusualSpends(tx, from = "0000-00-00") {
   }
   return out.sort((a, b) => a.date.localeCompare(b.date) || String(a.id).localeCompare(String(b.id)));
 }
+// ── 2단계: 월말 예상 (analysis/python/forecast.py의 B4 혼합 · 분류별 예측 · 예산 초과 가능성과 같은 규칙)
+// 이번 달 c일 뒤에 나갈 고정 지출 (내부이체 제외, 말일보다 큰 날은 말일로, 이번 달에 이미 기록됐으면 제외)
+function fixedRemaining(fixed, asOf, cats) {
+  const [y, m, c] = asOf.split("-").map(Number), last = new Date(Date.UTC(y, m, 0)).getUTCDate(), ym = asOf.slice(0, 7);
+  return (fixed || []).filter((f) => f.dir === "out" && f.cat !== "내부이체" && (!cats || cats.includes(f.cat))
+    && (!f.start || f.start <= ym) && !(f.made && f.made[ym]) && Math.min(Number(f.day), last) > c)
+    .reduce((a, f) => a + Number(f.amount), 0);
+}
+// 기간의 쓴 돈 = 지출 − 환불 (0 아래로 내려가지 않음)
+function spentBetween(tx, a, b) {
+  let out = 0, ref = 0;
+  for (const t of tx) { if (t.date < a || t.date > b) continue; const k = MX.kind(t); if (k === "spend") out += t.amount; else if (k === "refund") ref += t.amount; }
+  return Math.max(out - ref, 0);
+}
+// 변동비(고정 아닌 지출) 합: 날짜 a~b, cats가 있으면 그 분류만
+function varBetween(tx, a, b, cats) {
+  return tx.reduce((s2, t) => s2 + (t.date >= a && t.date <= b && MX.kind(t) === "spend" && !MX.fixed(t) && (!cats || cats.includes(t.cat)) ? t.amount : 0), 0);
+}
+// 월말 예상 = (지난 날 비율) × [지금까지 + 최근 28일 하루 평균 변동비 × 남은 날 + 남은 고정비] + (남은 날 비율) × 최근 3달 평균
+// 기록이 1일부터 다 있는 지난달이 하나도 없으면 앞부분(B3)만 쓴다
+function monthEndForecast(tx, fixed, asOf) {
+  if (!tx.length) return null;
+  const first = tx.reduce((m, t) => (t.date < m ? t.date : m), asOf);
+  const [y, m, c] = asOf.split("-").map(Number), dim = new Date(Date.UTC(y, m, 0)).getUTCDate(), rem = dim - c;
+  const mstart = `${asOf.slice(0, 8)}01`, end = MX.dn(asOf);
+  const toDate = spentBetween(tx, mstart, asOf);
+  const rate28 = varBetween(tx, MX.ds(end - 27), asOf) / 28;
+  const fr = fixedRemaining(fixed, asOf);
+  const prev = [];
+  for (let k = 1; k <= 3; k++) {
+    const yy = m - k <= 0 ? y - 1 : y, mm = ((m - k - 1 + 12) % 12) + 1;
+    const ps = `${yy}-${String(mm).padStart(2, "0")}-01`, pe = `${ps.slice(0, 8)}${String(new Date(Date.UTC(yy, mm, 0)).getUTCDate()).padStart(2, "0")}`;
+    if (ps >= first) prev.push(spentBetween(tx, ps, pe));
+  }
+  const b3 = toDate + rate28 * rem + fr;
+  const prev3 = prev.length ? prev.reduce((a, b) => a + b, 0) / prev.length : null;
+  const w = c / dim;
+  return { asOf, toDate, rate28, remaining: rem, daysInMonth: dim, fixedRemaining: fr, prev3, nPrev: prev.length, b3,
+    forecast: prev3 === null ? b3 : w * b3 + (1 - w) * prev3, historyDays: end - MX.dn(first) + 1 };
+}
+// 분류별 예상 = 이번 달 지금까지 + 그 분류 최근 28일 하루 평균 변동비 × 남은 날 + 그 분류 남은 고정비
+function categoryForecast(tx, fixed, asOf) {
+  const [y, m, c] = asOf.split("-").map(Number), rem = new Date(Date.UTC(y, m, 0)).getUTCDate() - c;
+  const mstart = `${asOf.slice(0, 8)}01`, from = MX.ds(MX.dn(asOf) - 27), cur = {}, win = {};
+  for (const t of tx) {
+    if (MX.kind(t) !== "spend") continue;
+    if (t.date >= mstart && t.date <= asOf) cur[t.cat] = (cur[t.cat] || 0) + t.amount;
+    if (t.date >= from && t.date <= asOf && !MX.fixed(t)) win[t.cat] = (win[t.cat] || 0) + t.amount;
+  }
+  return [...new Set([...Object.keys(cur), ...Object.keys(win)])].sort().map((cat) => ({
+    cat, toDate: cur[cat] || 0, forecast: (cur[cat] || 0) + (win[cat] || 0) / 28 * rem + fixedRemaining(fixed, asOf, [cat]) }))
+    .sort((a, b) => b.forecast - a.forecast || a.cat.localeCompare(b.cat));
+}
+// 예산 초과 가능성: 예산이 있는 분류들의 합계가 예산 합계를 넘을 비율.
+// 최근 84일에서 '남은 날 수만큼 이어진 기간'의 변동비 합을 하나씩 대입해 센다 (budgets: { 분류: 만원 })
+function overrunProbability(tx, fixed, budgets, asOf) {
+  const cats = Object.keys(budgets || {}).filter((k) => Number(budgets[k]) > 0);
+  if (!cats.length) return null;
+  const budget = cats.reduce((a, k) => a + Number(budgets[k]) * 10000, 0);
+  const [y, m, c] = asOf.split("-").map(Number), rem = new Date(Date.UTC(y, m, 0)).getUTCDate() - c;
+  const mstart = `${asOf.slice(0, 8)}01`, end = MX.dn(asOf);
+  const toDate = tx.reduce((s2, t) => s2 + (t.date >= mstart && t.date <= asOf && MX.kind(t) === "spend" && cats.includes(t.cat) ? t.amount : 0), 0);
+  const fr = fixedRemaining(fixed, asOf, cats);
+  const v = Array.from({ length: 84 }, (_, i) => varBetween(tx, MX.ds(end - 83 + i), MX.ds(end - 83 + i), cats));
+  const sums = rem === 0 ? [0] : Array.from({ length: 84 - rem + 1 }, (_, i) => v.slice(i, i + rem).reduce((a, b) => a + b, 0));
+  return { budget, toDate, fixedRemaining: fr, remainingDays: rem, nWindows: sums.length,
+    prob: sums.filter((x) => toDate + x + fr > budget).length / sums.length };
+}
+// 최근 12주(월~일) 변동비 합 — 화면 그래프용
+function weeklyVariable(tx, asOf) {
+  const end = MX.dn(asOf), dow = (new Date(end * 864e5).getUTCDay() + 6) % 7, monday = end - dow;
+  return Array.from({ length: 12 }, (_, i) => { const a = monday - (11 - i) * 7; return { start: MX.ds(a), sum: varBetween(tx, MX.ds(a), MX.ds(Math.min(a + 6, end))), partial: a + 6 > end }; });
+}
 // ── METRICS:END
 // 나의 자산관리 → 분석 탭: 소비 인텔리전스 1단계 (이번 달 현황 · 반복 결제 · 평소보다 큰 지출 · 내보내기)
 // 거래는 읽기만 한다(저장·삭제 없음). 기록이 모자라면 숫자를 지어내지 않고 안내만 보여준다
@@ -3047,6 +3133,40 @@ function intelHtml() {
       <p class="hint" style="margin:8px 0 0">${md(M.curStart)}~${md(asOf)} 기준 · ${cmp}${M.prev && rise ? ` 가장 많이 늘어난 곳은 <b>${esc(rise.cat)}</b>(+${won(rise.cur - rise.prev)})예요.` : ""}</p>
       ${M.cats.length ? `<div class="diag" style="margin-top:10px">${M.cats.slice(0, 5).map((c) => { const dd = c.cur - c.prev; return `<div class="diag-line"><span class="badge ${dd > 0 ? "b-up" : dd < 0 ? "b-down" : "b-flat"}">${esc(c.cat)}</span><span>${won(c.cur)}${M.prev ? ` · 지난달 같은 기간 ${won(c.prev)}` : ""}</span></div>`; }).join("")}</div>` : ""}`;
   }
+  // 월말 예상 (2단계)
+  const F = monthEndForecast(tx, ledger.fixed, asOf);
+  const P = overrunProbability(tx, ledger.fixed, profile.budgets || {}, asOf);
+  const CF = categoryForecast(tx, ledger.fixed, asOf).slice(0, 5);
+  const B = profile.budgets || {};
+  let fc;
+  if (!F || F.historyDays < 28) fc = `<p class="hint" style="margin:0">가계부 기록이 28일 이상 쌓이면 월말 예상 지출을 보여드려요. 지금은 ${F ? F.historyDays : 0}일치예요.</p>`;
+  else {
+    const r1000 = (v) => Math.round(v / 1000) * 1000;
+    const pr = P ? (P.prob >= 0.995 ? "거의 확실해요" : P.prob <= 0.005 ? "거의 없어요" : `약 ${Math.round(P.prob * 100)}%예요`) : "";
+    const maxV = Math.max(...CF.map((x) => Math.max(x.forecast, (B[x.cat] || 0) * 1e4)), 1);
+    fc = `<div class="mp-story" style="margin:0">이번 달은 <b>약 ${won(r1000(F.forecast))}</b> 쓸 것으로 보여요 <span class="badge b-flat">추정</span></div>
+      <div class="flow3" style="margin-top:10px">
+        <div><span>지금까지</span><b class="num">${won(F.toDate)}</b></div>
+        <div><span>남은 ${F.remaining}일 변동비</span><b class="num">${won(r1000(F.rate28 * F.remaining))}</b></div>
+        <div><span>남은 고정비</span><b class="num">${won(F.fixedRemaining)}</b></div>
+      </div>
+      ${P ? `<p class="hint" style="margin:8px 0 0">예산을 정한 분류(${Object.keys(B).filter((k) => B[k] > 0).map(esc).join("·")})의 합계 예산 ${won(P.budget)}을 넘을 가능성은 <b class="${P.prob >= 0.5 ? "up" : ""}">${pr}</b>. 최근 84일 중 남은 ${P.remainingDays}일과 같은 길이의 기간 ${P.nWindows}개를 대입해 본 비율이에요.</p>` : `<p class="hint" style="margin:8px 0 0">위 '이번 달 예산'에서 분류별 예산을 정하면 넘을 가능성도 알려드려요.</p>`}
+      <div class="fc-bars">${CF.map((x) => { const bud = (B[x.cat] || 0) * 1e4; return `<div class="fc-row"><span class="fc-name">${esc(x.cat)}</span>
+          <span class="fc-track"><i class="fc-now" style="width:${(x.toDate / maxV) * 100}%"></i><i class="fc-pred" style="width:${(Math.max(x.forecast - x.toDate, 0) / maxV) * 100}%"></i>${bud ? `<i class="fc-bud" style="left:${(bud / maxV) * 100}%"></i>` : ""}</span>
+          <span class="fc-val">${won(r1000(x.forecast))}</span></div>`; }).join("")}</div>
+      <p class="hint" style="margin:6px 0 0"><i class="fc-key"></i>지금까지 <i class="fc-key pred"></i>예상 더 쓸 돈${CF.some((x) => B[x.cat]) ? " · 세로선은 예산" : ""}</p>
+      <p class="hint" style="margin:6px 0 0">달 초반엔 지난 ${F.nPrev ? `${F.nPrev}달 평균` : "기록"}을, 날이 갈수록 최근 28일 쓰는 속도를 더 반영한 추정이라 실제와 다를 수 있어요.</p>`;
+  }
+  // 최근 12주 변동비 그래프
+  const WK = weeklyVariable(tx, asOf), wmax = Math.max(...WK.map((w) => w.sum), 1);
+  const weekly = spanDays < 14 ? "" : `<section class="card">
+      <div class="sec-title"><h2>최근 소비 흐름</h2><span>12주 · 변동비</span></div>
+      <svg viewBox="0 0 312 108" class="wk-chart" role="img" aria-label="최근 12주 주별 변동비 그래프">
+        ${WK.map((w, i) => { const h = Math.round((w.sum / wmax) * 76); return `<rect x="${i * 26 + 4}" y="${84 - h}" width="18" height="${Math.max(h, 1)}" rx="4" class="${w.partial ? "wk-now" : "wk-bar"}"></rect>`; }).join("")}
+        <text x="4" y="102" class="wk-t">${md(WK[0].start)}</text><text x="308" y="102" class="wk-t" text-anchor="end">이번 주</text>
+      </svg>
+      <p class="hint" style="margin:4px 0 0">가장 많이 쓴 주 ${won(wmax)} · 이번 주는 아직 진행 중이에요.</p>
+    </section>`;
   // 반복 결제
   const R = recurringPayments(tx, asOf);
   const rec = spanDays < 60 ? `<p class="hint" style="margin:0">반복 결제를 찾으려면 두 달 이상 기록이 필요해요. 지금은 ${spanDays}일치예요.</p>`
@@ -3059,10 +3179,30 @@ function intelHtml() {
     : !U.length ? `<p class="hint" style="margin:0">이번 달엔 평소보다 크게 쓴 지출이 없어요.</p>`
     : `<div class="diag">${U.map((u) => `<div class="diag-line"><span class="badge b-up">${md(u.date)}</span><span><b>${esc(u.merchant)}</b> ${won(u.amount)} · ${esc(u.cat)} 평소(중앙값) ${won(u.median)}의 약 ${fmt(u.amount / u.median, 1)}배</span></div>`).join("")}</div>
       <p class="hint" style="margin:8px 0 0">같은 분류의 최근 90일 기록 중 큰 쪽(상위 5%) 금액의 2배가 넘는 지출이에요. 꼭 잘못 쓴 건 아니니 확인만 해 보세요.</p>`;
+  // 루미의 소비 인사이트 (3단계): 숫자는 위에서 계산한 값, 루미(AI)는 설명만
+  const facts = insightFacts({ M, F, P, CF, R, U, asOf });
+  ui.insightFacts = facts;
+  const saved = lastGet().insight;
+  const I = ui.insight?.loading ? null : (saved && saved.ym === asOf.slice(0, 7) && saved.key === factsKey(facts) ? saved.data : null);
+  const ruleLines = ruleInsight(facts);
+  const insight = `<section class="card" id="sec-insight">
+      <div class="sec-title"><h2>루미의 소비 인사이트</h2><span>${I ? "루미 설명" : "계산한 요약"}</span></div>
+      <div class="ans" style="display:flex;gap:10px;align-items:flex-start">${mascot(36, facts.overProb >= 0.5 ? "reassure" : "happy")}
+        <ul class="mp-list" style="margin:0;flex:1">${(I ? [I.summary, I.change, I.risk, I.save, I.action] : ruleLines).filter(Boolean).map((x) => `<li>${esc(x)}</li>`).join("")}</ul></div>
+      ${ui.insight?.note ? `<p class="hint" style="margin:8px 0 0">${esc(ui.insight.note)}</p>` : ""}
+      <button class="btn ghost" style="margin-top:12px;width:100%" data-act="insight-ask" ${ui.insight?.loading || !aiLeft() ? "disabled" : ""}>${ui.insight?.loading ? "루미가 정리하는 중…" : I ? "루미에게 다시 설명 듣기" : "루미에게 쉬운 말로 설명 듣기"}</button>
+      <p class="hint" style="margin:6px 0 0">${fbLeftText()} · 숫자는 앱이 계산하고, 루미는 그 숫자로 설명만 해요. 가게 이름이나 거래 내역은 보내지 않아요.</p>
+      ${!aiLeft() && !ui.insight?.loading ? `<p class="hint" style="margin:4px 0 8px">${outOfFb()}</p>${adButton("fb")}` : ""}
+    </section>`;
   return `<section class="card" id="sec-intel">
       <div class="sec-title"><h2>이번 달 소비 현황</h2><span>가계부 기준</span></div>
       ${status}
     </section>
+    <section class="card" id="sec-forecast">
+      <div class="sec-title"><h2>월말 예상 지출</h2><span>${md(asOf)} 기준</span></div>
+      ${fc}
+    </section>
+    ${weekly}
     <section class="card">
       <div class="sec-title"><h2>반복 결제</h2><span>최근 180일</span></div>
       ${rec}
@@ -3071,11 +3211,61 @@ function intelHtml() {
       <div class="sec-title"><h2>평소보다 큰 지출</h2><span>이번 달</span></div>
       ${unusual}
     </section>
+    ${insight}
     <section class="card">
       <div class="sec-title"><h2>가계부 내보내기</h2><span>CSV</span></div>
       <p class="hint" style="margin:0 0 10px">거래 기록을 이 기기에 CSV 파일로 저장해요. 엑셀이나 분석 도구에서 열 수 있어요.</p>
       <button class="btn ghost" data-act="ledger-export" style="width:100%">가계부 CSV로 내보내기</button>
     </section>`;
+}
+// AI에 보낼 숫자 묶음 (집계값만. 가게 이름·개별 거래 없음). 서버(api/receipts.js cleanFacts)가 한 번 더 거른다
+function insightFacts({ M, F, P, CF, R, U, asOf }) {
+  const rise = M.prev ? M.cats.filter((c) => c.cur - c.prev >= 10000).sort((a, b) => (b.cur - b.prev) - (a.cur - a.prev))[0] : null;
+  const prevBy = Object.fromEntries(M.cats.map((c) => [c.cat, c.prev]));
+  const ok = F && F.historyDays >= 28;
+  return {
+    period: `${M.curStart}~${asOf}`, daysLeft: F ? F.remaining : null,
+    spentToDate: M.cur, prevSamePeriod: M.prev || null, fixedToDate: M.curFixed,
+    forecast: ok ? Math.round(F.forecast / 1000) * 1000 : null,
+    budget: ok && P ? P.budget : null, overProb: ok && P ? P.prob : null,
+    rise: rise ? { cat: rise.cat, diff: rise.cur - rise.prev } : null,
+    categories: ok ? CF.map((c) => ({ cat: c.cat, toDate: c.toDate, prev: prevBy[c.cat] || 0, forecast: Math.round(c.forecast / 1000) * 1000 })) : [],
+    recurringCount: R.length, unusualCount: U.length,
+  };
+}
+function factsKey(f) { return JSON.stringify([f.spentToDate, f.prevSamePeriod, f.forecast, f.budget, f.overProb, f.recurringCount, f.unusualCount]); }
+// AI 없이도 보이는 요약 (같은 숫자로 만든 문장)
+function ruleInsight(f) {
+  const r = (v) => won(v);
+  const lines = [`이번 달 지금까지 ${r(f.spentToDate)}${josa(r(f.spentToDate), "을", "를")} 썼어요.${f.forecast ? ` 지금 흐름이면 월말엔 약 ${r(f.forecast)}${josa(r(f.forecast), "으로", "로")} 추정돼요.` : ""}`];
+  if (f.prevSamePeriod) {
+    const d = f.spentToDate - f.prevSamePeriod;
+    lines.push(`지난달 같은 기간보다 ${r(Math.abs(d))} ${d >= 0 ? "더" : "덜"} 썼어요.${f.rise ? ` 가장 많이 늘어난 곳은 ${f.rise.cat}(+${r(f.rise.diff)})예요.` : ""}`);
+  }
+  if (f.budget) lines.push(f.overProb >= 0.5 ? `예산 ${r(f.budget)}을 넘을 가능성이 높아요(약 ${Math.round(f.overProb * 100)}%). 남은 ${f.daysLeft}일은 조금 아껴 봐요.` : `예산 ${r(f.budget)} 안에서 쓸 가능성이 높아요.`);
+  const big = (f.categories || []).filter((c) => !["주거·통신", "구독", "급여·수입"].includes(c.cat))[0];
+  if (big) lines.push(`이번 달 가장 많이 쓸 것 같은 곳은 ${big.cat}(약 ${r(big.forecast)})예요. 여기부터 살펴보면 효과가 커요.`);
+  if (f.unusualCount) lines.push(`이번 달 평소보다 큰 지출이 ${f.unusualCount}건 있어요. 위 '평소보다 큰 지출'에서 확인해 보세요.`);
+  return lines;
+}
+async function askInsight() {
+  const facts = ui.insightFacts;
+  if (!facts || ui.insight?.loading) return;
+  if (!lastGet().insightOk) {
+    if (!confirm("이번 달 소비 숫자 요약(쓴 돈·예상·예산·분류별 합계)만 AI(Google Gemini 무료 등급 또는 OpenAI)로 보내요.\n가게 이름이나 거래 내역은 보내지 않아요. 보낼까요?")) return;
+    lastSet("insightOk", true);
+  }
+  if (!aiLeft()) { render(); return; }
+  ui.insight = { loading: true }; render();
+  try {
+    const j = await getJson("/api/receipts", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode: "insight", facts }) });
+    if (j.insight) {
+      aiCount();
+      lastSet("insight", { ym: facts.period.slice(0, 7), key: factsKey(facts), data: j.insight });
+      ui.insight = null;
+    } else ui.insight = { note: "새로 받은 루미 설명에 앱이 계산하지 않은 숫자가 섞여 있어서 쓰지 않았어요. 횟수는 쓰지 않았어요." };
+  } catch (err) { ui.insight = { note: err.body?.error || "지금은 설명을 만들지 못했어요. 계산한 요약을 보여드려요." }; }
+  if (["assets"].includes(route())) render();
 }
 // 가계부 CSV 내보내기: 동의를 받은 뒤 이 기기에만 파일로 저장 (어디에도 보내지 않음). analysis/python/run_sql.py --tx 로 바로 분석 가능
 function exportLedgerCsv() {
@@ -4553,6 +4743,7 @@ document.addEventListener("click", async (e) => {
     case "net-sel": ui.netSel = Number(el.dataset.i); render(); break;
     case "budget-edit": openModal("budget"); break;
     case "ledger-export": exportLedgerCsv(); break;
+    case "insight-ask": askInsight(); break;
     case "budget-save": {
       const B = {};
       document.querySelectorAll(".bud-form input[data-c]").forEach((inp) => { const v = parseInt(inp.value.replace(/[^0-9]/g, ""), 10); if (v > 0) B[inp.dataset.c] = v; });

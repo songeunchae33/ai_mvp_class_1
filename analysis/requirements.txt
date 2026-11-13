@@ -5,4 +5,5 @@ matplotlib>=3.8    # 그래프
 nbformat>=5.10     # 노트북 만들기
 nbclient>=0.10     # 노트북 실행(결과까지 저장)
 ipykernel>=6.29    # 노트북 실행 엔진
-# 2단계(소비 예측)에서 추가 예정: scikit-learn, xgboost
+scikit-learn>=1.5  # 2단계: Ridge 회귀, 순열 중요도, IsolationForest
+xgboost>=2.0       # 2단계: XGBoost 회귀
