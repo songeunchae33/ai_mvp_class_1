@@ -45,18 +45,20 @@ def main():
     ap.add_argument("--fixed", type=Path, default=DATA / "synthetic_fixed.csv")
     ap.add_argument("--as-of", default=None, help="기준일 YYYY-MM-DD (없으면 마지막 거래일)")
     ap.add_argument("--quiet", action="store_true")
+    ap.add_argument("--out", type=Path, default=RESULTS, help="결과 폴더 (실제·외부 데이터는 analysis/private/... 로)")
     args = ap.parse_args()
     as_of = args.as_of
     if as_of is None and (DATA / "as_of.csv").exists() and args.tx == DATA / "synthetic_tx.csv":
         as_of = (DATA / "as_of.csv").read_text(encoding="utf-8").splitlines()[1].strip()
 
     con = connect(args.tx, args.budgets, args.fixed, as_of)
-    RESULTS.mkdir(exist_ok=True)
+    out = args.out
+    out.mkdir(parents=True, exist_ok=True)
     for f in sorted(SQL.glob("[0-9][0-9]_*.sql")):
         if f.name.startswith("00_"):
             continue
         df = con.execute(f.read_text(encoding="utf-8")).df()
-        df.to_csv(RESULTS / f"{f.stem}.csv", index=False, encoding="utf-8")
+        df.to_csv(out / f"{f.stem}.csv", index=False, encoding="utf-8")
         if not args.quiet:
             print(f"\n== {f.stem} ({len(df)}줄) ==")
             print(df.head(8).to_string(index=False))

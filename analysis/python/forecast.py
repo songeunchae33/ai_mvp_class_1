@@ -128,16 +128,17 @@ def baselines(f: dict) -> dict:
 
 
 # ── 학습·평가용 표 ────────────────────────────────────────────────────────
-def build_dataset(tx, fixed, as_of) -> pd.DataFrame:
+def build_dataset(tx, fixed, as_of, cutoffs=None, users=None) -> pd.DataFrame:
+    """cutoffs: 볼 날짜(c) 목록(없으면 1~말일−1 전부) · users: 일부 사람만"""
     rows = []
-    for user in tx.user_id.unique():
+    for user in (users if users is not None else tx.user_id.unique()):
         d = daily_table(tx, user, as_of)
         for mstart in pd.date_range(d.index[0], as_of, freq="MS"):
             mend = mstart + pd.offsets.MonthEnd(0)
             if mend > as_of or (mstart - d.index[0]).days < 56:       # 다 끝난 달 · 지난 기록 2달 이상
                 continue
             target = month_total(d, mstart, mend)
-            for c in range(1, mend.day):
+            for c in (cutoffs or range(1, mend.day)):
                 f = features_at(d, fixed, user, mstart + pd.Timedelta(days=c - 1))
                 rows.append({"user_id": user, "month": mstart.strftime("%Y-%m"), "target": target, **f, **baselines(f)})
     return pd.DataFrame(rows)
@@ -164,7 +165,8 @@ def evaluate(df: pd.DataFrame):
     rows = []
     for mname in models:
         err = (test[mname] - test.target).abs()
-        r = {"모델": mname, "MAE(원)": round(err.mean()), "MAPE(%)": round(100 * (err / test.target).mean(), 1)}
+        pos = test.target > 0   # 쓴 돈이 0원인 달은 비율 오차를 계산할 수 없어 MAPE에서만 뺀다
+        r = {"모델": mname, "MAE(원)": round(err.mean()), "MAPE(%)": round(100 * (err[pos] / test.target[pos]).mean(), 1)}
         for g, sub in test.groupby("구간", observed=True):
             r[f"MAE {g}"] = round((sub[mname] - sub.target).abs().mean())
         rows.append(r)
