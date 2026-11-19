@@ -1035,6 +1035,91 @@
   .arc-node.locked .lb { opacity: 0.55; }
   .arc-node.wrong .lb small { color: #ff8a9b; }
   .arc-node:focus-visible .hit { outline: 3px solid #fff; }
+  /* ═════ 모의투자 (DESIGN.md: 흰 면 + 1px 선, 파랑 하나로 강조, 오르면 빨강·내리면 파랑, 그림자 없음) ═════ */
+  .inv { gap: 12px; }
+  .inv .lumi-says { align-items: flex-start; }
+  .inv-says .bubble-onb, .inv-eval .bubble-onb { background: var(--soft); border-radius: 4px 12px 12px 12px; padding: 10px 12px; font-family: 'Jua', sans-serif; font-size: 15px; line-height: 23px; }
+  .b-ok { color: var(--down); background: var(--down-bg); } .b-no { color: var(--up); background: var(--up-bg); } .b-warn { color: #7A5300; background: #FFF4D6; }
+  .inv-top { display: flex; flex-direction: column; gap: 6px; }
+  .inv-total { display: flex; align-items: center; gap: 8px; }
+  .inv-total b { font-size: 26px; line-height: 34px; font-weight: 800; letter-spacing: -0.01em; }
+  .inv-seg { display: flex; background: var(--soft); border-radius: 12px; padding: 3px; margin-top: 8px; }
+  .inv-seg button { flex: 1; border: 0; background: transparent; border-radius: 10px; min-height: 34px; font-size: 13px; font-weight: 600; color: var(--sub); cursor: pointer; }
+  .inv-seg button.on { background: #fff; color: var(--ink); font-weight: 700; box-shadow: 0 0 0 1px var(--line); }
+  .inv-chart { width: 100%; height: auto; display: block; margin-top: 6px; }
+  .inv-chart .me { fill: none; stroke-width: 2.4; stroke-linejoin: round; stroke-linecap: round; }
+  .inv-chart .me.up, .inv-chart .dot.up { stroke: var(--up); } .inv-chart .me.down, .inv-chart .dot.down { stroke: var(--down); }
+  .inv-chart .dot { fill: #fff; stroke-width: 2.4; }
+  .inv-chart .k { fill: none; stroke: #A9B0BC; stroke-width: 1.6; stroke-dasharray: 4 4; }
+  .inv-chart .base { stroke: #E5E8ED; stroke-width: 1; }
+  .inv-chart .lb { font-size: 10px; fill: var(--sub); }
+  .inv-legend { display: flex; gap: 12px; flex-wrap: wrap; font-size: 11px; color: var(--sub); }
+  .inv-legend i { display: inline-block; width: 14px; height: 0; border-top: 2.4px solid var(--up); vertical-align: middle; margin-right: 4px; }
+  .inv-legend i.k { border-top: 1.6px dashed #A9B0BC; } .inv-legend i.base { border-top: 1px solid #D2D6DD; }
+  .inv-empty { margin: 10px 0 4px; text-align: center; }
+  .inv-bars { display: flex; align-items: flex-end; gap: 6px; height: 110px; margin-top: 10px; overflow-x: auto; }
+  .inv-bars .ib { flex: 1; min-width: 38px; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 3px; font-size: 10px; }
+  .inv-bars .ib i { width: 100%; max-width: 28px; border-radius: 6px 6px 2px 2px; background: var(--up); } .inv-bars .ib i.down { background: var(--down); }
+  .inv-bars small { color: var(--sub); white-space: nowrap; }
+  .inv-rank { display: flex; flex-direction: column; gap: 10px; }
+  .inv-lock { display: flex; gap: 10px; align-items: center; background: var(--soft); border-radius: 12px; padding: 12px; }
+  .inv-lock p { margin: 0; font-size: 13px; line-height: 20px; color: var(--sub); }
+  .rk-list { display: flex; flex-direction: column; gap: 6px; }
+  .rk { display: grid; grid-template-columns: 22px minmax(0, 72px) 1fr 56px; align-items: center; gap: 8px; font-size: 13px; padding: 6px 8px; border-radius: 10px; }
+  .rk.me { background: var(--mint); color: var(--green); font-weight: 700; }
+  .rk .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .rk .bar { height: 8px; background: var(--soft); border-radius: 999px; overflow: hidden; } .rk .bar i { display: block; height: 100%; background: var(--green); border-radius: 999px; }
+  .rk > :last-child { text-align: right; } .rk-gap { text-align: center; color: var(--sub); font-size: 12px; }
+  .inv-sbox { margin: 0; background: var(--soft); border-radius: 12px; }
+  .inv-sbox input { background: transparent; }
+  #inv-results { display: flex; flex-direction: column; margin-top: 6px; }
+  .inv-sr { display: flex; justify-content: space-between; align-items: center; gap: 8px; width: 100%; border: 0; border-bottom: 1px solid #F0F2F5; background: transparent; padding: 10px 2px; text-align: left; cursor: pointer; min-height: 52px; }
+  .inv-sr:last-child { border-bottom: 0; }
+  .inv-sr > span:first-child { display: flex; flex-direction: column; gap: 2px; }
+  .inv-sr b { font-size: 15px; }
+  .inv-buy { color: var(--green); background: var(--mint); border-radius: 12px; padding: 8px 14px; font-size: 13px; font-weight: 700; }
+  .inv-chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 8px; }
+  .inv-chips .hint { width: 100%; }
+  .inv-hint-open { display: flex; align-items: center; gap: 10px; width: 100%; border: 0; background: transparent; padding: 0; text-align: left; cursor: pointer; min-height: 44px; }
+  .inv-hint-open > span:nth-child(2) { flex: 1; display: flex; flex-direction: column; gap: 2px; } .inv-hint-open b { font-size: 16px; }
+  .inv-hint-open .plus { font-size: 18px; display: inline-flex; align-items: center; justify-content: center; color: var(--green); }
+  .inv-hint { display: flex; flex-direction: column; gap: 6px; padding: 12px 0; border-top: 1px solid #F0F2F5; }
+  .inv-hint p { margin: 0; font-size: 14px; line-height: 21px; }
+  .inv-hint .r, .inv-q .r, .modal .r { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .inv-hint a { color: var(--sub); } .inv-hs { display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
+  .inv-news { display: flex; flex-direction: column; gap: 6px; background: var(--soft); border-radius: 12px; padding: 12px; }
+  .inv-news a { color: var(--ink); font-size: 13px; line-height: 19px; text-decoration: none; }
+  .inv-mix { display: flex; gap: 16px; align-items: center; margin: 4px 0 10px; }
+  .inv-donut { width: 108px; height: 108px; border-radius: 50%; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
+  .inv-donut span { width: 68px; height: 68px; border-radius: 50%; background: #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+  .inv-donut small { font-size: 10px; color: var(--sub); } .inv-donut b { font-size: 17px; font-weight: 800; }
+  .inv-leg { flex: 1; display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
+  .inv-leg div { display: grid; grid-template-columns: 10px 1fr auto auto; align-items: center; gap: 6px; }
+  .inv-leg i { width: 10px; height: 10px; border-radius: 3px; } .inv-leg small { min-width: 52px; text-align: right; }
+  .inv-holds { display: flex; flex-direction: column; border-top: 1px solid #F0F2F5; }
+  .inv-hold { display: flex; align-items: center; gap: 10px; width: 100%; border: 0; border-bottom: 1px solid #F0F2F5; background: transparent; padding: 12px 0; text-align: left; cursor: pointer; }
+  .inv-hold:last-child { border-bottom: 0; }
+  .inv-hold .dotc { width: 8px; height: 32px; border-radius: 4px; flex-shrink: 0; }
+  .inv-hold .hm { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; } .inv-hold .hm b { font-size: 15px; }
+  .inv-hold .hv { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; } .inv-hold .hv b { font-size: 15px; }
+  .inv-eval { display: flex; flex-direction: column; gap: 10px; padding: 12px 0; border-top: 1px solid #F0F2F5; }
+  .modal .inv-eval { border-top: 0; padding-top: 0; }
+  .inv-eval h3 { margin: 0; font-size: 15px; }
+  .ev-grid { display: grid; grid-template-columns: 1fr auto; gap: 6px 12px; background: var(--soft); border-radius: 12px; padding: 12px; font-size: 14px; }
+  .ev-grid > :nth-child(even) { text-align: right; }
+  .inv-bonus { display: flex; justify-content: space-between; align-items: center; gap: 10px; width: 100%; text-align: left; cursor: pointer; background: var(--mint) !important; border-color: var(--mint) !important; color: var(--green); font-size: 14px; line-height: 20px; }
+  .inv-bonus > b { white-space: nowrap; }
+  .inv-bonus small { display: block; font-size: 12px; opacity: 0.85; margin-top: 2px; }
+  .inv-badges { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .inv-badges div { display: flex; flex-direction: column; align-items: center; gap: 2px; text-align: center; background: var(--soft); border-radius: 12px; padding: 10px 6px; filter: grayscale(1); opacity: 0.55; }
+  .inv-badges div.ok { filter: none; opacity: 1; background: var(--mint); }
+  .inv-badges span { font-size: 22px; } .inv-badges b { font-size: 12px; } .inv-badges small { font-size: 10px; line-height: 14px; color: var(--sub); }
+  .inv-q { background: var(--soft); border-radius: 12px; padding: 12px; display: flex; flex-direction: column; gap: 6px; }
+  .inv-step { display: flex; align-items: center; gap: 6px; }
+  .inv-step .icon-btn { width: 36px; height: 36px; border-radius: 10px; background: var(--soft); font-size: 18px; font-weight: 700; }
+  .inv-step .field { width: 68px; text-align: center; padding: 6px; min-height: 36px; }
+  .learn-pop .page-head h1 { font-size: 18px; }
+  .qplus { background: var(--mint); color: var(--green) !important; border-radius: 999px; padding: 2px 10px; font-size: 13px; font-weight: 700; }
 </style>
 </head>
 <body>
@@ -1054,7 +1139,7 @@ const STORE_KEY = "myeco.profile.v1";
 // 계정 문서: users/{uid} = { profile, ledger, learn, ui, updatedAt }. 더 최근에 바뀐 쪽이 이긴다.
 const SYNC_KEY = "myeco.sync.v1";
 const FB_VER = "10.12.2";
-const SYNC_DATA = { profile: "myeco.profile.v1", ledger: "myeco.ledger.v1", learn: "myeco.learn.v1", ui: "myeco.ui.v1" };
+const SYNC_DATA = { profile: "myeco.profile.v1", ledger: "myeco.ledger.v1", learn: "myeco.learn.v1", ui: "myeco.ui.v1", invest: "myeco.invest.v1" };
 let sync = (() => { try { return JSON.parse(localStorage.getItem(SYNC_KEY)) || {}; } catch { return {}; } })(); // { on, email, lastSync, changedAt }
 let fb = null, syncTimer = null;
 function saveSync() { try { localStorage.setItem(SYNC_KEY, JSON.stringify(sync)); } catch {} }
@@ -1628,15 +1713,22 @@ function tabHead(title) {
     </div>
   </header>`;
 }
-// 하단 탭: 홈 / 공부 / 나의 자산관리 / 가계부
+// 하단 탭: 홈 / 모의투자 / 나의 자산관리 / 가계부 (공부는 홈의 퀴즈 + 에서 전체 화면 팝업으로)
+const LEARN_POP = ["learn", "solved", "review", "quiz"];
+function learnHead() {
+  return `<header class="page-head learn-pop">
+    <h1>경제 공부</h1>
+    <button class="icon-btn" data-act="learn-close" aria-label="경제 공부 닫기">${ICON.close}</button>
+  </header>`;
+}
 const TABS = [
   ["home", "홈", `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 10.5 12 4l8.5 6.5V19a1.5 1.5 0 0 1-1.5 1.5h-4.5v-5.5h-5v5.5H5A1.5 1.5 0 0 1 3.5 19z"/></svg>`],
-  ["learn", "공부", `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15H6.5A2.5 2.5 0 0 0 4 20.5z"/><path d="M4 20.5A2.5 2.5 0 0 0 6.5 23H20v-5"/><path d="M9 8h7M9 12h5"/></svg>`],
+  ["invest", "모의투자", `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" aria-hidden="true"><path d="M4 19h16"/><path d="M5 15l4-4 3 3 6-7"/><path d="M15 7h3v3"/></svg>`],
   ["assets", "나의 자산관리", `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="6" width="18" height="14" rx="3"/><path d="M3 10h18M16 15h2"/><path d="M7 6V5a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v1"/></svg>`],
   ["ledger", "가계부", `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" aria-hidden="true"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6M9 16h3"/></svg>`],
 ];
 function tabBar(r) {
-  const cur = r === "money" ? "ledger" : ["schedule", "benefits", "layout"].includes(r) ? "home" : ["news", "watch", "letters", "solved", "review", "quiz"].includes(r) ? "learn" : r;
+  const cur = r === "money" ? "ledger" : ["schedule", "benefits", "layout", "news", "watch", "letters"].includes(r) ? "home" : r;
   return `<nav class="tabbar" aria-label="주요 메뉴">${TABS.map(([id, label, icon]) =>
     `<button class="${cur === id ? "on" : ""}" data-act="tab" data-t="${id}" ${cur === id ? 'aria-current="page"' : ""}>${icon}<span>${label}</span></button>`).join("")}</nav>`;
 }
@@ -1871,7 +1963,7 @@ function checkProgress() {
   initGame();
   const msgs = [];
   const day = ymd(today0());
-  if (todayCount() >= MISSION && learnState.missionDay !== day) { learnState.missionDay = day; learnState.bonus = (learnState.bonus || 0) + MISSION_XP; msgs.push(`오늘의 미션 완료! +${MISSION_XP} XP`); }
+  if (todayCount() >= MISSION && learnState.missionDay !== day) { learnState.missionDay = day; learnState.bonus = (learnState.bonus || 0) + MISSION_XP; msgs.push(`오늘의 미션 완료! +${MISSION_XP} XP`); const b = invBonus(INV_BONUS.mission, "오늘의 미션"); if (b) msgs.push(b); }
   const lv = levelOf(xpTotal());
   if (lv > (learnState.seenLevel || 1)) { learnState.seenLevel = lv; msgs.push(`🎉 레벨 업! Lv.${lv} ${titleOf(lv)}`); }
   for (const b of badgeList()) if (b.ok && !learnState.badges[b.id]) { learnState.badges[b.id] = Date.now(); msgs.push(`배지 획득 ${b.icon} ${b.name}`); }
@@ -2039,10 +2131,13 @@ function homeBlocks() {
     </section>`;
 
   const tq = todayQuiz();
+  // 오늘의 퀴즈 + 를 누르면 경제 공부 전체(미션·빠른 퀴즈·탈출 지도·섬·노트)가 전체 화면 팝업으로 열린다
   const quizBlock = todayQuizShown(tq) ? `<section class="quiz" id="h-quiz">
-      <button class="quiz-head" data-act="go-learn"><span class="hand">${quizLabel(tq.c)} · ${learnState.today?.hot ? "요즘 보도자료에 많이 나온 말" : esc(catName(tq.c.cat))}</span><span>경제 공부 ›</span></button>
+      <button class="quiz-head" data-act="go-learn" aria-label="경제 공부 전체 보기"><span class="hand">${quizLabel(tq.c)} · ${learnState.today?.hot ? "요즘 보도자료에 많이 나온 말" : esc(catName(tq.c.cat))}</span><span class="qplus">+ 전체</span></button>
       ${quizBox(tq.c, tq.lv, true, true, true)}
-    </section>` : "";
+    </section>` : `<section class="quiz" id="h-quiz">
+      <button class="quiz-head" data-act="go-learn" aria-label="경제 공부 전체 보기"><span class="hand">경제 공부 · 미션 · 빠른 퀴즈 · 탈출 지도</span><span class="qplus">+</span></button>
+    </section>`;
 
   const nq = nextQuestion();
   const moreBlock = nq ? `<section class="more" id="h-more">${moreQuestion(nq)}</section>` : "";
@@ -2113,6 +2208,7 @@ function drawerMenu() {
   return [
     { title: "마이페이지", route: "my", items: [["기본 정보", "my", "sec-basic"], ["투자 성향 · 관심사", "my", "sec-risk"], ["투자 성향 정밀 진단", "risktest", ""]] },
     { title: "홈 화면", route: "home", items: [...home, ["나를 위한 일정", "schedule", ""], ["우리 지역 혜택", "benefits", ""], ["홈 화면 꾸미기", "layout", ""]] },
+    { title: "모의투자", route: "invest", items: [["내 가상 자산·그래프", "invest", ""], ["루미의 오늘 힌트", "invest", ""]] },
     { title: "경제공부", route: "learn", items: [["경제 개념·퀴즈", "learn", ""], ["뉴스 쉽게 풀이", "news", ""], ["뉴스레터", "letters", ""], ["관심 종목", "watch", ""]] },
     { title: "나의 자산관리", route: "assets", items: [["순자산·자산 진단", "assets", "sec-diag"], ["목표 저축", "assets", "sec-goals"], ["자산·대출 입력", "assets", "sec-assets"], ["소비 분석", "assets", "sec-analysis"]] },
     { title: "가계부", route: "ledger", items: [["캡처로 기록하기", "ledger", "m-capture"], ["직접 기록", "ledger", "m-quick"], ["최근 기록", "ledger", "m-recent"], ["지출 통계", "ledger", "m-summary"], ["달력으로 보기", "ledger", "m-cal"]] },
@@ -2559,7 +2655,7 @@ function openModal(kind, extra = {}) { ui.modal = { kind, route: routeKey(), ...
 function viewModal() {
   const m = ui.modal;
   if (!m) return "";
-  const body = { "tx-edit": modalTxEdit, "tx-add": modalTxAdd, fixed: modalFixed, consent: modalConsent, catDetail: modalCatDetail, quick: modalQuick, concept: modalConcept, badges: modalBadges, notes: modalNotes, budget: modalBudget, assets: modalAssets, goal: modalGoal, quiz: modalQuiz, ad: modalAd }[m.kind]?.(m);
+  const body = { "tx-edit": modalTxEdit, "tx-add": modalTxAdd, fixed: modalFixed, consent: modalConsent, catDetail: modalCatDetail, quick: modalQuick, concept: modalConcept, badges: modalBadges, notes: modalNotes, budget: modalBudget, assets: modalAssets, goal: modalGoal, quiz: modalQuiz, ad: modalAd, "inv-hints": modalInvHints, "inv-trade": modalInvTrade, "inv-eval": modalInvEval }[m.kind]?.(m);
   if (!body) { ui.modal = null; return ""; }
   return `<div class="modal-back"><div class="modal form" role="dialog" aria-modal="true">${body}</div></div>`;
 }
@@ -3606,7 +3702,7 @@ function conceptRow(c, showCat) {
 
 function viewLearn() {
   const L = data.learn;
-  if (!L) return `${tabHead("공부")}<main class="scroll"><p class="hint">불러오는 중…</p></main>`;
+  if (!L) return `${learnHead()}<main class="scroll"><p class="hint">불러오는 중…</p></main>`;
   ensureTrending();
   markAttend();
   initGame();
@@ -3640,7 +3736,7 @@ function viewLearn() {
         <span class="arc-sub">개념 ${done}/${list.length} · ★ ${stars}/${list.length * 3}</span>`}
       </button>`;
   }).join("");
-  return `${tabHead("공부")}
+  return `${learnHead()}
   <main class="scroll">
     <section class="card lv-card">
       ${mascot(64, lv >= 5 ? "confident" : "happy", "")}
@@ -3945,7 +4041,7 @@ function viewStage(catId) {
   const m = arcMap(catId);
   const done = m.list.filter(mastered).length;
   const word = { done: "완료", wrong: "틀림", doing: "진행 중", open: "시작", locked: "잠김" };
-  return `${tabHead("공부")}
+  return `${learnHead()}
   <main class="scroll">
     <div class="stage-head"><button class="icon-btn" data-act="stage-close" aria-label="탈출 지도 목록으로">${ICON.back}</button><div><h2>${esc(catName(catId))}</h2><span class="hint">개념 ${done}/${m.n} 완료 · 아래에서 위로 올라가요</span></div></div>
     <div class="arcade" style="aspect-ratio:${ARC_W}/${m.H};background:${m.th.bg};border-color:${m.th.gir}">
@@ -3967,7 +4063,7 @@ function viewIslands(catId) {
   if (n && names[n - 1] && islandOpen(catId, n)) {
     const list = islandConcepts(catId, n);
     const ok = list.filter(mastered).length;
-    return `${tabHead("공부")}
+    return `${learnHead()}
   <main class="scroll">
     <div class="stage-head"><button class="icon-btn" data-act="island-close" aria-label="섬 목록으로">${ICON.back}</button><div><h2>${n}섬 · ${esc(names[n - 1])}</h2><span class="hint">맞힌 개념 ${ok}/${list.length} · 모두 맞히면 다음 섬이 열려요</span></div></div>
     <section class="card isl-list">${list.map((c, i) => {
@@ -3985,7 +4081,7 @@ function viewIslands(catId) {
       <span class="isl-body"><b>${esc(name)}</b><span class="hint">${open ? `맞힌 개념 ${ok}/${list.length}` : `앞 섬을 다 맞히면 열려요 · 개념 ${list.length}개`}</span>
         <span class="isl-bar"><i style="width:${Math.round((ok / list.length) * 100)}%"></i></span></span></button>`;
   }).join(`<span class="isl-path" aria-hidden="true"></span>`);
-  return `${tabHead("공부")}
+  return `${learnHead()}
   <main class="scroll">
     <div class="stage-head"><button class="icon-btn" data-act="stage-close" aria-label="공부로">${ICON.back}</button><div><h2>${esc(catName(catId))}</h2><span class="hint">섬 ${names.filter((_, i) => islandDone(catId, i + 1)).length}/${names.length} 완료 · 개념 ${all.filter(mastered).length}/${all.length}</span></div></div>
     <div class="isl-map">${cards}</div>
@@ -4090,6 +4186,7 @@ const SUGGEST = ["내 대출, 금리 오르면 이자 얼마?", "지금 환전�
 const PAGE_NAME = { my: "마이페이지", risktest: "마이페이지", home: "홈", assets: "나의 자산관리", ledger: "가계부", learn: "공부", solved: "공부", review: "공부", news: "뉴스", letters: "뉴스레터", watch: "관심 종목", schedule: "일정", benefits: "우리 지역 혜택", layout: "홈 화면 꾸미기", etc: "기타" };
 // 검색창 바로 가기: 화면 안의 칸·버튼까지. [이름, 화면, 위치(id), 찾는 말들, 누르면 할 일(없으면 그 위치로 이동)]
 const SPOTS = [
+  ["모의투자 (가상 1,000만 원 주식 게임)", "invest", "", ["모의투자", "모의주식", "주식 게임", "게임", "시즌", "순위", "랭킹", "채권", "cma", "힌트"]],
   ["로그아웃 · 기기 연결", "my", "sec-sync", ["로그아웃", "로그인", "기기 연결", "기기", "연결", "구글", "계정", "동기화", "다른 기기"]],
   ["기본 정보 (닉네임·나이·성별·소득·지역)", "my", "sec-basic", ["기본 정보", "닉네임", "이름", "나이", "성별", "소득", "연봉", "사는 곳", "지역", "학교"]],
   ["투자 성향 · 관심사", "my", "sec-risk", ["관심사", "관심", "투자 성향", "성향", "선호", "위험", "쇼핑", "여행", "부동산"]],
@@ -4646,19 +4743,676 @@ function viewOnboard() {
     </div></main>`;
 }
 
+// ───────────────────────── 모의투자 (가상 돈 게임) ─────────────────────────
+// 누구나 바로 시작: 시즌(한 달)마다 가상 1,000만 원. 주식은 가장 최근 종가로 언제든 바로 사고판다(거래 시간 제한 없음).
+// 채권·예금·CMA는 금리만큼 날마다 이자가 붙는 단순한 방식. 기록은 이 기기에, 로그인하면 계정에도 저장(SYNC_DATA).
+// 순위는 구글 로그인한 사람만: Firestore invest/{시즌}/players/{uid} = { nick, total, ret, at }.
+// 평가: 팔 때·시즌 끝에, 산 뒤 오른 비율을 같은 기간 코스피와 비교하고, 고른 힌트의 방향·기간이 맞았는지 본다.
+const INV_KEY = "myeco.invest.v1";
+const INV_START = 10000000;
+const INV_BONUS = { mission: 300000, perfect: 200000, max: 500000 }; // 퀴즈 보너스, 하루 최대 50만 원
+function seasonKey(d = new Date()) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`; }
+function seasonLabel(k) { return `${Number(k.slice(5))}월 시즌`; }
+function seasonLeft() { const d = new Date(); return new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate() - d.getDate(); }
+function invNewSeason() { return { season: seasonKey(), cash: INV_START, hold: {}, trades: [], evals: [], bonus: { day: "", amt: 0 }, bonusTotal: 0, kospi0: null }; }
+function loadInv() {
+  try { const v = JSON.parse(localStorage.getItem(INV_KEY)); if (v && v.season) return { seasons: [], badges: {}, px: {}, good: 0, ...v }; } catch {}
+  return { ...invNewSeason(), seasons: [], badges: {}, px: {}, good: 0 };
+}
+let inv = loadInv();
+function saveInv() { try { localStorage.setItem(INV_KEY, JSON.stringify(inv)); } catch {} syncSoon(); }
+const invData = { prices: {}, yields: null, hist: null, histKey: "", hints: null, rank: null, loading: false, quote: {} };
+const INV_POP = ["삼성전자", "SK하이닉스", "현대차", "NAVER", "카카오", "LG에너지솔루션"];
+
+// 이자 상품: 채권은 한국은행 ECOS 금리(키가 없으면 예시), 예금은 금리 비교(없으면 예시), CMA는 예시 금리
+function rateProducts() {
+  const y = invData.yields || [];
+  const dep = data.rates?.items?.[0];
+  const ys = (id, name, rate) => { const f = y.find((x) => x.id === id); return f ? { rate: f.rate, sample: !!f.sample } : { rate, sample: true }; };
+  return [
+    { id: "cma", name: "CMA (RP형)", group: "예금·CMA", rate: 2.3, sample: true, words: ["cma", "씨엠에이", "파킹"] },
+    { id: "dep", name: dep ? `정기예금 1년 (${dep.bank})` : "정기예금 1년", group: "예금·CMA", rate: dep?.base ?? 3.0, sample: !dep, words: ["예금", "정기예금", "적금"] },
+    { id: "ktb3", name: "국고채 3년", group: "채권", ...ys("ktb3", "국고채 3년", 2.9), words: ["채권", "국고채", "국채", "나라"] },
+    { id: "corp3", name: "회사채 3년 (AA-)", group: "채권", ...ys("corp3", "회사채", 3.4), words: ["채권", "회사채"] },
+  ];
+}
+function rateById(id) { return rateProducts().find((p) => p.id === id); }
+
+// ── 계산 ──
+function invPrice(name) { return invData.prices[name]?.v ?? inv.px[name] ?? null; }
+function lotValue(l, at = Date.now()) { return l.amt * (1 + (l.rate / 100) * Math.max(0, at - l.at) / (365 * 86400e3)); }
+function holdValue(h, at) {
+  if (h.kind === "rate") return h.lots.reduce((s, l) => s + lotValue(l, at), 0);
+  const p = invPrice(h.name);
+  return p != null ? h.qty * p : h.cost;
+}
+function invTotal() { return inv.cash + Object.values(inv.hold).reduce((s, h) => s + holdValue(h), 0); }
+function invBase() { return INV_START + (inv.bonusTotal || 0); }
+function invRet() { return (invTotal() / invBase() - 1) * 100; }
+function invGroups() {
+  const g = { 주식: 0, 채권: 0, "예금·CMA": 0, 현금: inv.cash };
+  for (const h of Object.values(inv.hold)) g[h.kind === "stock" ? "주식" : rateById(h.id)?.group || "예금·CMA"] += holdValue(h);
+  return g;
+}
+const INV_COLORS = { 주식: "#245296", 채권: "#4E9BD1", "예금·CMA": "#9DB8E0", 현금: "#D2D6DD" };
+function curKospi() { return data.market?.kospi?.v ?? invData.kospi ?? null; }
+
+// ── 힌트: 숫자 힌트(환율·지수, 규칙으로) + 보도자료 힌트(AI, /api/brief?hints=1) ──
+function numberHints() {
+  const m = data.market, out = [];
+  if (!m) return out;
+  const u = m.usd, src = m.src?.usd === "ecos" ? "한국은행 ECOS 환율" : "한국수출입은행 환율";
+  if (u && Math.abs(u.vs) >= 3) {
+    const down = u.vs < 0;
+    out.push({ id: "fx", title: down ? "환율이 내렸어요" : "환율이 올랐어요", dir: down ? "down" : "up", days: 14, stocks: ["현대차", "기아", "삼성전자"],
+      text: down ? `원/달러 환율이 직전보다 ${fmt(Math.abs(u.vs), 1)}원 내렸어요. 수출이 많은 현대차·기아·삼성전자는 같은 달러를 벌어도 원화가 줄 수 있어요.`
+        : `원/달러 환율이 직전보다 ${fmt(Math.abs(u.vs), 1)}원 올랐어요. 수출이 많은 현대차·기아·삼성전자는 같은 달러를 벌어도 원화가 늘 수 있어요.`,
+      sources: [{ title: `${src} ${ymdLabel(u.date)}`, url: m.src?.usd === "ecos" ? "https://ecos.bok.or.kr" : "https://www.koreaexim.go.kr" }] });
+  }
+  const k = m.kospi;
+  if (k && Math.abs(k.pct) >= 1) out.push({ id: "kospi", title: `코스피가 ${k.pct > 0 ? "크게 올랐어요" : "크게 내렸어요"}`, dir: "swing", days: 3, stocks: [],
+    text: `코스피가 하루에 ${fmt(Math.abs(k.pct), 2)}% 움직였어요. 시장이 크게 움직인 뒤에는 며칠 더 출렁이기도 해요.`,
+    sources: [{ title: `코스피 ${ymdLabel(k.date)} 종가`, url: "https://ecos.bok.or.kr" }] });
+  return out;
+}
+function invHints() { return [...numberHints(), ...(invData.hints?.hints || [])]; }
+function hintById(id) { return invHints().find((h) => h.id === id); }
+const DIR = { up: ["오를 수도", "up"], down: ["내릴 수도", "down"], swing: ["크게 출렁일 수도", "swing"] };
+function dirPill(dir) { const [t, c] = DIR[dir] || DIR.swing; return `<span class="badge b-${c === "swing" ? "warn" : c}">${t}</span>`; }
+function daysText(d) { return d <= 3 ? "오늘~며칠" : d <= 7 ? "일주일쯤" : d <= 14 ? "며칠~2주" : "몇 주~한 달"; }
+
+// ── 불러오기 ──
+async function loadInvest(force = false) {
+  if (invData.loading) return;
+  invData.loading = true;
+  const names = [...new Set(Object.values(inv.hold).filter((h) => h.kind === "stock").map((h) => h.name))];
+  const chunks = [];
+  for (let i = 0; i < Math.max(1, names.length); i += 10) chunks.push(names.slice(i, i + 10));
+  try {
+    const res = await Promise.all(chunks.map((c, i) => getJson(`/api/market?stocks=${encodeURIComponent(c.join(","))}${i === 0 ? "&yields=1" : ""}`).catch(() => null)));
+    for (const j of res) {
+      if (!j) continue;
+      if (j.yields) invData.yields = j.yields;
+      if (j.kospi) invData.kospi = j.kospi.v;
+      invData.sample = invData.sample || !!j.sample;
+      for (const s of j.stocks || []) if (!s.missing) { invData.prices[s.name] = s; inv.px[s.name] = s.v; }
+    }
+    if (inv.kospi0 == null && curKospi()) inv.kospi0 = curKospi();
+    if (curKospi()) inv.lastKospi = curKospi();
+    saveInvQuiet();
+  } catch {}
+  const jobs = [loadInvHist(force), loadRank()];
+  if (!invData.hints) jobs.push(getJson("/api/brief?hints=1").then((j) => (invData.hints = j)).catch(() => (invData.hints = { hints: [] })));
+  await Promise.all(jobs);
+  invData.loading = false;
+  pushRank();
+  if (route() === "invest") render();
+}
+function saveInvQuiet() { try { localStorage.setItem(INV_KEY, JSON.stringify(inv)); } catch {} }
+// 그래프용 과거 종가: 이번 시즌에 거래한 종목 + 코스피
+async function loadInvHist(force) {
+  const names = [...new Set(inv.trades.filter((t) => t.kind === "stock").map((t) => t.name))].slice(0, 10);
+  const key = names.join(",");
+  if (!force && invData.hist && invData.histKey === key) return;
+  try { invData.hist = await getJson(`/api/market?history=${encodeURIComponent(key)}&days=40`); invData.histKey = key; } catch { invData.hist = null; }
+}
+// 사기 화면을 열 때 그 종목의 지금 값
+async function loadQuote(name) {
+  if (invData.prices[name] || invData.quote[name]) return;
+  invData.quote[name] = { loading: true };
+  try {
+    const j = await getJson(`/api/market?stocks=${encodeURIComponent(name)}`);
+    const s = (j.stocks || [])[0];
+    if (s && !s.missing) { invData.prices[name] = { ...s, sample: !!j.sample }; inv.px[name] = s.v; invData.quote[name] = { ok: true }; }
+    else invData.quote[name] = { missing: true };
+  } catch { invData.quote[name] = { missing: true }; }
+  if (ui.modal?.kind === "inv-trade") render();
+}
+
+// ── 시즌: 달이 바뀌면 마지막 값으로 평가하고 기록을 남긴 뒤 1,000만 원으로 다시 시작 ──
+function rollSeason() {
+  if (inv.season === seasonKey()) return;
+  const k = inv.lastKospi || curKospi();
+  const ends = []; // 시즌 끝에 갖고 있던 주식의 평가는 새 시즌 화면에 남긴다
+  for (const h of Object.values(inv.hold)) if (h.kind === "stock" && h.qty > 0) {
+    const p = inv.px[h.name];
+    if (p != null) ends.push(evalLots(h.name, h.lots, p, k, true));
+  }
+  inv.good = (inv.good || 0) + ends.filter((e) => e.good).length;
+  const total = invTotal(), ret = (total / invBase() - 1) * 100;
+  const kret = inv.kospi0 && k ? (k / inv.kospi0 - 1) * 100 : null;
+  inv.seasons = [...(inv.seasons || []), { season: inv.season, total: Math.round(total), ret: Math.round(ret * 100) / 100, kret: kret == null ? null : Math.round(kret * 100) / 100, rank: inv.lastRank || null }].slice(-12);
+  if (kret != null && ret > kret) inv.badges.beat = inv.badges.beat || Date.now();
+  inv.badges.season = inv.badges.season || Date.now();
+  Object.assign(inv, invNewSeason());
+  inv.evals = ends;
+  saveInv();
+  toast(`${seasonLabel(inv.season)}이 시작됐어요! 가상 1,000만 원으로 다시 시작해요`);
+}
+
+// ── 사고팔기 ──
+function holdKey(kind, id) { return `${kind}:${id}`; }
+function buyStock(name, qty, reason) {
+  const p = invPrice(name);
+  if (!(p > 0) || !(qty > 0)) return toast("수량을 확인해 주세요");
+  const amt = p * qty;
+  if (amt > inv.cash) return toast(`현금이 모자라요. 최대 ${fmt(Math.floor(inv.cash / p))}주까지 살 수 있어요`);
+  const k = holdKey("stock", name);
+  const h = inv.hold[k] || (inv.hold[k] = { kind: "stock", name, qty: 0, cost: 0, lots: [] });
+  const lot = { at: Date.now(), qty, price: p, kospi: curKospi(), reason };
+  h.qty += qty; h.cost += amt; h.lots.push(lot);
+  inv.cash -= amt;
+  inv.trades.unshift({ at: lot.at, kind: "stock", side: "buy", name, qty, price: p, reason });
+  afterTrade(`${name} ${fmt(qty)}주를 ${won(amt)}에 샀어요`);
+}
+function sellStock(name, qty) {
+  const k = holdKey("stock", name), h = inv.hold[k], p = invPrice(name);
+  if (!h || !(qty > 0) || qty > h.qty || !(p > 0)) return toast("수량을 확인해 주세요");
+  // 먼저 산 것부터 판다
+  let left = qty; const sold = [];
+  while (left > 0 && h.lots.length) {
+    const l = h.lots[0], n = Math.min(l.qty, left);
+    sold.push({ ...l, qty: n }); l.qty -= n; left -= n;
+    if (!l.qty) h.lots.shift();
+  }
+  const costSold = sold.reduce((s, l) => s + l.qty * l.price, 0);
+  h.qty -= qty; h.cost -= costSold;
+  inv.cash += p * qty;
+  const ev = evalLots(name, sold, p, curKospi(), false);
+  inv.evals.unshift(ev);
+  if (ev.good) inv.good = (inv.good || 0) + 1;
+  if (!h.qty) delete inv.hold[k];
+  inv.trades.unshift({ at: Date.now(), kind: "stock", side: "sell", name, qty, price: p });
+  ui.modal = { kind: "inv-eval", route: "invest", id: ev.id };
+  afterTrade(`${name} ${fmt(qty)}주를 팔았어요`, true);
+}
+function depositRate(id, amt) {
+  const pr = rateById(id);
+  if (!pr || !(amt > 0)) return toast("금액을 적어 주세요");
+  if (amt > inv.cash) return toast(`현금이 모자라요. 최대 ${won(inv.cash)}까지 넣을 수 있어요`);
+  const k = holdKey("rate", id);
+  const h = inv.hold[k] || (inv.hold[k] = { kind: "rate", id, name: pr.name, lots: [] });
+  h.lots.push({ at: Date.now(), amt, rate: pr.rate });
+  inv.cash -= amt;
+  inv.trades.unshift({ at: Date.now(), kind: "rate", side: "buy", name: pr.name, id, amt, rate: pr.rate });
+  afterTrade(`${pr.name}에 ${won(amt)}을 넣었어요 (연 ${fmt(pr.rate, 2)}%)`);
+}
+function withdrawRate(id) {
+  const k = holdKey("rate", id), h = inv.hold[k];
+  if (!h) return;
+  const v = holdValue(h), principal = h.lots.reduce((s, l) => s + l.amt, 0);
+  inv.cash += v;
+  delete inv.hold[k];
+  inv.trades.unshift({ at: Date.now(), kind: "rate", side: "sell", name: h.name, id, amt: v });
+  afterTrade(`${h.name}에서 ${won(v)}을 뺐어요 (이자 ${won(v - principal)})`);
+}
+function afterTrade(msg, keepModal) {
+  if (!keepModal) ui.modal = null;
+  checkInvBadges();
+  saveInv();
+  render();
+  toast(msg);
+  loadInvHist(true).then(() => route() === "invest" && render());
+  pushRank();
+}
+
+// ── 평가: 산 뒤 오른 비율 vs 같은 기간 코스피, 고른 힌트의 방향·기간 ──
+function evalLots(name, lots, price, kospiNow, seasonEnd) {
+  const qty = lots.reduce((s, l) => s + l.qty, 0) || 1;
+  const cost = lots.reduce((s, l) => s + l.qty * l.price, 0) || 1;
+  const ret = (price * qty / cost - 1) * 100;
+  const kl = lots.filter((l) => l.kospi && kospiNow);
+  const kret = kl.length ? kl.reduce((s, l) => s + (kospiNow / l.kospi - 1) * l.qty * l.price, 0) / kl.reduce((s, l) => s + l.qty * l.price, 0) * 100 : null;
+  const heldDays = Math.round(lots.reduce((s, l) => s + (Date.now() - l.at) * l.qty, 0) / qty / 86400e3);
+  const hl = lots.find((l) => l.reason?.type === "hint" && l.reason.dir);
+  let hint = null;
+  if (hl) {
+    const r = hl.reason, early = heldDays < r.days;
+    const ok = r.dir === "up" ? ret > 0 : r.dir === "down" ? ret < 0 : Math.abs(ret) >= 3;
+    hint = { title: r.title, dir: r.dir, days: r.days, early, ok: early ? null : ok };
+  }
+  const reasonText = lots.map((l) => l.reason?.type === "mine" || l.reason?.type === "etc" ? l.reason.text : "").find(Boolean) || "";
+  const excess = kret == null ? null : ret - kret;
+  const beat = excess != null && excess >= 0;
+  let text;
+  if (hint && hint.early) text = `힌트 기간(${daysText(hint.days)})보다 일찍 정리해서 근거가 맞았는지는 아직 판단하기 어려워요. ${beat ? "그래도 시장보다는 잘했어요." : "시장보다는 덜 올랐어요."}`;
+  else if (hint && hint.ok) text = beat ? "근거도 맞고 시장보다도 잘했어요!" : "근거는 맞았는데 시장 전체가 더 많이 움직였어요.";
+  else if (hint) text = ret > 0 ? "힌트와 다르게 움직였지만 결과는 좋았어요. 다른 이유가 있었는지 살펴봐요." : "힌트와 반대로 움직였어요. 같은 기간 다른 소식이 있었는지 살펴봐요.";
+  else text = excess == null ? (ret >= 0 ? "벌었어요!" : "이번엔 잃었어요.") : beat ? "시장(코스피)보다 잘했어요." : "이번엔 시장(코스피)보다 덜 올랐어요.";
+  return { id: String(Date.now()) + Math.random().toString(36).slice(2, 5), at: Date.now(), name, qty, heldDays, ret: Math.round(ret * 100) / 100,
+    kret: kret == null ? null : Math.round(kret * 100) / 100, hint, reasonText, text, seasonEnd, good: !!(hint && hint.ok && beat) };
+}
+
+// ── 퀴즈 보너스 (하루 최대 50만 원) ──
+function invBonus(amt, label) {
+  rollSeason();
+  const day = ymd(today0());
+  if (inv.bonus.day !== day) inv.bonus = { day, amt: 0 };
+  const add = Math.min(amt, INV_BONUS.max - inv.bonus.amt);
+  if (add <= 0) return "";
+  inv.bonus.amt += add; inv.cash += add; inv.bonusTotal = (inv.bonusTotal || 0) + add;
+  inv.trades.unshift({ at: Date.now(), kind: "bonus", amt: add, label });
+  inv.badges.quiz = inv.badges.quiz || Date.now();
+  saveInv(); pushRank();
+  return `모의투자 +${invMan(add)} (${label})`;
+}
+function invMan(n) { n = Math.round(n || 0); return n < 1e4 ? won(n) : `${fmt(Math.round(n / 1e4))}만 원`; }
+function invBonusToday() { return inv.bonus.day === ymd(today0()) ? inv.bonus.amt : 0; }
+
+// ── 배지 ──
+function invBadgeList() {
+  const groups = Object.entries(invGroups()).filter(([g, v]) => g !== "현금" && v > 0).length;
+  return [
+    { id: "first", icon: "💰", name: "첫 매매", desc: "처음으로 사 봤어요", ok: !!inv.badges.first || inv.trades.some((t) => t.kind !== "bonus") },
+    { id: "mix", icon: "🧺", name: "나눠 담기", desc: "주식·채권·예금 중 두 종류 이상을 함께 가졌어요", ok: !!inv.badges.mix || groups >= 2 },
+    { id: "analyst", icon: "🔍", name: "분석왕", desc: "근거도 맞고 시장보다 잘한 매매 3번", ok: (inv.good || 0) >= 3 },
+    { id: "quiz", icon: "📚", name: "공부하는 투자자", desc: "퀴즈로 투자금 보너스를 받았어요", ok: !!inv.badges.quiz },
+    { id: "season", icon: "🏁", name: "시즌 완주", desc: "한 시즌을 끝까지 했어요", ok: !!inv.badges.season },
+    { id: "beat", icon: "🏆", name: "시장 이기기", desc: "한 시즌 수익률이 같은 기간 코스피보다 높았어요", ok: !!inv.badges.beat },
+  ];
+}
+function checkInvBadges() {
+  for (const b of invBadgeList()) if (b.ok && !inv.badges["got-" + b.id]) {
+    inv.badges["got-" + b.id] = Date.now();
+    if (b.id === "first" || b.id === "mix") inv.badges[b.id] = Date.now();
+    setTimeout(() => toast(`모의투자 배지 획득 ${b.icon} ${b.name}`), 900);
+  }
+}
+
+// ── 순위 (구글 로그인한 사람끼리) ──
+async function invUser() {
+  if (!sync.on) return null;
+  await loadFirebase();
+  await fb.auth.authStateReady?.();
+  return fb.auth.currentUser;
+}
+async function pushRank() {
+  try {
+    const u = await invUser();
+    if (!u) return;
+    await fb.F.setDoc(fb.F.doc(fb.db, "invest", inv.season, "players", u.uid), { nick: String(profile?.nickname || "익명").slice(0, 12), total: Math.round(invTotal()), ret: Math.round(invRet() * 100) / 100, at: Date.now() });
+  } catch {}
+}
+async function loadRank() {
+  if (!sync.on) { invData.rank = null; return; }
+  try {
+    const u = await invUser();
+    if (!u) { invData.rank = null; return; }
+    const F = fb.F;
+    const snap = await F.getDocs(F.query(F.collection(fb.db, "invest", inv.season, "players"), F.orderBy("total", "desc"), F.limit(50)));
+    const list = snap.docs.map((d) => ({ uid: d.id, ...d.data() }));
+    if (!list.some((x) => x.uid === u.uid)) list.push({ uid: u.uid, nick: profile?.nickname || "나", total: Math.round(invTotal()), ret: invRet() });
+    list.sort((a, b) => b.total - a.total);
+    const me = list.findIndex((x) => x.uid === u.uid);
+    invData.rank = { list, me, n: list.length };
+    inv.lastRank = { rank: me + 1, of: list.length };
+  } catch (e) { invData.rank = { error: true }; }
+}
+
+// ── 그래프 ──
+function seriesAt(arr, d) { // d 이전(포함) 마지막 값
+  let v = null;
+  for (const x of arr || []) { if (x[0] <= d) v = x; else break; }
+  return v;
+}
+function tradeDay(t) { return ymd(new Date(t.at)).replace(/-/g, ""); }
+// 날짜 d(YYYYMMDD) 끝의 내 자산: 이번 시즌 거래를 그날까지 다시 따라간다. useOpen이면 그날 시가로
+function valueOn(d, useOpen) {
+  const H = invData.hist?.series || {};
+  let cash = INV_START, end = new Date(`${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6, 8)}T23:59:59`).getTime();
+  const qty = {}, last = {}, lots = [];
+  for (const t of [...inv.trades].reverse()) {
+    if (t.at > end) break;
+    if (t.kind === "bonus") cash += t.amt;
+    else if (t.kind === "stock") { qty[t.name] = (qty[t.name] || 0) + (t.side === "buy" ? t.qty : -t.qty); cash += (t.side === "buy" ? -1 : 1) * t.qty * t.price; last[t.name] = t.price; }
+    else if (t.side === "buy") { cash -= t.amt; lots.push({ ...t, at: t.at, amt: t.amt, rate: t.rate }); }
+    else { cash += t.amt; for (let i = lots.length - 1; i >= 0; i--) if (lots[i].id === t.id) lots.splice(i, 1); }
+  }
+  let v =cash + lots.reduce((s, l) => s + lotValue(l, end), 0);
+  for (const [n, q] of Object.entries(qty)) if (q > 0) {
+    const row = seriesAt(H[n], d);
+    v += q * (row ? (useOpen && row[0] === d && row[2] ? row[2] : row[1]) : last[n]);
+  }
+  return v;
+}
+function invChartPoints(period) {
+  const K = invData.hist?.kospi || [];
+  if (!K.length) return [];
+  const start = inv.season.replace("-", "") + "01";
+  const now = new Date();
+  const back = (n) => ymd(new Date(now.getFullYear(), now.getMonth(), now.getDate() - n)).replace(/-/g, "");
+  let pts;
+  if (period === "1d") {
+    const ds = K.filter((x) => x[0] >= start).slice(-2).map((x) => x[0]);
+    if (!ds.length) return [];
+    const latest = ds[ds.length - 1];
+    pts = [...(ds.length > 1 ? [{ d: ds[0], v: valueOn(ds[0]), label: "전날 종가" }] : []), { d: latest, v: valueOn(latest, true), label: "시가" }, { d: latest, v: valueOn(latest), label: "종가" }];
+    return pts;
+  }
+  const from = period === "1w" ? back(7) : back(31);
+  const ds = K.filter((x) => x[0] >= from && x[0] >= start);
+  const k0 = ds[0]?.[1];
+  pts = ds.map((x) => ({ d: x[0], v: valueOn(x[0]), k: x[1] }));
+  if (pts.length) { const v0 = pts[0].v; pts.forEach((p) => (p.kv = k0 ? v0 * (p.k / k0) : null)); }
+  return pts;
+}
+function lineChart(pts) {
+  const W = 320, H = 132, P = 8;
+  const vals = pts.flatMap((p) => [p.v, p.kv].filter((x) => x != null));
+  let lo = Math.min(...vals), hi = Math.max(...vals);
+  if (hi - lo < 1) { hi += 1; lo -= 1; }
+  const pad = (hi - lo) * 0.12; lo -= pad; hi += pad;
+  const x = (i) => P + (i * (W - P * 2)) / Math.max(1, pts.length - 1);
+  const y = (v) => P + (1 - (v - lo) / (hi - lo)) * (H - P * 2 - 16);
+  const path = (key) => pts.map((p, i) => (p[key] == null ? "" : `${i ? "L" : "M"}${x(i).toFixed(1)},${y(p[key]).toFixed(1)}`)).join("");
+  const up = pts[pts.length - 1].v >= pts[0].v;
+  const lab = (p) => p.label || `${Number(p.d.slice(4, 6))}/${Number(p.d.slice(6, 8))}`;
+  return `<svg class="inv-chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="내 자산 그래프">
+    <line x1="${P}" y1="${y(invBase()).toFixed(1)}" x2="${W - P}" y2="${y(invBase()).toFixed(1)}" class="base"/>
+    ${pts.some((p) => p.kv != null) ? `<path d="${path("kv")}" class="k"/>` : ""}
+    <path d="${path("v")}" class="me ${up ? "up" : "down"}"/>
+    <circle cx="${x(pts.length - 1).toFixed(1)}" cy="${y(pts[pts.length - 1].v).toFixed(1)}" r="3.5" class="dot ${up ? "up" : "down"}"/>
+    <text x="${P}" y="${H - 2}" class="lb">${lab(pts[0])}</text><text x="${W - P}" y="${H - 2}" class="lb" text-anchor="end">${lab(pts[pts.length - 1])}</text>
+  </svg>`;
+}
+function seasonBars() {
+  const list = [...(inv.seasons || []).slice(-11), { season: inv.season, ret: Math.round(invRet() * 100) / 100, now: true }];
+  const mx = Math.max(1, ...list.map((s) => Math.abs(s.ret)));
+  return `<div class="inv-bars">${list.map((s) => `<div class="ib"><span class="num ${s.ret >= 0 ? "up" : "down"}">${s.ret > 0 ? "+" : ""}${fmt(s.ret, 1)}%</span>
+      <i class="${s.ret >= 0 ? "up" : "down"}" style="height:${Math.max(4, Math.round((Math.abs(s.ret) / mx) * 56))}px"></i><small>${Number(s.season.slice(5))}월${s.now ? "·지금" : ""}</small></div>`).join("")}</div>
+    ${list.length < 2 ? `<p class="hint" style="margin:6px 0 0">시즌이 끝날 때마다 한 칸씩 쌓여요.</p>` : ""}`;
+}
+function chartBlock() {
+  const per = ui.invPeriod || "1m";
+  const seg = [["1d", "1일"], ["1w", "1주"], ["1m", "1개월"], ["1y", "1년"]].map(([v, t]) => `<button class="${per === v ? "on" : ""}" data-act="inv-period" data-v="${v}">${t}</button>`).join("");
+  let body;
+  if (per === "1y") body = seasonBars();
+  else {
+    const pts = invChartPoints(per);
+    body = pts.length >= 2 ? `${lineChart(pts)}<div class="inv-legend"><span><i class="me"></i>내 자산</span>${per !== "1d" ? `<span><i class="k"></i>코스피 (같은 비율로)</span>` : ""}<span><i class="base"></i>시작 금액</span></div>`
+      : `<p class="hint inv-empty">${invData.hist ? "거래일이 쌓이면 그래프가 그려져요." : "그래프를 불러오는 중…"}</p>`;
+  }
+  return `<div class="seg inv-seg" role="tablist">${seg}</div>${body}`;
+}
+
+// ── 화면 ──
+function lumiInvestLine() {
+  if (!inv.trades.some((t) => t.kind !== "bonus")) return "가상 1,000만 원이 들어왔어요! 오늘 힌트를 보고 첫 종목을 골라 볼까요?";
+  const best = Object.values(inv.hold).filter((h) => h.kind === "stock").map((h) => ({ h, r: (holdValue(h) / h.cost - 1) * 100 })).sort((a, b) => Math.abs(b.r) - Math.abs(a.r))[0];
+  if (best && Math.abs(best.r) >= 1) return `${esc(best.h.name)}${josa(best.h.name, "이", "가")} 산 뒤로 ${fmt(Math.abs(best.r), 1)}% ${best.r > 0 ? "올랐어요" : "내렸어요"}. 왜 그런지 오늘 힌트를 볼까요?`;
+  const g = invGroups();
+  if (g.현금 / invTotal() > 0.8) return "아직 현금이 많아요. 주식이 부담되면 채권이나 CMA에 조금 넣어 두는 방법도 있어요.";
+  return `${seasonLabel(inv.season)}이 ${seasonLeft()}일 남았어요. 같은 기간 코스피보다 잘하는 게 목표예요!`;
+}
+function rankBlock() {
+  if (!sync.on) return `<section class="card inv-rank"><div class="sec-title" style="margin:0"><h2>순위</h2><span>${seasonLabel(inv.season)}</span></div>
+      <div class="inv-lock">${mascot(36, "wave")}<p>구글로 로그인하면 같은 시즌 사람들과 순위를 겨뤄요. 로그인하지 않아도 게임과 배지는 그대로 할 수 있어요.</p></div>
+      <button class="btn ghost block" data-act="sync-start">구글로 로그인하고 순위 보기</button></section>`;
+  const R = invData.rank;
+  if (!R) return `<section class="card inv-rank"><div class="sec-title" style="margin:0"><h2>순위</h2><span>${seasonLabel(inv.season)}</span></div><p class="hint" style="margin:0">불러오는 중…</p></section>`;
+  if (R.error) return `<section class="card inv-rank"><div class="sec-title" style="margin:0"><h2>순위</h2><span>${seasonLabel(inv.season)}</span></div><p class="hint" style="margin:0">순위표를 아직 불러오지 못했어요. 잠시 후 다시 열어 주세요.</p></section>`;
+  const top = R.list.slice(0, 5), mx = Math.max(...R.list.map((x) => x.total), 1), mn = Math.min(...R.list.map((x) => x.total), INV_START) * 0.98;
+  const row = (x, i) => `<div class="rk ${i === R.me ? "me" : ""}"><b class="num">${i + 1}</b><span class="nm">${esc(x.nick || "익명")}${i === R.me ? " (나)" : ""}</span>
+      <span class="bar"><i style="width:${Math.max(6, Math.round(((x.total - mn) / (mx - mn || 1)) * 100))}%"></i></span><span class="num ${x.ret >= 0 ? "up" : "down"}">${x.ret > 0 ? "+" : ""}${fmt(x.ret, 1)}%</span></div>`;
+  return `<section class="card inv-rank"><div class="sec-title" style="margin:0"><h2>순위</h2><span>${seasonLabel(inv.season)} · ${R.n}명</span></div>
+    <p style="margin:0">로그인한 ${R.n}명 중 <b style="color:var(--green)">${R.me + 1}위</b>예요</p>
+    <div class="rk-list">${top.map(row).join("")}${R.me >= 5 ? `<div class="rk-gap">…</div>${row(R.list[R.me], R.me)}` : ""}</div></section>`;
+}
+function invSearchResults() {
+  const q = (ui.invQ || "").trim();
+  const ql = q.toLowerCase();
+  const rates = rateProducts().filter((p) => !q || p.name.toLowerCase().includes(ql) || p.words.some((w) => w.includes(ql) || ql.includes(w)));
+  if (!q) { // 검색 전: 많이 찾는 종목과 이자 상품을 칩으로 짧게
+    const chip = (k, t) => `<button class="chip small" data-act="inv-open" data-k="${esc(k)}">${esc(t)}</button>`;
+    return `<div class="inv-chips"><span class="hint">인기 주식</span>${INV_POP.map((n) => chip("stock:" + n, n)).join("")}</div>
+      <div class="inv-chips"><span class="hint">채권·예금</span>${rates.map((p) => chip("rate:" + p.id, `${p.name.replace(/ \(.*\)$/, "")} ${fmt(p.rate, 1)}%`)).join("")}</div>`;
+  }
+  const stocks = ui.invRes || [];
+  const row = (k, name, sub) => `<button class="inv-sr" data-act="inv-open" data-k="${esc(k)}"><span><b>${esc(name)}</b><small class="hint">${sub}</small></span><span class="inv-buy">사기</span></button>`;
+  return `${stocks.map((s) => row("stock:" + s.name, s.name, `주식${s.market ? " · " + esc(s.market) : ""}`)).join("")}
+    ${rates.map((p) => row("rate:" + p.id, p.name, `${p.group} · 연 ${fmt(p.rate, 2)}%${p.sample ? " (예시 금리)" : ""}`)).join("")}
+    ${ui.invSearching ? `<p class="hint">찾는 중…</p>` : !stocks.length && !rates.length ? `<p class="hint">찾는 종목이 없어요. 이름을 조금 다르게 적어 보세요.</p>` : ""}`;
+}
+function holdRow(h) {
+  const v = holdValue(h);
+  if (h.kind === "rate") {
+    const pr = rateById(h.id), principal = h.lots.reduce((s, l) => s + l.amt, 0);
+    return `<button class="inv-hold" data-act="inv-open" data-k="rate:${h.id}"><span class="dotc" style="background:${INV_COLORS[pr?.group || "예금·CMA"]}"></span>
+      <span class="hm"><b>${esc(h.name)}</b><small class="hint">연 ${fmt(h.lots[h.lots.length - 1].rate, 2)}% · 넣은 돈 ${won(principal)}</small></span>
+      <span class="hv"><b class="num">${won(v)}</b><small class="num up">+${won(v - principal)}</small></span></button>`;
+  }
+  const r = (v / h.cost - 1) * 100, P = invData.prices[h.name];
+  const lot = h.lots[h.lots.length - 1], rs = lot?.reason;
+  const dd = Math.floor((Date.now() - (lot?.at || 0)) / 86400e3);
+  const why = rs?.type === "hint" ? (dd >= rs.days ? "힌트 기간이 지났어요 · 팔면 평가" : `힌트 확인 D+${dd} / ${rs.days}일`) : rs?.text ? esc(rs.text.slice(0, 12)) : "";
+  return `<button class="inv-hold" data-act="inv-open" data-k="stock:${esc(h.name)}"><span class="dotc" style="background:${INV_COLORS.주식}"></span>
+    <span class="hm"><b>${esc(h.name)} <small class="hint">${fmt(h.qty)}주</small></b><small class="hint num">${P ? `시가 ${fmt(P.o)} · 종가 ${fmt(P.v)}` : "가격 불러오는 중"}${why ? ` · ${why}` : ""}</small></span>
+    <span class="hv"><b class="num">${won(v)}</b><small class="num ${tone(r)}">${r > 0 ? "+" : ""}${fmt(r, 2)}%</small></span></button>`;
+}
+function donut(groups, total) {
+  let acc = 0;
+  const stops = Object.entries(groups).filter(([, v]) => v > 0).map(([g, v]) => { const a = acc; acc += (v / total) * 100; return `${INV_COLORS[g]} ${a.toFixed(2)}% ${acc.toFixed(2)}%`; });
+  return `<div class="inv-donut" style="background:conic-gradient(${stops.join(",") || "#D2D6DD 0 100%"})"><span><small>투자 비중</small><b class="num">${fmt(Math.round(((total - groups.현금) / total) * 100))}%</b></span></div>`;
+}
+function evalCard(e, full) {
+  const h = e.hint;
+  return `<div class="inv-eval">
+    <div class="sec-title" style="margin:0"><h3>${esc(e.name)}</h3><span>${e.seasonEnd ? "시즌 끝 평가" : `${e.heldDays}일 갖고 있다가 팜`}</span></div>
+    <div class="ev-grid">
+      <span class="hint">내 수익</span><b class="num ${tone(e.ret)}">${e.ret > 0 ? "+" : ""}${fmt(e.ret, 2)}%</b>
+      <span class="hint">같은 기간 코스피</span><span class="num">${e.kret == null ? "-" : `${e.kret > 0 ? "+" : ""}${fmt(e.kret, 2)}%`}</span>
+      ${e.kret == null ? "" : `<span class="hint">시장보다</span><b class="num" style="color:var(--green)">${e.ret - e.kret >= 0 ? "+" : ""}${fmt(e.ret - e.kret, 2)}%p ${e.ret - e.kret >= 0 ? "잘했어요" : "덜 올랐어요"}</b>`}
+      ${h ? `<span class="hint">고른 힌트 · ${DIR[h.dir]?.[0] || ""}</span><span>${h.early ? `<span class="badge b-flat">기간 전</span>` : h.ok ? `<span class="badge b-ok">방향 맞음</span>` : `<span class="badge b-no">방향 다름</span>`}</span>` : ""}
+      ${!h && e.reasonText ? `<span class="hint">내가 적은 이유</span><span>${esc(e.reasonText)}</span>` : ""}
+    </div>
+    <div class="lumi-says inv-says">${mascot(36, e.good ? "happy" : "wave")}<p class="bubble-onb">${esc(e.text)}${full && h ? `<br><small class="hint">힌트: ${esc(h.title)} (${daysText(h.days)})</small>` : ""}</p></div>
+  </div>`;
+}
+function viewInvest() {
+  rollSeason();
+  if (!invData.started) { invData.started = true; loadInvest(); }
+  const total = invTotal(), ret = invRet(), G = invGroups();
+  const holds = Object.values(inv.hold).sort((a, b) => holdValue(b) - holdValue(a));
+  const hints = invHints();
+  const bonusLeft = INV_BONUS.max - invBonusToday();
+  const badges = invBadgeList();
+  return `${tabHead("모의투자")}
+  <main class="scroll inv">
+    <div class="lumi-says inv-says">${mascot(44, ...lumiMood())}<p class="bubble-onb">${lumiInvestLine()}</p></div>
+
+    <section class="card inv-top">
+      <div class="sec-title" style="margin:0"><span class="hint">내 가상 자산</span><span class="badge b-flat">${seasonLabel(inv.season)} · D-${seasonLeft()}</span></div>
+      <div class="inv-total"><b class="num">${won(Math.round(total))}</b><span class="badge b-${tone(ret)}">${ret > 0 ? "+" : ""}${fmt(ret, 2)}%</span></div>
+      <p class="hint num" style="margin:0">현금 ${won(Math.round(inv.cash))} · 투자 ${won(Math.round(total - inv.cash))}${inv.bonusTotal ? ` · 퀴즈 보너스 +${won(inv.bonusTotal)}` : ""}${invData.sample ? ` <span class="badge b-sample">예시 데이터</span>` : ""}</p>
+      ${chartBlock()}
+    </section>
+
+    ${rankBlock()}
+
+    <section class="card inv-search">
+      <div class="searchbox inv-sbox">${SEARCH_ICON}<label for="inv-q" class="sr">주식·채권·예금 검색</label>
+        <input id="inv-q" type="search" autocomplete="off" placeholder="주식·채권·예금 검색 (예: 하이닉스, 국고채)" value="${esc(ui.invQ || "")}"></div>
+      <div id="inv-results">${invSearchResults()}</div>
+    </section>
+
+    <section class="card inv-hintbar">
+      <button class="inv-hint-open" data-act="inv-hints">${mascot(30)}<span><b>루미의 오늘 힌트</b><small class="hint">${invData.hints ? `${hints.length}개 · 경제 소식이 주가에 줄 수 있는 영향` : "만드는 중…"}</small></span><span class="plus" aria-hidden="true">+</span></button>
+    </section>
+
+    <section class="card">
+      <div class="sec-title" style="margin:0"><h2>내 포트폴리오</h2><span>${holds.length ? `${holds.length}개 상품` : "아직 없어요"}</span></div>
+      <div class="inv-mix">${donut(G, total)}
+        <div class="inv-leg">${Object.entries(G).map(([g, v]) => `<div><i style="background:${INV_COLORS[g]}"></i><span>${g}</span><b class="num">${fmt(Math.round((v / total) * 100))}%</b><small class="hint num">${invMan(v)}</small></div>`).join("")}</div>
+      </div>
+      ${holds.length ? `<div class="inv-holds">${holds.map(holdRow).join("")}</div>` : `<p class="hint" style="margin:0">위 검색창에서 주식이나 채권·예금을 찾아 담아 보세요.</p>`}
+    </section>
+
+    ${inv.evals.length ? `<section class="card"><div class="sec-title" style="margin:0"><h2>루미의 매매 평가</h2><span>팔 때 · 시즌 끝에</span></div>
+      ${inv.evals.slice(0, ui.invEvalAll ? 30 : 2).map((e) => evalCard(e)).join("")}
+      ${inv.evals.length > 2 ? `<button class="link-btn" data-act="inv-eval-all">${ui.invEvalAll ? "접기" : `평가 ${inv.evals.length}개 모두 보기`} ›</button>` : ""}</section>` : ""}
+
+    <button class="card inv-bonus" data-act="go-learn"><span>${bonusLeft > 0 ? `오늘의 미션을 끝내면 <b>+${invMan(INV_BONUS.mission)}</b>, 빠른 퀴즈 퍼펙트면 <b>+${invMan(INV_BONUS.perfect)}</b>` : "오늘 퀴즈 보너스를 다 받았어요!"}<small>오늘 받은 보너스 ${invMan(invBonusToday())} / ${invMan(INV_BONUS.max)}</small></span><b>퀴즈 ›</b></button>
+
+    <section class="card"><div class="sec-title" style="margin:0"><h2>모의투자 배지</h2><span>${badges.filter((b) => b.ok).length}/${badges.length}</span></div>
+      <div class="inv-badges">${badges.map((b) => `<div class="${b.ok ? "ok" : ""}" title="${esc(b.desc)}"><span>${b.icon}</span><b>${b.name}</b><small>${esc(b.desc)}</small></div>`).join("")}</div></section>
+
+    <p class="foot">가상 돈으로 하는 게임이에요. 주식은 가장 최근 종가(전일 종가)로 언제든 바로 사고팔고, 채권·예금·CMA는 금리만큼 날마다 이자가 붙는 단순한 방식이에요. 힌트와 평가는 투자 권유가 아닌 공부용 참고예요.</p>
+  </main>`;
+}
+// 힌트 팝업
+function modalInvHints() {
+  const hints = invHints();
+  const news = (data.news?.issues || []).slice(0, 3);
+  return `<div class="sec-title" style="margin:0"><h2>루미의 오늘 힌트</h2><span>참고용이에요</span></div>
+    ${hints.length ? hints.map((h) => `<div class="inv-hint">
+      <div class="r">${dirPill(h.dir)}<span class="hint">${daysText(h.days)}</span></div>
+      <b>${esc(h.title)}</b><p>${esc(h.text)}</p>
+      <div class="r"><span class="hint">근거 ${h.sources.map((s) => `<a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.title.slice(0, 24))}</a>`).join(" · ")}</span>
+        ${h.stocks.length ? `<span class="inv-hs">${h.stocks.map((s) => `<button class="chip small" data-act="inv-open" data-k="stock:${esc(s)}">${esc(s)}</button>`).join("")}</span>` : ""}</div>
+    </div>`).join("") : `<p class="hint">${invData.hints ? "오늘은 눈에 띄는 힌트가 없어요. 아래 큰 뉴스를 살펴보세요." : "힌트를 만드는 중이에요…"}</p>`}
+    ${news.length ? `<div class="inv-news"><b>오늘의 큰 뉴스</b><span class="hint">기사 제목 그대로예요 · 네이버 뉴스</span>
+      ${news.map((n) => `<a href="${esc(n.url)}" target="_blank" rel="noopener">${esc(n.title)} ${ICON.out}</a>`).join("")}</div>` : ""}
+    <p class="hint" style="margin:0">힌트는 정부 보도자료와 환율·지수 숫자로 만들어요. 사라·팔라는 뜻이 아니에요.</p>
+    <button class="btn ghost" data-act="modal-close">닫기</button>`;
+}
+// 사고팔기 팝업
+function modalInvTrade(m) {
+  const [kind, id] = [m.k.slice(0, m.k.indexOf(":")), m.k.slice(m.k.indexOf(":") + 1)];
+  const side = m.side || "buy";
+  if (kind === "rate") {
+    const pr = rateById(id), h = inv.hold[holdKey("rate", id)];
+    if (!pr) return "";
+    const v = h ? holdValue(h) : 0, principal = h ? h.lots.reduce((s, l) => s + l.amt, 0) : 0;
+    return `<div class="sec-title" style="margin:0"><h2>${esc(pr.name)}</h2><button class="icon-btn" data-act="modal-close" aria-label="닫기">${ICON.close}</button></div>
+      <div class="inv-q"><div class="r"><span class="hint">${pr.group} 금리 (1년 기준)</span><b class="num">연 ${fmt(pr.rate, 2)}%</b></div>
+        <p class="hint" style="margin:6px 0 0">${pr.group === "채권" ? "나라나 회사에 돈을 빌려주고 이자를 받는 거예요. 주식보다 덜 출렁여요." : "언제든 넣고 뺄 수 있는 이자 상품이에요."} 이 게임에서는 넣어 둔 날만큼 이자가 붙어요.${pr.sample ? " (예시 금리)" : ""}</p></div>
+      ${h ? `<div class="inv-q"><div class="r"><span class="hint">지금 가진 것</span><b class="num">${won(v)}</b></div><div class="r"><span class="hint">넣은 돈 · 붙은 이자</span><span class="num">${won(principal)} · +${won(v - principal)}</span></div></div>` : ""}
+      <div><label class="lb" for="inv-amt">넣을 금액 (만원)</label><input class="field num" id="inv-amt" inputmode="numeric" placeholder="예: 100" value="${m.amt ?? ""}"><p class="hint" style="margin:4px 0 0">넣을 수 있는 현금 ${won(Math.floor(inv.cash))}</p></div>
+      <button class="btn" data-act="inv-deposit" data-id="${id}">넣기</button>
+      ${h ? `<button class="btn ghost" data-act="inv-withdraw" data-id="${id}">전부 빼기 (${won(v)})</button>` : ""}`;
+  }
+  const name = id, P = invData.prices[name], Q = invData.quote[name], h = inv.hold[holdKey("stock", name)];
+  if (!P) {
+    loadQuote(name);
+    return `<div class="sec-title" style="margin:0"><h2>${esc(name)}</h2><button class="icon-btn" data-act="modal-close" aria-label="닫기">${ICON.close}</button></div>
+      <p class="hint">${Q?.missing ? "이 종목의 가격을 찾지 못했어요. 정확한 종목 이름으로 검색해 주세요." : "가격을 불러오는 중…"}</p>`;
+  }
+  const qty = Math.max(1, m.qty || 1), max = side === "buy" ? Math.floor(inv.cash / P.v) : h?.qty || 0;
+  const rel = invHints().filter((x) => x.dir).sort((a, b) => b.stocks.includes(name) - a.stocks.includes(name)).slice(0, 4);
+  const rs = m.reason || {};
+  const chip = (type, label, extra = "") => `<button class="chip ${rs.type === type && (type !== "hint" || rs.hintId === extra) ? "on" : ""}" data-act="inv-reason" data-t="${type}" data-h="${extra}">${label}</button>`;
+  return `<div class="sec-title" style="margin:0"><h2>${esc(name)}</h2><button class="icon-btn" data-act="modal-close" aria-label="닫기">${ICON.close}</button></div>
+    ${h ? `<div class="inv-seg"><button class="${side === "buy" ? "on" : ""}" data-act="inv-side" data-v="buy">사기</button><button class="${side === "sell" ? "on" : ""}" data-act="inv-side" data-v="sell">팔기 (${fmt(h.qty)}주)</button></div>` : ""}
+    <div class="inv-q">
+      <div class="r"><span class="hint">${ymdLabel(P.date)} 시가</span><span class="num">${fmt(P.o)}원</span></div>
+      <div class="r"><span class="hint">${ymdLabel(P.date)} 종가 · 이 값으로 바로 ${side === "buy" ? "사요" : "팔아요"}</span><b class="num">${fmt(P.v)}원</b></div>
+      <div class="r"><span class="hint">전날보다</span><span class="num ${tone(P.pct)}">${pct(P.pct)}</span></div>
+      ${P.sample || invData.sample ? `<span class="badge b-sample">예시 데이터</span>` : ""}
+    </div>
+    <div class="r"><b>수량</b><span class="inv-step"><button class="icon-btn" data-act="inv-qty" data-d="-1" aria-label="하나 빼기">−</button>
+      <input class="field num" id="inv-qty" inputmode="numeric" value="${qty}" aria-label="수량"><button class="icon-btn" data-act="inv-qty" data-d="1" aria-label="하나 더하기">+</button>
+      <button class="chip small" data-act="inv-max">최대 ${fmt(max)}</button></span></div>
+    <div class="r"><span class="hint">${side === "buy" ? "필요한 돈 · 남는 현금" : "받는 돈"}</span><span class="num" id="inv-cost">${side === "buy" ? `${won(qty * P.v)} · ${won(Math.max(0, inv.cash - qty * P.v))}` : won(qty * P.v)}</span></div>
+    ${side === "buy" ? `<div><b>왜 사나요?</b> <span class="hint">안 골라도 돼요</span>
+      <div class="chips" style="margin-top:8px">${rel.map((x) => chip("hint", esc(x.title), x.id)).join("")}${chip("mine", "내 판단")}${chip("etc", "기타")}</div>
+      ${rs.type === "mine" || rs.type === "etc" ? `<input class="field" id="inv-why" maxlength="40" style="margin-top:8px" placeholder="${rs.type === "etc" ? "이유를 직접 적어 주세요 (예: 이 회사 제품을 자주 써요)" : "어떻게 판단했는지 한 줄 (안 적어도 돼요)"}" value="${esc(rs.text || "")}">` : ""}</div>` : ""}
+    <button class="btn" data-act="inv-do">${fmt(qty)}주 ${side === "buy" ? "사기" : "팔기"}</button>`;
+}
+function modalInvEval(m) {
+  const e = inv.evals.find((x) => x.id === m.id);
+  if (!e) return "";
+  return `<div class="sec-title" style="margin:0"><h2>루미의 매매 평가</h2><span>참고용</span></div>${evalCard(e, true)}<button class="btn" data-act="modal-close">확인</button>`;
+}
+
+// ── 모의투자 누르기·입력 ──
+document.addEventListener("click", (e) => {
+  const el = e.target.closest("[data-act]");
+  if (!el || !el.dataset.act.startsWith("inv-")) return;
+  const act = el.dataset.act, m = ui.modal;
+  switch (act) {
+    case "inv-period": ui.invPeriod = el.dataset.v; render(); break;
+    case "inv-hints": openModal("inv-hints"); break;
+    case "inv-eval-all": ui.invEvalAll = !ui.invEvalAll; render(); break;
+    case "inv-open": {
+      const k = el.dataset.k;
+      ui.modal = { kind: "inv-trade", route: "invest", k, side: "buy", qty: 1, reason: null };
+      if (route() !== "invest") { ui.modal.route = routeKey(); }
+      render();
+      break;
+    }
+    case "inv-side": m.side = el.dataset.v; m.qty = 1; render(); break;
+    case "inv-qty": m.qty = Math.max(1, (parseInt(document.getElementById("inv-qty")?.value, 10) || 1) + Number(el.dataset.d)); render(); break;
+    case "inv-max": {
+      const name = m.k.slice(6), P = invData.prices[name];
+      const mx = m.side === "sell" ? inv.hold[holdKey("stock", name)]?.qty || 1 : Math.floor(inv.cash / (P?.v || 1));
+      m.qty = Math.max(1, mx); render(); break;
+    }
+    case "inv-reason": {
+      const t = el.dataset.t, text = document.getElementById("inv-why")?.value || m.reason?.text || "";
+      m.qty = parseInt(document.getElementById("inv-qty")?.value, 10) || m.qty;
+      m.reason = m.reason?.type === t && (t !== "hint" || m.reason.hintId === el.dataset.h) ? null : { type: t, hintId: el.dataset.h, text: t === "hint" ? "" : text };
+      render();
+      if (t !== "hint") document.getElementById("inv-why")?.focus();
+      break;
+    }
+    case "inv-do": {
+      const name = m.k.slice(6), qty = parseInt(document.getElementById("inv-qty")?.value, 10) || 0;
+      if (m.side === "sell") { sellStock(name, qty); break; }
+      let reason = { type: "none" };
+      if (m.reason?.type === "hint") { const h = hintById(m.reason.hintId); if (h) reason = { type: "hint", hintId: h.id, title: h.title, dir: h.dir, days: h.days }; }
+      else if (m.reason) {
+        const text = (document.getElementById("inv-why")?.value || "").trim().slice(0, 40);
+        if (m.reason.type === "etc" && !text) { toast("기타 이유를 적어 주세요"); break; }
+        reason = { type: m.reason.type, text };
+      }
+      buyStock(name, qty, reason);
+      break;
+    }
+    case "inv-deposit": depositRate(el.dataset.id, Math.round((parseFloat(document.getElementById("inv-amt")?.value) || 0) * 10000)); break;
+    case "inv-withdraw": withdrawRate(el.dataset.id); break;
+  }
+});
+let invTimer;
+document.addEventListener("input", (e) => {
+  const el = e.target;
+  if (el.id === "inv-q") {
+    ui.invQ = el.value;
+    const q = el.value.trim();
+    const paint = () => { const box = document.getElementById("inv-results"); if (box) box.innerHTML = invSearchResults(); };
+    clearTimeout(invTimer);
+    ui.invRes = []; ui.invSearching = q.length >= 1;
+    paint();
+    if (!q) return;
+    invTimer = setTimeout(async () => {
+      try { const j = await getJson(`/api/market?search=${encodeURIComponent(q)}`); if ((ui.invQ || "").trim() === q) ui.invRes = j.results || []; } catch { ui.invRes = []; }
+      ui.invSearching = false; paint();
+    }, 300);
+    return;
+  }
+  if (el.id === "inv-qty" && ui.modal?.kind === "inv-trade") {
+    const m = ui.modal, P = invData.prices[m.k.slice(6)], q = Math.max(0, parseInt(el.value, 10) || 0);
+    m.qty = q || 1;
+    const box = document.getElementById("inv-cost");
+    if (box && P) box.textContent = m.side === "buy" ? `${won(q * P.v)} · ${won(Math.max(0, inv.cash - q * P.v))}` : won(q * P.v);
+    const btn = document.querySelector('[data-act="inv-do"]');
+    if (btn) btn.textContent = `${fmt(q)}주 ${m.side === "buy" ? "사기" : "팔기"}`;
+  }
+  if (el.id === "inv-why" && ui.modal?.reason) ui.modal.reason.text = el.value;
+});
+
 // ───────────────────────── 라우팅 / 그리기 ─────────────────────────
 function route() {
   if (!profile) return "onboard";
   const h = location.hash.slice(1);
-  return ["my", "news", "schedule", "learn", "benefits", "risktest", "money", "assets", "ledger", "layout", "watch", "letters", "etc", "solved", "review", "quiz"].includes(h) ? h : "home";
+  return ["my", "news", "schedule", "learn", "invest", "benefits", "risktest", "money", "assets", "ledger", "layout", "watch", "letters", "etc", "solved", "review", "quiz"].includes(h) ? h : "home";
 }
 function render() {
   const r = route();
   const app = document.getElementById("app");
   const y = window.scrollY;
   const focusId = document.activeElement?.id;
-  app.innerHTML = ({ onboard: viewOnboard, my: viewMy, news: viewNews, schedule: viewSchedule, learn: viewLearn, benefits: viewBenefits, risktest: viewRiskTest, money: viewLedger, ledger: viewLedger, assets: viewAssets, layout: viewLayout, watch: viewWatch, letters: viewLetters, etc: viewEtc, solved: viewSolved, review: viewReview, quiz: viewQuizPage }[r] || viewHome)()
-    + (r !== "onboard" ? tabBar(r) : "")
+  app.innerHTML = ({ onboard: viewOnboard, my: viewMy, news: viewNews, schedule: viewSchedule, learn: viewLearn, invest: viewInvest, benefits: viewBenefits, risktest: viewRiskTest, money: viewLedger, ledger: viewLedger, assets: viewAssets, layout: viewLayout, watch: viewWatch, letters: viewLetters, etc: viewEtc, solved: viewSolved, review: viewReview, quiz: viewQuizPage }[r] || viewHome)()
+    + (r !== "onboard" && !LEARN_POP.includes(r) ? tabBar(r) : "")
     + (ui.drawer && r !== "onboard" ? viewDrawer() : "")
     + viewModal()
     + (ui.openAd && r !== "onboard" ? viewOpenAd() : "");
@@ -4774,14 +5528,15 @@ document.addEventListener("click", async (e) => {
         if (!cur.review) m.xp += XP_LV[cur.lv];
         if (m.combo >= 2) { m.lastBonus = 5; m.bonus += 5; m.xp += 5; learnState.bonus = (learnState.bonus || 0) + 5; }
       } else m.combo = 0;
-      if (m.i === m.qs.length - 1 && m.ok === m.qs.length) learnState.perfect = true;
+      if (m.i === m.qs.length - 1 && m.ok === m.qs.length) { learnState.perfect = true; const b = invBonus(INV_BONUS.perfect, "빠른 퀴즈 퍼펙트"); if (b) setTimeout(() => toast(b), 1600); }
       saveLearn(); markAttend(); checkProgress(); render();
       break;
     }
     case "qq-next": { const m = ui.qp; if (!m) break; if (m.i + 1 < m.qs.length) { m.i++; m.picked = null; } else m.done = true; render(); break; }
     case "quiz-open": openQuizPage("quiz", { id: el.dataset.id, lv: Number(el.dataset.lv || 0) }); break;
     case "quiz-next": { const c = conceptById(el.dataset.id); if (c && ui.qp && !mastered(c)) ui.qp.lv = curLv(c); render(); break; }
-    case "go-learn": go("#learn"); break;
+    case "go-learn": if (!LEARN_POP.includes(route())) ui.learnFrom = route(); go("#learn"); break;
+    case "learn-close": { const f = ui.learnFrom; ui.learnFrom = null; go(f && f !== "home" ? "#" + f : "#home"); break; }
     case "ledger-tab": ui.ledgerTab = el.dataset.v; render(); window.scrollTo(0, 0); break;
     case "asset-tab": ui.assetTab = el.dataset.v; render(); window.scrollTo(0, 0); break;
     case "assets-edit": openModal("assets", { draft: assetDraft() }); break;
@@ -5071,7 +5826,7 @@ document.addEventListener("click", async (e) => {
     case "wipe":
       if (confirm(sync.on ? "이 기기와 구글 계정에 저장된 내 정보를 모두 지우고 연결도 끊을까요? 되돌릴 수 없어요." : "이 기기에 저장된 내 정보를 모두 지울까요? 되돌릴 수 없어요.")) {
         await deleteRemote();
-        try { [STORE_KEY, UI_KEY, LEARN_KEY, LEDGER_KEY, AI_KEY, LAST_KEY].forEach((k) => localStorage.removeItem(k)); } catch {}
+        try { [STORE_KEY, UI_KEY, LEARN_KEY, LEDGER_KEY, AI_KEY, LAST_KEY, INV_KEY].forEach((k) => localStorage.removeItem(k)); } catch {}
         ledger.tx = []; ledger.uploads = {}; ledger.fixed = []; ledger.cats = { added: [], hidden: [] }; learnState.answers = {}; learnState.notes = {}; learnState.days = {}; learnState.today = null;
         profile = null; ui.onb = { step: 0, draft: null }; location.hash = ""; render();
       }
