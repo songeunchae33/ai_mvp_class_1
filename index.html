@@ -462,6 +462,13 @@
   .hot-list { display: flex; flex-direction: column; }
   .hot-item { display: flex; align-items: center; gap: 10px; min-height: 44px; border: none; background: transparent; border-top: 1px solid #EEF1F8; text-align: left; cursor: pointer; padding: 0; font-size: 15px; }
   .hot-item:first-child { border-top: none; }
+  .hot-row { display: flex; flex-direction: column; border-top: 1px solid #EEF1F8; }
+  .hot-row:first-child { border-top: none; }
+  .hot-row .hot-item { border-top: none; }
+  .hot-quiz { align-self: flex-end; margin: 0 0 8px; min-height: 36px; padding: 0 14px; border: none; border-radius: 12px; background: var(--mint); color: var(--green); font-size: 13px; font-weight: 700; cursor: pointer; }
+  .hot-quiz.done { background: transparent; color: var(--sub); }
+  .mode-pick { display: flex; flex-direction: column; gap: 4px; text-align: left; cursor: pointer; border: 1px solid var(--line); }
+  .mode-pick b { font-size: 17px; }
   .hot-rank { width: 24px; height: 24px; border-radius: 50%; flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; font-family: 'Jua', sans-serif; font-size: 14px; color: #fff; background: linear-gradient(135deg, #7C96FF, #FF9EBB); }
   .hot-t { flex: 1; font-weight: 600; }
   .more-btn { width: 100%; min-height: 44px; border: none; border-top: 1px solid #EEF1F8; background: transparent; color: var(--green); font-size: 13px; font-weight: 700; cursor: pointer; }
@@ -1109,9 +1116,6 @@
   .inv-eval h3 { margin: 0; font-size: 15px; }
   .ev-grid { display: grid; grid-template-columns: 1fr auto; gap: 6px 12px; background: var(--soft); border-radius: 12px; padding: 12px; font-size: 14px; }
   .ev-grid > :nth-child(even) { text-align: right; }
-  .inv-bonus { display: flex; justify-content: space-between; align-items: center; gap: 10px; width: 100%; text-align: left; cursor: pointer; background: var(--mint) !important; border-color: var(--mint) !important; color: var(--green); font-size: 14px; line-height: 20px; }
-  .inv-bonus > b { white-space: nowrap; }
-  .inv-bonus small { display: block; font-size: 12px; opacity: 0.85; margin-top: 2px; }
   .inv-badges { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
   .inv-badges div { display: flex; flex-direction: column; align-items: center; gap: 2px; text-align: center; background: var(--soft); border-radius: 12px; padding: 10px 6px; filter: grayscale(1); opacity: 0.55; }
   .inv-badges div.ok { filter: none; opacity: 1; background: var(--mint); }
@@ -1143,6 +1147,7 @@
   .mix-leg { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 12px; font-size: 13px; }
   .mix-leg div { display: grid; grid-template-columns: 10px 1fr auto; align-items: center; gap: 6px; }
   .mix-leg i { width: 10px; height: 10px; border-radius: 3px; } .mix-leg small { grid-column: 2 / 4; margin-top: -4px; }
+  .mix-cmp { margin: 0; padding: 10px 12px; border-radius: 12px; background: var(--soft); font-size: 14px; font-weight: 600; line-height: 20px; }
   .inv-mixmini { display: flex; justify-content: space-between; align-items: center; gap: 10px; width: 100%; text-align: left; cursor: pointer; }
   .inv-mixmini > span:first-child { display: flex; flex-direction: column; gap: 2px; } .inv-mixmini b { font-size: 16px; }
   .inv-mixmini .plus { font-size: 18px; color: var(--green); display: inline-flex; align-items: center; justify-content: center; }
@@ -1380,6 +1385,10 @@ const LETTERS = [
 ];
 const INCOME = ["", "~3천만원", "3천~5천만원", "5천~7,500만원", "7,500만원~"];
 const INCOME_MONTHLY = [0, 210, 330, 520, 750]; // 구간별 대략 월 소득(만원), 비상금 진단용
+// 월 소득(만원): 자산 입력의 월 소득(가계부 고정 수입 월급과 이어짐) → 없으면 연 소득 구간으로 대략
+function incomeMonthly(p = profile) { return Number(p?.monthlyIncome) > 0 ? Number(p.monthlyIncome) : INCOME_MONTHLY[p?.income || 0] || 0; }
+// 가계부 고정 수입 가운데 월급 (분류가 급여·수입이거나 이름에 월급·급여)
+function salaryFixed() { return ledger.fixed.find((f) => f.dir === "in" && (f.cat === "급여·수입" || /월급|급여/.test(f.name))) || null; }
 // 위험기피 점수(1=위험 괜찮음 … 10=절대 싫음) → 금융투자협회 5단계 투자성향 이름
 function riskType(a) {
   if (a >= 9) return "안정형";
@@ -1496,7 +1505,7 @@ async function loadAll(manual = false) {
     getJson(`/api/news?full=1&q=${encodeURIComponent("환율")}`).then((j) => (data.fxNews = j.sample ? [] : j.items || [])).catch(() => {}),
   ];
   if (!data.calendar.length) jobs.push(getJson("/data/calendar.json").then((j) => (data.calendar = j.events || [])).catch(() => {}));
-  if (!data.learn) jobs.push(getJson("/data/learn.json").then((j) => (data.learn = j)).catch(() => {}));
+  if (!data.learn) jobs.push(getJson("/data/learn.json").then((j) => (data.learn = withBasics(j))).catch(() => {}));
   jobs.push(loadBenefits());
   if (!data.rates) jobs.push(getJson("/api/rates").then((j) => (data.rates = j)).catch(() => {}));
   await Promise.all(jobs);
@@ -1580,8 +1589,9 @@ function impacts() {
   const rateSoon = rateEvent && dayDiff(rateEvent.d) <= 7 ? 2 : 0;
   const when = rateEvent ? `${rateEvent.d.getMonth() + 1}/${rateEvent.d.getDate()} ${isBok ? "금통위" : "FOMC"}` : "다음 금리 결정";
   const rateSrc = isBok ? ["한국은행 기준금리 추이", "https://www.bok.or.kr/portal/singl/baseRate/list.do?dataSeCd=01&menuNo=200643"] : ["미국 연준 FOMC 일정", "https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm"];
-  if (p.debts === null) {
-    out.push({ tag: "금리", tone: "flat", text: "대출이 있다면 알려주세요. 금리가 바뀔 때 내 이자가 얼마나 달라지는지 계산해드려요.", kind: "rate", score: 1 + rateSoon, num: "금리 일정: 한국은행·연준 발표", src: rateSrc });
+  if (p.debts === null) { // 대출은 묻지 않는다. 내 돈 '자산'에서 직접 넣을 때까지 일반 설명만
+    const text = p.assets.cash ? `${when}에서 금리가 0.25%p 바뀌면, 예금 ${man(p.assets.cash)}의 1년 이자가 약 ${won(p.assets.cash * 1e4 * 0.0025)} 달라질 수 있어요.` : `${rateEvent ? `${when}에 기준금리가 정해져요. ` : ""}금리가 오르면 예금 이자는 늘고, 대출 이자는 커져요.`;
+    out.push({ tag: rateEvent ? `금리 · ${when}` : "금리", tone: "flat", text, kind: "rate", score: 1 + rateSoon, num: p.assets.cash ? "예금: 내가 입력한 금액" : "금리 일정: 한국은행·연준 발표", src: rateSrc });
   } else {
     const variable = p.debts.filter((d) => d.kind === "변동").reduce((s, d) => s + (Number(d.amount) || 0), 0);
     let text;
@@ -1648,10 +1658,9 @@ function bubbleLines() {
 
 function nextQuestion() {
   const p = profile, s = p.skipped || {};
-  if (p.debts === null && !s.debts) return "debts";
   if (!p.region?.sido && !s.region) return "region";
   if (!p.status && !s.status) return "status";
-  if (!p.income && !s.income) return "income";
+  if (!p.income && !p.monthlyIncome && !s.income) return "income";
   if (p.assets.cash === null && !s.cash) return "cash";
   if (!p.payday && !s.payday) return "payday";
   if (!p.gender && !s.gender) return "gender";
@@ -1873,26 +1882,25 @@ function quizBox(c, lv, dark, mini = false, today = false) {
         : !ans.ok ? `<button class="link-btn" style="padding-left:0;align-self:flex-start" data-act="retry" data-id="${c.id}" data-lv="${lv}">다시 풀기 ›</button>`
         : hasNext && curLv(c) === lv + 1 ? `<button class="btn" data-act="quiz-next" data-id="${c.id}">더 어려운 ${LV_NAME[lv + 1]} 풀기 ›</button>` : ""}` : ""}`;
 }
-// 오늘의 퀴즈: 하루에 한 문제를 정해두고(아직 다 못 푼 개념의 지금 단계), 답한 뒤 '옮겨둘게요'를 누르면 사라진다
+// 오늘의 퀴즈: 요즘 화제 TOP 5(정부 보도자료)에 이어지는 경제 기초 문제를 하루에 하나 정해 둔다. 답한 뒤 '옮겨둘게요'를 누르면 사라진다
+// 화제 자료가 없으면 아직 안 푼 경제 기초 문제를 날짜 순서대로. 예전 기록(수업 자료 문제)으로 정해진 날은 그대로 둔다
 function todayQuiz() {
-  const list = data.learn?.concepts || [];
+  const list = basicList();
   if (!list.length) return null;
   const day = ymd(today0());
   let T = learnState.today;
-  // 요즘 보도자료에 많이 나온 개념 (아직 다 못 푼 것 중)
-  const hot = data.trending?.available ? list.filter((c) => !mastered(c) && (data.trending.counts?.[c.id] || 0) > 0)
-    .sort((a, b) => data.trending.counts[b.id] - data.trending.counts[a.id])[0] : null;
-  // 아침에 화제 자료가 늦게 오면, 아직 안 푼 오늘 문제는 화제 개념으로 바꾼다
+  const ev = hotEvents().map((e) => ({ e, c: basicFor(e) })).find((x) => x.c && !mastered(x.c));
+  // 아침에 화제 자료가 늦게 오면, 아직 안 푼 오늘 문제는 화제 문제로 바꾼다
   const untouched = T && T.day === day && !T.hot && !qa(conceptById(T.id) || {}, T.lv) && !T.dismissed;
-  if (!T || T.day !== day || !conceptById(T.id) || (hot && untouched && hot.id !== T.id)) {
-    let c = hot;
+  if (!T || T.day !== day || !conceptById(T.id) || (ev && untouched && ev.c.id !== T.id)) {
+    let c = ev?.c;
     if (!c) {
       const pool = list.filter((x) => !mastered(x));
       if (!pool.length) return null;
       const dayIdx = Math.floor((today0() - new Date(2026, 0, 1)) / 86400e3);
       c = pool[((dayIdx % pool.length) + pool.length) % pool.length];
     }
-    T = learnState.today = { day, id: c.id, lv: curLv(c), hot: !!hot && c === hot, word: hot && c === hot ? c.term : "" };
+    T = learnState.today = { day, id: c.id, lv: curLv(c), hot: !!ev, word: ev ? ev.e.title : "" };
     saveLearn();
   }
   return { c: conceptById(T.id), lv: T.lv };
@@ -1991,7 +1999,7 @@ function checkProgress() {
   initGame();
   const msgs = [];
   const day = ymd(today0());
-  if (todayCount() >= MISSION && learnState.missionDay !== day) { learnState.missionDay = day; learnState.bonus = (learnState.bonus || 0) + MISSION_XP; msgs.push(`오늘의 미션 완료! +${MISSION_XP} XP`); const b = invBonus(INV_BONUS.mission, "오늘의 미션"); if (b) msgs.push(b); }
+  if (todayCount() >= MISSION && learnState.missionDay !== day) { learnState.missionDay = day; learnState.bonus = (learnState.bonus || 0) + MISSION_XP; msgs.push(`오늘의 미션 완료! +${MISSION_XP} XP`); }
   const lv = levelOf(xpTotal());
   if (lv > (learnState.seenLevel || 1)) { learnState.seenLevel = lv; msgs.push(`🎉 레벨 업! Lv.${lv} ${titleOf(lv)}`); }
   for (const b of badgeList()) if (b.ok && !learnState.badges[b.id]) { learnState.badges[b.id] = Date.now(); msgs.push(`배지 획득 ${b.icon} ${b.name}`); }
@@ -2017,6 +2025,16 @@ function islandOpen(catId, n) { for (let k = 1; k < n; k++) if (!islandDone(catI
 function pickQuick() {
   const L = data.learn;
   const cand = [];
+  // 경제 기초면 경제 기초 문제에서만 (요즘 화제 문제 먼저)
+  if (learnMode() !== "exam") {
+    const hot = new Set(hotEvents().map(basicFor).filter(Boolean).map((c) => c.id));
+    const pool = basicList();
+    const out = pool.filter((c) => !mastered(c)).map((c) => ({ id: c.id, lv: 0, w: (isWrong(c) ? 0 : 2) + (hot.has(c.id) ? 0 : 1) + Math.random() }))
+      .sort((a, b) => a.w - b.w).slice(0, 5).map(({ id, lv }) => ({ id, lv }));
+    const done = pool.filter(mastered).sort(() => Math.random() - 0.5);
+    while (out.length < 5 && done.length) out.push({ id: done.pop().id, lv: 0, review: true });
+    return out;
+  }
   for (const cat of L.categories) {
     const list = stageConcepts(cat.id);
     list.forEach((c, i) => { const st = nodeState(list, i); if (st !== "locked" && st !== "done") cand.push({ id: c.id, lv: curLv(c), w: st === "wrong" ? 0 : Math.random() + 1 }); });
@@ -2053,6 +2071,17 @@ function modalConcept(m) {
   const c = conceptById(m.id);
   if (!c) return "";
   const done = mastered(c);
+  if (c.cat === "basic") {
+    // 경제 기초: 이 문제와 이어진 요즘 화제를 위에 보여주고, 다음은 아직 안 푼 다른 화제 문제
+    const ev = hotEvents().find((e) => basicFor(e)?.id === c.id || c.words.includes(e.word));
+    const next = hotEvents().map(basicFor).find((x) => x && x.id !== c.id && !mastered(x)) || basicList().find((x) => x.id !== c.id && !mastered(x));
+    const ans = qa(c, 0);
+    return `<div class="sec-title" style="margin:0"><h2>${esc(c.term)}</h2><span class="tagc">경제 기초</span></div>
+      ${ev ? `<p class="hint" style="margin:0">요즘 화제 · ${esc(ev.title)}</p>` : ""}
+      <div class="c-quiz">${quizBox(c, 0, false)}</div>
+      <div class="inline">${ans ? `<button class="btn ghost" data-act="qp-back" style="flex:1">공부로</button>${next ? `<button class="btn" data-act="concept-open" data-id="${next.id}" style="flex:2">다음 문제 ›</button>` : ""}`
+        : `<button class="btn ghost" data-act="note-toggle" data-id="${c.id}" style="flex:1">${learnState.notes[c.id] ? "★ 노트에서 빼기" : "☆ 노트에 담기"}</button><button class="btn ghost" data-act="qp-back" style="flex:1">공부로</button>`}</div>`;
+  }
   if (isSingle(c)) {
     // 섬 안의 개념: 문제를 먼저 풀고, 답한 뒤 해설. '다음 문제'는 같은 섬의 다음 개념
     const list = islandConcepts(c.cat, c.island), k = list.indexOf(c), next = list[k + 1];
@@ -2108,7 +2137,54 @@ function viewQuizPage() {
     ${body ? `<section class="card form qpage">${body}</section>` : `<section class="card"><p class="hint" style="margin:0 0 10px">풀던 문제가 없어요. 공부에서 문제를 골라 주세요.</p><button class="btn" data-act="go-learn">공부로 가기</button></section>`}
   </main>`;
 }
-function catName(id) { return data.learn?.categories.find((c) => c.id === id)?.name || ""; }
+function catName(id) { return id === "basic" ? "경제 기초" : data.learn?.categories.find((c) => c.id === id)?.name || ""; }
+
+// ── 경제 기초 퀴즈: 요즘 화제(정부 보도자료 TOP 5)의 낱말마다 쉬운 객관식 문제 ──
+// words: /api/trending 의 화제 낱말(event.word)이나 보도자료 제목에 이 말이 있으면 이 문제를 낸다. 정답은 보기 첫 번째로 적고, 화면에서는 자리를 돌린다
+const BASIC_Q = [
+  [["금리", "대출", "가계부채", "국채"], "기준금리", "한국은행이 기준금리를 올리면 보통 어떤 일이 생길까요?", ["예금·대출 이자가 함께 오르는 편이다", "대출 이자만 내려간다", "물가가 바로 두 배가 된다", "주식 거래 수수료가 없어진다"], "기준금리는 돈의 기본 가격이에요. 오르면 은행 예금·대출 금리도 따라 오르는 편이라, 저축하는 사람은 이자를 더 받고 돈을 빌린 사람은 이자 부담이 커져요."],
+  [["물가", "소비", "농산물"], "물가와 인플레이션", "물가가 오른다(인플레이션)는 것은 무슨 뜻일까요?", ["같은 돈으로 살 수 있는 물건이 줄어든다", "돈의 가치가 올라간다", "월급이 자동으로 오른다", "은행 이자가 사라진다"], "물건값이 전반적으로 오르면 만 원으로 살 수 있는 양이 줄어요. 그래서 물가가 오르면 돈의 가치는 떨어진다고 말해요."],
+  [["환율", "외환"], "원/달러 환율", "원/달러 환율이 1,300원에서 1,400원으로 오르면 어떻게 될까요?", ["해외여행·해외직구가 더 비싸진다", "달러가 더 싸진 것이다", "원화 가치가 올라간 것이다", "수입품 가격이 내려간다"], "1달러를 사는 데 원화가 더 많이 들게 됐으니 원화 가치는 떨어진 거예요. 그래서 달러로 값을 내는 여행·직구·수입품이 비싸져요."],
+  [["수출", "조선업", "자동차", "철강", "석유화학", "바이오", "방산"], "수출과 경기", "우리나라 수출이 크게 늘면 보통 생기는 일로 알맞은 것은?", ["기업 이익과 일자리가 늘어 경기에 도움이 된다", "외국에서 사 오는 물건이 늘어난다", "무역수지가 반드시 적자가 된다", "환율이 무조건 두 배로 오른다"], "수출이 늘면 해외에서 번 돈이 들어와 기업 실적·투자·고용에 도움이 돼요. 수출은 우리 경제에서 큰 몫을 차지해서 수출 소식이 경기의 신호로 자주 쓰여요."],
+  [["수입", "무역"], "무역수지", "무역수지 흑자란 무엇일까요?", ["수출한 금액이 수입한 금액보다 많은 것", "수입한 금액이 수출보다 많은 것", "정부가 세금을 많이 걷은 것", "주가가 많이 오른 것"], "나라 밖으로 판 돈(수출)에서 사 온 돈(수입)을 뺀 것이 무역수지예요. 판 게 더 많으면 흑자, 사 온 게 더 많으면 적자예요."],
+  [["관세"], "관세", "다른 나라가 우리 물건에 매기는 관세를 높이면 어떻게 될까요?", ["우리 물건이 그 나라에서 더 비싸져 덜 팔릴 수 있다", "우리 물건이 그 나라에서 더 싸진다", "우리나라가 걷는 세금이 줄어든다", "환율이 그 나라에서 정해진다"], "관세는 수입품에 붙는 세금이에요. 관세가 오르면 그 나라에서 우리 물건값이 비싸져 판매가 줄 수 있어서, 수출 기업에 부담이 돼요."],
+  [["FTA", "무역"], "자유무역협정(FTA)", "두 나라가 FTA(자유무역협정)를 맺으면 보통 어떻게 될까요?", ["두 나라 사이 관세 같은 무역 장벽이 낮아진다", "두 나라가 같은 화폐를 쓴다", "두 나라 사이 수출이 금지된다", "여권 없이 오갈 수 있다"], "FTA는 서로 관세를 낮추거나 없애 물건을 사고팔기 쉽게 하는 약속이에요. 서비스·투자 분야까지 넓히면 관광·콘텐츠 같은 서비스 시장 문도 열려요."],
+  [["반도체", "AI"], "반도체와 AI", "AI가 커지면서 우리나라 반도체 수출이 늘어난 까닭으로 알맞은 것은?", ["AI 계산에 고성능 메모리 반도체가 많이 필요해서", "반도체 가격이 법으로 정해져서", "AI가 반도체를 대신 만들어서", "다른 나라가 반도체 수입을 금지해서"], "AI 서버는 많은 데이터를 빠르게 처리해야 해서 고성능 메모리가 많이 들어가요. 한국은 메모리 반도체를 잘 만드는 나라라 AI 붐이 수출 증가로 이어졌어요."],
+  [["AI", "디지털", "플랫폼", "스타트업"], "AI와 생산성", "공장에 AI를 도입하면 기대하는 효과(생산성 향상)는 무엇일까요?", ["같은 시간에 더 많이, 더 정확하게 만들 수 있다", "전기를 전혀 쓰지 않게 된다", "회사가 세금을 내지 않게 된다", "물건값이 무조건 오른다"], "생산성은 같은 사람·시간으로 얼마나 많이 만들어 내는지예요. AI로 불량을 줄이고 일을 자동화하면 생산성이 올라 비용이 줄고 경쟁력이 커져요."],
+  [["에너지", "원전", "배터리", "전기차", "탈탄소"], "전기화와 탈탄소", "탄소를 줄이려고 '전기화'를 늘린다는 말의 뜻은 무엇일까요?", ["석유·가스 대신 전기로 움직이는 설비·차를 늘린다", "전기 요금을 없앤다", "전기를 다른 나라에 팔지 않는다", "석탄 발전을 늘린다"], "자동차·난방·공장 설비를 석유·가스 대신 전기로 돌리고, 그 전기를 깨끗한 에너지로 만들면 탄소가 줄어요. 그래서 전기차·배터리·청정에너지 산업이 함께 커져요."],
+  [["유가", "물류"], "국제 유가", "국제 유가가 크게 오르면 어떤 일이 생길까요?", ["기름값·운송비가 올라 물가에 부담이 된다", "휘발유가 싸진다", "우리나라 수입액이 줄어든다", "금리가 0이 된다"], "우리나라는 석유를 거의 다 수입해요. 유가가 오르면 기름값·운송비·원재료비가 함께 올라 여러 물건값이 오르기 쉬워요."],
+  [["부동산", "청약"], "주택청약", "주택청약통장은 무엇을 위한 통장일까요?", ["새로 짓는 아파트 분양을 신청할 자격을 쌓는 통장", "주식을 사고파는 통장", "외화를 모으는 통장", "대출을 갚는 전용 통장"], "청약통장에 꾸준히 넣은 기간과 금액이 새 아파트 분양에 신청할 자격과 순위가 돼요. 청년은 우대 금리를 주는 상품도 있어요."],
+  [["전세", "부동산"], "전세", "전세에 대한 설명으로 맞는 것은?", ["큰 보증금을 맡기고 월세 없이 살다가 나갈 때 돌려받는다", "매달 집값의 절반을 낸다", "집을 사는 것과 같다", "보증금 없이 들어가 산다"], "전세는 목돈을 보증금으로 맡기고 매달 월세를 내지 않는 방식이에요. 나갈 때 보증금을 돌려받아야 해서, 계약 전에 집에 걸린 빚을 꼭 확인해요."],
+  [["일자리", "고용", "청년"], "실업률", "실업률은 무엇의 비율일까요?", ["일하려는 사람 가운데 일자리를 구하지 못한 사람", "전체 국민 가운데 학생", "일하는 사람 가운데 공무원", "전체 국민 가운데 은퇴한 사람"], "실업률은 일할 뜻이 있는 사람(경제활동인구) 중 일자리가 없는 사람의 비율이에요. 일자리를 찾지 않는 사람은 계산에서 빠져요."],
+  [["최저임금"], "최저임금", "최저임금이란 무엇일까요?", ["법으로 정한, 일한 사람에게 줘야 하는 가장 낮은 시간당 임금", "회사가 줄 수 있는 가장 높은 월급", "내야 하는 가장 적은 세금", "은행 대출의 가장 낮은 금리"], "최저임금은 해마다 최저임금위원회가 정하고, 아르바이트도 이보다 적게 받으면 안 돼요."],
+  [["소상공인", "중소기업", "벤처"], "소상공인 정책자금", "정부가 소상공인·중소기업에 낮은 이자로 돈을 빌려주는 까닭으로 알맞은 것은?", ["은행에서 돈 빌리기 어려운 작은 기업의 버팀목이 되려고", "대기업만 키우려고", "세금을 없애려고", "수출을 막으려고"], "작은 가게·기업은 담보나 신용이 부족해 은행 대출이 어렵기 쉬워요. 정책자금은 이런 곳이 버티고 성장하도록 돕는 장치예요."],
+  [["예산", "추경", "국채"], "추가경정예산", "추경(추가경정예산)이란 무엇일까요?", ["한 해 예산을 정한 뒤 필요할 때 더 짜는 예산", "다음 해 예산", "세금을 돌려주는 제도", "한국은행이 돈을 찍어 내는 것"], "나라 예산은 미리 정하지만, 경기가 크게 나빠지거나 재난이 생기면 국회 승인을 받아 예산을 더 짜요. 이것이 추경이에요."],
+  [["세금", "세제"], "연말정산", "직장인의 연말정산은 무엇일까요?", ["1년 동안 월급에서 미리 뗀 세금을 실제 낼 세금과 맞춰 돌려받거나 더 내는 것", "새해 첫 월급", "통장 정리", "카드값을 한 번에 갚는 것"], "회사는 월급에서 세금을 미리 떼요. 연말에 카드 사용·보험료 같은 공제를 반영해 실제 세금을 다시 계산하고, 많이 뗐으면 돌려받아요."],
+  [["증시", "코스피", "밸류업"], "코스피 지수", "코스피 지수는 무엇일까요?", ["유가증권시장에 상장된 회사들의 주가를 모아 계산한 지수", "한 회사의 주가", "원/달러 환율", "한국은행 기준금리"], "코스피는 시장 전체 분위기를 한 숫자로 보여줘요. 코스피가 올랐다는 건 상장 회사들 주가가 전반적으로 올랐다는 뜻이에요."],
+  [["배당", "밸류업"], "배당", "배당이란 무엇일까요?", ["회사가 번 이익 일부를 주주에게 나눠 주는 것", "회사가 주식을 새로 찍는 것", "회사가 은행에서 빌린 돈", "주식을 팔 때 내는 세금"], "주식을 가진 사람(주주)은 회사의 주인 중 하나라서, 회사가 이익을 내면 그 일부를 배당으로 받을 수 있어요."],
+  [["연금", "건강보험", "저출생"], "국민연금과 고령화", "저출생·고령화가 국민연금에 부담이 되는 까닭은 무엇일까요?", ["보험료를 내는 사람은 줄고 연금을 받는 사람은 늘어서", "국민연금이 주식이라서", "은행 이자가 0이라서", "외국인만 연금을 받아서"], "국민연금은 일하는 세대가 낸 보험료로 굴러가는 몫이 커요. 아이는 적게 태어나고 오래 사는 사람이 많아지면 내는 쪽보다 받는 쪽이 커져요."],
+  [["가상자산", "스테이블코인"], "스테이블코인", "스테이블코인은 무엇일까요?", ["달러 같은 화폐 가치에 맞춰 값이 거의 일정하도록 만든 가상자산", "값이 매일 두 배가 되는 코인", "한국은행이 발행하는 원화", "주식의 한 종류"], "스테이블코인은 1코인 = 1달러처럼 값을 묶어 두려고 같은 금액의 돈·국채를 준비해 둬요. 그래서 송금·결제에 쓰려는 움직임이 있어요."],
+  [["관광"], "관광과 여행수지", "외국인 관광객이 한국에 와서 쓰는 돈은 어떻게 볼까요?", ["우리나라가 서비스를 팔아 돈이 들어오는 것", "우리나라가 물건을 사 오는 것(수입)", "정부가 걷는 세금", "어디에도 잡히지 않는다"], "외국인이 국내에서 숙박·쇼핑에 쓰는 돈은 서비스 수출처럼 들어오는 돈(여행수지 수입)이에요. 반대로 우리가 해외여행에서 쓰는 돈은 나가는 돈이에요."],
+  [["공급망", "물류"], "공급망", "'공급망이 흔들린다'는 말은 무슨 뜻일까요?", ["원료·부품이 제때 오지 않아 생산이 막힐 수 있다는 것", "가게들이 한꺼번에 문을 닫는 것", "인터넷이 끊기는 것", "세금이 오르는 것"], "물건 하나를 만드는 데 여러 나라의 원료·부품이 쓰여요. 한 곳이 막히면 생산이 늦어지고 값이 오를 수 있어서 공급망을 여러 곳으로 나눠요."],
+  [["농산물"], "농산물 수출", "농산물 수출이 늘면 농가에 좋은 점은 무엇일까요?", ["국내 말고도 팔 곳이 늘어 소득이 안정된다", "농산물 값이 법으로 고정된다", "농가가 세금을 내지 않게 된다", "외국 농산물 수입이 금지된다"], "국내에서 값이 떨어져도 해외에 팔 수 있으면 농가 소득이 덜 흔들려요. K-푸드 인기로 과일·김 같은 품목 수출이 늘고 있어요."],
+  [["소비", "내수"], "내수", "경제 뉴스의 '내수'는 무엇을 말할까요?", ["나라 안에서 사람·기업이 쓰는 소비와 투자", "해외로 파는 수출", "외국인이 사들인 주식", "정부가 빌린 돈"], "내수는 국내에서 쓰는 돈이에요. 수출이 좋아도 내수가 약하면 동네 가게·서비스업은 어려울 수 있어요."],
+];
+const BASICS = BASIC_Q.map(([words, term, q, choices, ex], i) => {
+  const r = i % 4, rot = [...choices.slice(r), ...choices.slice(0, r)]; // 정답 자리를 돌린다
+  return { id: "basic-" + (i + 1), cat: "basic", words, term, quiz: { type: "mc", q, choices: rot, a: (choices.length - r) % choices.length, ex } };
+});
+function withBasics(j) { if (j && !j.concepts.some((c) => c.cat === "basic")) j.concepts.push(...BASICS.map((b) => ({ ...b }))); return j; }
+function basicList() { return (data.learn?.concepts || []).filter((c) => c.cat === "basic"); }
+function hotEvents() { return data.trending?.available ? data.trending.events || [] : []; }
+// 화제 하나에 이어지는 경제 기초 문제 (안 푼 것 먼저)
+function basicFor(ev) {
+  const hit = basicList().filter((b) => b.words.includes(ev.word) || b.words.some((w) => w.length > 1 && ev.title.includes(w)))
+    .sort((a, b) => fit(b) - fit(a)); // 제목에 대표 낱말이 들어간 문제 → 화제 낱말이 대표 낱말인 문제 먼저
+  function fit(b) { return (ev.title.includes(b.words[0]) ? 4 : 0) + (b.words[0] === ev.word ? 2 : 0) + (b.words.includes(ev.word) ? 1 : 0); }
+  return hit.find((b) => !mastered(b)) || hit[0] || null;
+}
+// 공부 방법: basic(경제 기초 · 요즘 화제) / exam(시험 공부 · 수업 자료 4과목). 처음엔 정하지 않음
+function learnMode() { return learnState.mode || null; }
 
 function homeBlocks() {
   const m = data.market;
@@ -2159,12 +2235,13 @@ function homeBlocks() {
     </section>`;
 
   const tq = todayQuiz();
-  // 오늘의 퀴즈 + 를 누르면 경제 공부 전체(미션·빠른 퀴즈·탈출 지도·섬·노트)가 전체 화면 팝업으로 열린다
+  // 오늘의 퀴즈(요즘 화제에 이어지는 경제 기초 문제). + 를 누르면 경제 공부 탭으로
   const quizBlock = todayQuizShown(tq) ? `<section class="quiz" id="h-quiz">
-      <button class="quiz-head" data-act="go-learn" aria-label="경제 공부 전체 보기"><span class="hand">${quizLabel(tq.c)} · ${learnState.today?.hot ? "요즘 보도자료에 많이 나온 말" : esc(catName(tq.c.cat))}</span><span class="qplus">+ 전체</span></button>
+      <button class="quiz-head" data-act="go-learn" aria-label="경제 공부 전체 보기"><span class="hand">${quizLabel(tq.c)} · ${esc(catName(tq.c.cat))}</span><span class="qplus">+ 전체</span></button>
+      ${learnState.today?.hot && learnState.today.word ? `<p class="hint" style="margin:0">요즘 화제 · ${esc(learnState.today.word)}</p>` : ""}
       ${quizBox(tq.c, tq.lv, true, true, true)}
     </section>` : `<section class="quiz" id="h-quiz">
-      <button class="quiz-head" data-act="go-learn" aria-label="경제 공부 전체 보기"><span class="hand">경제 공부 · 미션 · 빠른 퀴즈 · 탈출 지도</span><span class="qplus">+</span></button>
+      <button class="quiz-head" data-act="go-learn" aria-label="경제 공부 전체 보기"><span class="hand">경제 공부 · 요즘 화제 퀴즈 · 미션</span><span class="qplus">+</span></button>
     </section>`;
 
   const nq = nextQuestion();
@@ -2179,7 +2256,7 @@ function homeBlocks() {
           <div class="dots" aria-hidden="true">${lines.map((_, i) => `<span class="dot ${i === ui.bubble ? "on" : ""}"></span>`).join("")}</div>
           <div style="display:flex">
             ${line.act ? `<button class="link-btn" data-act="${line.act}">${line.label || "질문하기"} ›</button>` : ""}
-            ${lines.length > 1 ? `<button class="link-btn" data-act="next-line" ${line.act ? 'style="color:var(--sub)"' : ""}>${ui.bubble < lines.length - 1 ? "다음" : "처음으로"} ›</button>` : ""}
+            ${lines.length > 1 ? `<button class="link-btn" data-act="next-line" ${line.act ? 'style="color:var(--sub)"' : ""} aria-label="루미의 다른 말 보기 (화면은 그대로)">루미 다음 말 ›</button>` : ""}
           </div>
         </div>
       </div>
@@ -2990,7 +3067,7 @@ function viewAssets() {
 // 자산·부채 고치기 팝업 (저장을 누를 때만 반영)
 function assetDraft() {
   const p = profile, a = p.assets;
-  return { cash: a.cash, invest: a.invest, other: a.other, payday: p.payday ?? null, debts: (p.debts || []).map((d) => ({ ...d })) };
+  return { cash: a.cash, invest: a.invest, other: a.other, payday: p.payday ?? null, monthlyIncome: p.monthlyIncome ?? null, extraIncome: p.extraIncome ?? null, debts: (p.debts || []).map((d) => ({ ...d })) };
 }
 function syncAssetDraft() {
   const D = ui.modal?.draft;
@@ -2998,6 +3075,7 @@ function syncAssetDraft() {
   const int = (id) => { const n = parseInt(String(document.getElementById(id)?.value ?? "").replace(/[^0-9]/g, ""), 10); return Number.isFinite(n) ? n : null; };
   D.cash = int("a-cash"); D.invest = int("a-invest"); D.other = int("a-other");
   const pd = int("a-payday"); D.payday = pd >= 1 && pd <= 31 ? pd : null;
+  D.monthlyIncome = int("a-minc"); D.extraIncome = int("a-xinc");
   D.debts.forEach((d, i) => {
     d.name = (document.getElementById(`md-n-${i}`)?.value || "").trim().slice(0, 20);
     d.amount = int(`md-a-${i}`);
@@ -3012,6 +3090,9 @@ function modalAssets(m) {
   return `<div class="sec-title" style="margin:0"><h2>내 자산·부채</h2><span>대략적인 금액도 괜찮아요</span></div>
     <div class="modal-scroll">
       <div class="grid2">${f("a-cash", "예금·현금", D.cash, "만원")}${f("a-invest", "주식·펀드 등 투자", D.invest, "만원")}${f("a-other", "기타 (보증금 등)", D.other, "만원")}${f("a-payday", "월급날", D.payday, "일")}</div>
+      <span class="lb" style="margin-top:6px">소득</span>
+      <div class="grid2">${f("a-minc", "월 소득 (매달 들어오는 돈)", D.monthlyIncome, "만원")}${f("a-xinc", "비정기 소득 (1년에 대략)", D.extraIncome, "만원")}</div>
+      <p class="hint" style="margin:0">${salaryFixed() ? `월 소득은 가계부 고정 수입 ‘${esc(salaryFixed().name)}’과 이어져 있어요.` : "알바·상여·용돈처럼 들쑥날쑥한 돈은 비정기 소득에 1년치를 대략 적어요. 가계부 고정 수입에 월급을 넣으면 월 소득도 같이 채워져요."}</p>
       <span class="lb" style="margin-top:6px">부채</span>
       ${D.debts.map((d, i) => `<div class="debt">
         <div class="inline"><label for="md-n-${i}" class="sr">대출 이름</label><input class="field" id="md-n-${i}" placeholder="대출 이름 (예: 신용대출)" value="${esc(d.name || "")}">
@@ -3410,14 +3491,14 @@ function analysisHtml() {
   if (!list.length) return `<section class="card" id="sec-analysis">
       <div class="sec-title"><h2>소비 분석</h2><span>최근 30일</span></div>
       <div class="ans" style="display:flex;gap:10px">${mascot(40, "curious")}<p style="margin:0;font-size:14px;line-height:1.7">최근 30일 가계부 기록이 없어요. 가계부에 쓴 돈과 들어온 돈을 기록하면, 내 자산에 비해 소비가 괜찮은지 분석해 드릴게요.</p></div>
-      <button class="btn" style="margin-top:12px" data-act="nav" data-route="ledger" data-target="m-capture">가계부에 기록하러 가기</button>
+      <div class="inline" style="margin-top:12px"><button class="btn ghost" style="flex:1" data-act="fb-need-ledger">루미에게 피드백 받기</button><button class="btn" style="flex:1" data-act="nav" data-route="ledger" data-target="m-capture">가계부에 기록하기</button></div>
     </section>${foot}`;
   const sum = (arr) => arr.reduce((s2, x) => s2 + x.amount, 0);
   const outs = list.filter((x) => x.dir === "out");
   const refund = sum(list.filter((x) => x.dir === "in" && x.cat !== "급여·수입"));
   const spend = Math.max(0, sum(outs) - refund);
   const incomeRec = sum(list.filter((x) => x.dir === "in" && x.cat === "급여·수입"));
-  const incomeEst = p.income ? INCOME_MONTHLY[p.income] * 1e4 : 0;
+  const incomeEst = incomeMonthly(p) * 1e4;
   const income = incomeRec || incomeEst;
   const first = list.reduce((m, x) => (x.date < m ? x.date : m), B);
   const span = Math.round((t - new Date(first + "T00:00:00")) / 86400e3) + 1;
@@ -3731,7 +3812,9 @@ function viewLearn() {
   if (ui.learnStage && L.categories.some((c) => c.id === ui.learnStage)) return viewStage(ui.learnStage);
   const xp = xpTotal(), lv = levelOf(xp), inLv = xp % LEVEL_XP;
   const solved = solvedEntries();
-  const totalQ = L.concepts.reduce((n, c) => n + quizzesOf(c).length, 0);
+  const mode = learnMode();
+  const inMode = (c) => (mode === "exam" ? c.cat !== "basic" : c.cat === "basic");
+  const totalQ = L.concepts.filter(inMode).reduce((n, c) => n + quizzesOf(c).length, 0);
   const wrong = L.concepts.filter(isWrong);
   const att = attendRate();
   const todayN = Math.min(MISSION, todayCount());
@@ -3741,8 +3824,28 @@ function viewLearn() {
   const evs = T?.available ? T.events || [] : [];
   const hotBlock = evs.length ? `<section class="card" id="l-hot">
       <div class="sec-title"><h2>요즘 화제 TOP 5</h2><span>최근 ${data.trending?.days || 3}일 정부 보도자료</span></div>
-      <div class="hot-list">${evs.map((e, i) => `<a class="hot-item" href="${esc(e.url)}" target="_blank" rel="noopener"><span class="hot-rank">${i + 1}</span><span class="hot-t">${esc(e.title)}<small class="hint">#${esc(e.word)} · 관련 보도자료 ${e.count}건</small></span>${ICON.out}</a>`).join("")}</div>
+      <div class="hot-list">${evs.map((e, i) => {
+        const q = mode === "basic" ? basicFor(e) : null;
+        return `<div class="hot-row"><a class="hot-item" href="${esc(e.url)}" target="_blank" rel="noopener"><span class="hot-rank">${i + 1}</span><span class="hot-t">${esc(e.title)}<small class="hint">#${esc(e.word)} · 관련 보도자료 ${e.count}건</small></span>${ICON.out}</a>${q ? `<button class="hot-quiz ${mastered(q) ? "done" : ""}" data-act="concept-open" data-id="${q.id}" aria-label="${esc(e.title)} 관련 퀴즈 풀기">${mastered(q) ? "✓ 풀었어요" : "이 화제로 퀴즈 ›"}</button>` : ""}</div>`;
+      }).join("")}</div>
     </section>` : "";
+  const hub = `<section class="hub">
+      ${[["news", "", "뉴스 쉽게 풀이", "오늘의 경제를 쉬운 말로"], ["letters", "", "뉴스레터", "구독 관리·붙여넣기 풀이"], ["watch", "", "관심 종목", "추가·순서·보유 수량"]]
+        .map(([r, t, n, d]) => `<button class="hub-item" data-act="nav" data-route="${r}" data-target="${t}"><b>${n}</b><span>${d}</span></button>`).join("")}
+    </section>`;
+  const modeSeg = `<div class="sortbar seg2" role="tablist" aria-label="공부 방법">
+      <button class="${mode === "basic" ? "on" : ""}" role="tab" aria-selected="${mode === "basic"}" data-act="learn-mode" data-v="basic">경제 기초</button>
+      <button class="${mode === "exam" ? "on" : ""}" role="tab" aria-selected="${mode === "exam"}" data-act="learn-mode" data-v="exam">시험 공부</button>
+    </div>`;
+  // 처음 열면 공부 방법부터 고른다
+  if (!mode) return `${learnHead()}
+  <main class="scroll">
+    ${lumiSays("어떤 공부를 할까요? 고른 건 위에서 언제든 바꿀 수 있어요.", "lookup", "flat")}
+    <button class="card mode-pick" data-act="learn-mode" data-v="basic"><b>경제 기초 정보 습득</b><span class="hint">반도체 수출·FTA처럼 요즘 화제 뉴스로 쉬운 경제 퀴즈를 풀어요.</span></button>
+    <button class="card mode-pick" data-act="learn-mode" data-v="exam"><b>시험 공부 목적</b><span class="hint">국제금융·금융경제·베이지안 거시금융·투자운용사 수업 자료로 탈출 지도와 섬 문제를 풀어요.</span></button>
+    ${hotBlock}
+    ${hub}
+  </main>`;
   const stages = L.categories.map((cat) => {
     const list = stageConcepts(cat.id);
     const done = list.filter(mastered).length;
@@ -3760,11 +3863,8 @@ function viewLearn() {
   }).join("");
   return `${learnHead()}
   <main class="scroll">
-    ${hotBlock}
-    <section class="hub">
-      ${[["news", "", "뉴스 쉽게 풀이", "오늘의 경제를 쉬운 말로"], ["letters", "", "뉴스레터", "구독 관리·붙여넣기 풀이"], ["watch", "", "관심 종목", "추가·순서·보유 수량"]]
-        .map(([r, t, n, d]) => `<button class="hub-item" data-act="nav" data-route="${r}" data-target="${t}"><b>${n}</b><span>${d}</span></button>`).join("")}
-    </section>
+    ${modeSeg}
+    ${mode === "basic" ? hotBlock + hub : ""}
     <section class="card lv-card">
       ${mascot(64, lv >= 5 ? "confident" : "happy", "")}
       <div class="lv-main">
@@ -3779,15 +3879,17 @@ function viewLearn() {
       <div class="msn-dots">${Array.from({ length: MISSION }, (_, k) => `<i class="${k < todayN ? "on" : ""}"></i>`).join("")}</div>
       <button class="btn block" data-act="qq-start">⚡ 빠른 퀴즈 도전 (5문제)</button>
     </section>
-    ${todayQuizShown(tq) ? `<section class="quiz"><span class="hand" style="font-size:14px;color:var(--sub)">${quizLabel(tq.c)} · ${esc(tq.c.term)}${lvName(tq.c, tq.lv) ? ` · ${lvName(tq.c, tq.lv)}` : ""}</span>${quizBox(tq.c, tq.lv, true, false, true)}</section>` : ""}
+    ${mode === "basic" && todayQuizShown(tq) ? `<section class="quiz"><span class="hand" style="font-size:14px;color:var(--sub)">${quizLabel(tq.c)} · ${esc(tq.c.term)}</span>${quizBox(tq.c, tq.lv, true, false, true)}</section>` : ""}
     <section class="card stats">
       <button data-act="nav" data-route="solved"><b class="num">${solved.length}<small>/${totalQ}</small></b><span>푼 문제 ›</span></button>
       <div><b class="num">${att.pct}%</b><span>출석률 · ${att.n}/${att.of}일</span></div>
       <button data-act="nav" data-route="review"><b class="num" style="color:${wrong.length ? "var(--up)" : "inherit"}">${wrong.length}</b><span>복습할 문제 ›</span></button>
     </section>
-    <div class="sec-title" style="margin:6px 2px 0" id="l-map"><h2 style="font-size:20px">탈출 지도</h2><button class="link-btn" data-act="notes-open">내 노트 ${Object.keys(learnState.notes).length} ›</button></div>
+    ${mode === "exam" ? `<div class="sec-title" style="margin:6px 2px 0" id="l-map"><h2 style="font-size:20px">탈출 지도</h2><button class="link-btn" data-act="notes-open">내 노트 ${Object.keys(learnState.notes).length} ›</button></div>
     <div class="stage-grid">${stages}</div>
-    <p class="foot">앞 개념의 1단계를 맞히면 다음 칸이 열리고, 틀리면 공룡이 한 칸 다가와요. 화제 TOP 5는 최근 3일 정부 보도자료 기준이에요(적은 날은 7일). 기록은 이 기기(연결하면 내 계정)에 저장돼요.</p>
+    ${hub}
+    <p class="foot">앞 개념의 1단계를 맞히면 다음 칸이 열리고, 틀리면 공룡이 한 칸 다가와요. 기록은 이 기기(연결하면 내 계정)에 저장돼요.</p>`
+    : `<p class="foot">경제 기초 퀴즈는 요즘 화제 TOP 5(최근 3일 정부 보도자료, 적은 날은 7일)에 이어지는 문제예요. 기록은 이 기기(연결하면 내 계정)에 저장돼요.</p>`}
   </main>`;
 }
 // 탈출 지도: 과목마다 다른 게임 그림(레트로 오락실·옛날 게임·블록 점프·겨울 숲)에서 아래에서 위로 올라가 공룡에게서 탈출한다.
@@ -4490,11 +4592,11 @@ function mySections() {
     diag.push(dr < 20 ? ["b-green", "부채", `자산 대비 부채가 ${fmt(dr)}%로 건전한 편이에요.`]
       : dr < 50 ? ["b-flat", "부채", `자산 대비 부채가 ${fmt(dr)}%예요. 금리가 오를 때 이자 부담을 같이 봐두세요.`]
       : ["b-up", "부채", `자산 대비 부채가 ${fmt(dr)}%로 높은 편이에요. 금리가 높은 대출부터 줄이는 걸 고민해 보세요.`]);
-    if (p.income) {
-      const need = INCOME_MONTHLY[p.income] * 3;
+    if (incomeMonthly(p)) {
+      const need = incomeMonthly(p) * 3;
       diag.push((Number(a.cash) || 0) >= need ? ["b-green", "비상금", `예금·현금이 월 소득 3개월치(약 ${man(need)}) 이상이라 비상금은 충분해요.`]
         : ["b-up", "비상금", `비상금은 보통 월 소득 3~6개월치를 권해요. 약 ${man(need)}을 목표로 잡아보세요.`]);
-    } else diag.push(["b-flat", "비상금", "소득 구간을 넣으면 비상금이 충분한지 알려드려요."]);
+    } else diag.push(["b-flat", "비상금", "‘편집’에서 월 소득을 넣으면 비상금이 충분한지 알려드려요."]);
     if (total) {
       const ir = ((Number(a.invest) || 0) / total) * 100;
       const [lo, hi] = investGuide(p.avert);
@@ -4732,7 +4834,7 @@ function viewOnboard() {
       <p class="hint" style="margin:0">나이는 받을 수 있는 청년 혜택·정책을 찾는 데만 써요. 이 기기에만 저장돼요.</p>
     </div>
     ${sync.on ? `<div class="card" style="padding:12px 14px;font-size:14px;line-height:1.6">✓ <b>${esc(sync.email || "구글 계정")}</b>과 연결돼 있어요. 아직 불러올 기록이 없었어요. 기록이 있는 기기에서 같은 계정으로 연결한 뒤 눌러 주세요.<br><button class="btn ghost" style="margin-top:8px;width:100%" data-act="sync-pull">기록 다시 불러오기</button></div>`
-      : `<button class="link-btn" style="align-self:flex-start;padding-left:0" data-act="sync-start">다른 기기에서 쓰던 기록이 있나요? 구글로 로그인해서 불러오기 ›</button>`}`;
+      : `<p class="hint" style="margin:0">구글로 로그인하면 다른 기기에서 쓰던 기록을 불러오고, 모의투자 순위도 볼 수 있어요. 로그인 없이도 모든 기능을 쓸 수 있어요.</p>`}`;
   if (st === 1) body = `
     ${lumiSays(`반가워요, ${esc(d.nickname || "")}님! 관심 있는 종목을 알려주면 매일 챙겨볼게요.`, "wave", "up")}
     <h1>관심 있는 종목을<br>골라주세요</h1>
@@ -4756,12 +4858,13 @@ function viewOnboard() {
       <span class="lb">구독 중인 뉴스레터가 있나요?</span>
       <div class="chips">${LETTERS.map((l) => `<button class="chip ${d.letters.includes(l.id) ? "on" : ""}" data-act="letter" data-v="${l.id}" aria-pressed="${d.letters.includes(l.id)}">${l.name} · ${l.by}</button>`).join("")}</div>
     </div>
-    <p class="hint" style="margin:0">자산·대출·소득은 홈에서 하나씩 천천히 여쭤볼게요.</p>`;
+    <p class="hint" style="margin:0">자산·소득은 홈에서 하나씩 천천히 여쭤볼게요.</p>`;
   const canNext = st === 0 ? d.nickname.trim() && d.age > 0 : true;
   return `<main class="onb">${steps}${body}
     <div style="margin-top:auto;display:flex;gap:8px">
       ${st > 0 ? `<button class="btn ghost block" style="flex:0 0 96px" data-act="onb-back">이전</button>` : ""}
-      <button class="btn block" data-act="onb-next" ${canNext ? "" : "disabled"}>${st === 2 ? "루미와 시작하기" : "다음"}</button>
+      ${st === 0 && !sync.on ? `<button class="btn ghost block" style="flex:1" data-act="sync-start">구글 로그인하기</button>` : ""}
+      <button class="btn block" style="flex:1" data-act="onb-next" ${canNext ? "" : "disabled"}>${st === 2 ? "루미와 시작하기" : st === 0 && !sync.on ? "로그인 없이 시작하기" : "다음"}</button>
     </div></main>`;
 }
 
@@ -4774,7 +4877,7 @@ function viewOnboard() {
 // 평가: 팔 때·시즌 끝에, 산 뒤 오른 비율을 같은 기간 루미지수(가상 시장 평균)와 비교하고, 고른 힌트의 방향·기간이 맞았는지 본다.
 const INV_KEY = "myeco.invest.v2";
 const INV_START = 10000000;
-const INV_BONUS = { mission: 300000, perfect: 200000, max: 500000, bomb: 1000000 }; // 퀴즈 보너스 하루 최대 50만 원, 폭탄주 찾기 100만 원
+const INV_BONUS = { bomb: 1000000 }; // 폭탄주 찾기 100만 원 (퀴즈 보너스는 없앰: 모두 같은 돈으로 겨룬다)
 function seasonKey(d = new Date()) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`; }
 function seasonLabel(k) { return `${Number(k.slice(5))}월 시즌`; }
 function seasonLeft() { const d = new Date(); return new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate() - d.getDate(); }
@@ -5020,21 +5123,7 @@ function evalLots(name, lots, price, idxNow, seasonEnd) {
     kret: kret == null ? null : Math.round(kret * 100) / 100, hint, reasonText, text, seasonEnd, good: !!(hint && !hint.rumor && hint.ok && beat) };
 }
 
-// ── 퀴즈 보너스 (하루 최대 50만 원) ──
-function invBonus(amt, label) {
-  rollSeason();
-  const day = ymd(today0());
-  if (inv.bonus.day !== day) inv.bonus = { day, amt: 0 };
-  const add = Math.min(amt, INV_BONUS.max - inv.bonus.amt);
-  if (add <= 0) return "";
-  inv.bonus.amt += add; inv.cash += add; inv.bonusTotal = (inv.bonusTotal || 0) + add;
-  inv.trades.unshift({ at: Date.now(), kind: "bonus", amt: add, label });
-  inv.badges.quiz = inv.badges.quiz || Date.now();
-  saveInv(); pushRank();
-  return `모의투자 +${invMan(add)} (${label})`;
-}
 function invMan(n) { n = Math.round(n || 0); return n < 1e4 ? won(n) : `${fmt(Math.round(n / 1e4))}만 원`; }
-function invBonusToday() { return inv.bonus.day === ymd(today0()) ? inv.bonus.amt : 0; }
 
 // ── 배지 ──
 function invBadgeList() {
@@ -5044,7 +5133,6 @@ function invBadgeList() {
     { id: "mix", icon: "🧺", name: "나눠 담기", desc: "주식·채권·예금 중 두 종류 이상을 함께 가졌어요", ok: !!inv.badges.mix || groups >= 2 },
     { id: "analyst", icon: "🔍", name: "분석왕", desc: "근거도 맞고 시장보다 잘한 매매 3번", ok: (inv.good || 0) >= 3 },
     { id: "bomb", icon: "💣", name: "폭탄 해체반", desc: "폭탄주를 터지기 전에 찾았어요", ok: !!inv.badges.bomb },
-    { id: "quiz", icon: "📚", name: "공부하는 투자자", desc: "퀴즈로 투자금 보너스를 받았어요", ok: !!inv.badges.quiz },
     { id: "season", icon: "🏁", name: "시즌 완주", desc: "한 시즌을 끝까지 했어요", ok: !!inv.badges.season },
     { id: "beat", icon: "🏆", name: "시장 이기기", desc: "한 시즌 수익률이 루미지수보다 높았어요", ok: !!inv.badges.beat },
   ];
@@ -5178,6 +5266,14 @@ const MIX_WHY = {
   적극투자형: "더 크게 불리려고 주식을 절반 넘게 담고, 나머지로 흔들림을 줄여요.",
   공격투자형: "크게 오르내려도 괜찮아서 주식을 대부분 담아요. 그만큼 크게 잃을 수도 있어요.",
 };
+// 지금 비율이 성향 예시보다 어디에 더·덜 담겼는지 한 줄로 (5%p 넘게 차이 나는 것만, 큰 순서로 둘)
+function mixCompare() {
+  const type = riskType(profile.avert), mix = INV_MIX[type], G = invGroups(), total = invTotal();
+  if (!inv.trades.some((t) => t.kind !== "bonus") || !total) return "";
+  const diffs = Object.keys(mix).map((g) => [g, Math.round((G[g] / total) * 100 - mix[g])]).filter(([, d]) => Math.abs(d) > 5).sort((a, b) => Math.abs(b[1]) - Math.abs(a[1])).slice(0, 2);
+  if (!diffs.length) return `${type} 예시 비율과 거의 비슷하게 나눠 담았어요.`;
+  return `${type} 예시보다 ${diffs.map(([g, d]) => `${g}에 ${Math.abs(d)}%p ${d > 0 ? "더" : "덜"}`).join(", ")} 담았어요.`;
+}
 function mixBlock() {
   const type = riskType(profile.avert), mix = INV_MIX[type], G = invGroups(), total = invTotal();
   const bar = (vals) => `<div class="mix-bar">${Object.entries(vals).filter(([, v]) => v > 0).map(([g, v]) => `<i style="width:${v}%;background:${INV_COLORS[g]}"></i>`).join("")}</div>`;
@@ -5186,10 +5282,11 @@ function mixBlock() {
   const canFill = need.some(([, v]) => v > 0) && inv.cash > 1e4;
   return `<section class="card inv-mixrec">
     <div class="sec-title" style="margin:0"><h2>내 성향에 맞는 나눠 담기</h2><span class="badge b-green">${type}</span></div>
-    <p class="hint" style="margin:0">${profile.riskTest ? `${profile.riskTest.date} 투자 성향 진단 결과 기준` : "첫 설문의 성향 기준이에요"} · 일반적인 참고 예시예요</p>
+    <p class="hint" style="margin:0">${profile.riskTest ? `${profile.riskTest.date} 투자 성향 진단 결과 기준` : "첫 설문의 성향 기준이에요"} · 정답이 아니라, 같은 성향에서 흔히 나누는 참고 비율이에요</p>
     <div class="mix-row"><span class="hint">예시</span>${bar(mix)}</div>
     <div class="mix-row"><span class="hint">지금</span>${bar(now)}</div>
     <div class="mix-leg">${Object.keys(mix).map((g) => `<div><i style="background:${INV_COLORS[g]}"></i><span>${g}</span><b class="num">${mix[g]}%</b><small class="hint num">지금 ${fmt(Math.round(now[g]))}%</small></div>`).join("")}</div>
+    ${mixCompare() ? `<p class="mix-cmp">${esc(mixCompare())}</p>` : ""}
     <div class="lumi-says inv-says">${mascot(36)}<p class="bubble-onb">${MIX_WHY[type]} 주식 ${mix.주식}%(약 ${invMan(total * mix.주식 / 100)})는 아래 가상 시장에서 직접 골라 보세요.</p></div>
     ${canFill ? `<button class="btn ghost block inv-fill" data-act="inv-fill">예시 비율만큼 채권·예금 담기<small>${need.filter(([, v]) => v > 0).map(([g, v]) => `${g} ${invMan(v)}`).join(" · ")}</small></button>` : ""}
     <button class="link-btn" data-act="inv-risktest" style="align-self:flex-start;padding-left:0">${profile.riskTest ? "투자 성향 진단 다시 받기 ›" : "7문항 투자 성향 진단 받기 ›"}</button>
@@ -5287,7 +5384,6 @@ function viewInvest() {
   const total = invTotal(), ret = invRet(), G = invGroups();
   const holds = Object.values(inv.hold).sort((a, b) => holdValue(b) - holdValue(a));
   const hints = invHints();
-  const bonusLeft = INV_BONUS.max - invBonusToday();
   const badges = invBadgeList();
   return `${tabHead("모의투자")}
   <main class="scroll inv">
@@ -5300,7 +5396,7 @@ function viewInvest() {
       ${chartBlock()}
     </section>
 
-    ${!inv.trades.some((t) => t.kind !== "bonus") || ui.invMixOpen ? mixBlock() : `<button class="card inv-mixmini" data-act="inv-mix"><span><b>내 성향에 맞는 나눠 담기</b><small class="hint">${riskType(profile.avert)} 예시 비율과 지금 비교하기</small></span><span class="plus" aria-hidden="true">+</span></button>`}
+    ${!inv.trades.some((t) => t.kind !== "bonus") || ui.invMixOpen ? mixBlock() : `<button class="card inv-mixmini" data-act="inv-mix"><span><b>내 성향에 맞는 나눠 담기</b><small class="hint">${esc(mixCompare() || `${riskType(profile.avert)} 예시 비율과 지금 비교하기`)}</small></span><span class="plus" aria-hidden="true">+</span></button>`}
 
     <section class="card inv-hintbar">
       <button class="inv-hint-open" data-act="inv-hints">${mascot(30)}<span><b>루미의 오늘 힌트</b><small class="hint">${invData.game ? `${hints.length}개 · 나에게만 고른 오늘의 소식` : "만드는 중…"}</small></span><span class="plus" aria-hidden="true">+</span></button>
@@ -5329,7 +5425,6 @@ function viewInvest() {
       ${inv.evals.slice(0, ui.invEvalAll ? 30 : 2).map((e) => evalCard(e)).join("")}
       ${inv.evals.length > 2 ? `<button class="link-btn" data-act="inv-eval-all">${ui.invEvalAll ? "접기" : `평가 ${inv.evals.length}개 모두 보기`} ›</button>` : ""}</section>` : ""}
 
-    <button class="card inv-bonus" data-act="go-learn"><span>${bonusLeft > 0 ? `오늘의 미션을 끝내면 <b>+${invMan(INV_BONUS.mission)}</b>, 빠른 퀴즈 퍼펙트면 <b>+${invMan(INV_BONUS.perfect)}</b>` : "오늘 퀴즈 보너스를 다 받았어요!"}<small>오늘 받은 보너스 ${invMan(invBonusToday())} / ${invMan(INV_BONUS.max)}</small></span><b>퀴즈 ›</b></button>
 
     <section class="card"><div class="sec-title" style="margin:0"><h2>모의투자 배지</h2><span>${badges.filter((b) => b.ok).length}/${badges.length}</span></div>
       <div class="inv-badges">${badges.map((b) => `<div class="${b.ok ? "ok" : ""}" title="${esc(b.desc)}"><span>${b.icon}</span><b>${b.name}</b><small>${esc(b.desc)}</small></div>`).join("")}</div></section>
@@ -5596,7 +5691,8 @@ document.addEventListener("click", async (e) => {
     case "island-close": ui.learnIsland = null; render(); window.scrollTo(0, 0); break;
     case "island-locked": toast("앞 섬의 문제를 모두 맞히면 열려요"); break;
     case "node-locked": toast("앞 개념의 1단계를 먼저 맞혀 보세요"); break;
-    case "concept-open": { const c = conceptById(el.dataset.id); if (c) openQuizPage("concept", { id: c.id, lv: mastered(c) ? 2 : curLv(c) }); break; }
+    case "concept-open": { const c = conceptById(el.dataset.id); if (c) openQuizPage("concept", { id: c.id, lv: Math.min(quizzesOf(c).length - 1, mastered(c) ? 2 : curLv(c)) }); break; }
+    case "learn-mode": learnState.mode = el.dataset.v; saveLearn(); render(); window.scrollTo(0, 0); break;
     case "qp-back": if (ui.qpPushed) { ui.qpPushed = false; history.back(); } else go("#learn"); break;
     case "badges-open": if (el.dataset.jump) { ui.q = ""; ui.searchOpen = false; } openModal("badges"); break;
     case "notes-open": if (el.dataset.jump) { ui.q = ""; ui.searchOpen = false; } openModal("notes"); break;
@@ -5614,7 +5710,7 @@ document.addEventListener("click", async (e) => {
         if (!cur.review) m.xp += XP_LV[cur.lv];
         if (m.combo >= 2) { m.lastBonus = 5; m.bonus += 5; m.xp += 5; learnState.bonus = (learnState.bonus || 0) + 5; }
       } else m.combo = 0;
-      if (m.i === m.qs.length - 1 && m.ok === m.qs.length) { learnState.perfect = true; const b = invBonus(INV_BONUS.perfect, "빠른 퀴즈 퍼펙트"); if (b) setTimeout(() => toast(b), 1600); }
+      if (m.i === m.qs.length - 1 && m.ok === m.qs.length) { learnState.perfect = true; }
       saveLearn(); markAttend(); checkProgress(); render();
       break;
     }
@@ -5629,11 +5725,13 @@ document.addEventListener("click", async (e) => {
     case "assets-edit": openModal("assets", { draft: assetDraft() }); break;
     case "asset-debt-add": syncAssetDraft(); ui.modal.draft.debts.push({ name: "", amount: null, rate: null, kind: "변동", day: null }); render(); break;
     case "asset-debt-rm": syncAssetDraft(); ui.modal.draft.debts.splice(Number(el.dataset.i), 1); render(); break;
+    case "fb-need-ledger": toast("가계부 입력을 먼저 해주셔야 정확한 결과를 볼 수 있어요!"); break;
     case "assets-save": {
       syncAssetDraft();
       const D = ui.modal.draft;
       profile.assets = { ...profile.assets, cash: D.cash, invest: D.invest, other: D.other };
       profile.payday = D.payday;
+      profile.monthlyIncome = D.monthlyIncome; profile.extraIncome = D.extraIncome;
       profile.debts = D.debts.filter((d) => d.name || d.amount);
       recordNet();
       saveProfile(); ui.modal = null; render(); toast("저장했어요");
@@ -5803,7 +5901,9 @@ document.addEventListener("click", async (e) => {
       if (f) Object.assign(f, v);
       else ledger.fixed.push({ id: "f" + Date.now().toString(36), ...v, start: ymd(today0()).slice(0, 7), made: {} });
       saveLedger(); applyFixed();
-      ui.modal = null; render(); toast(f ? "고쳤어요" : "추가했어요. 매달 자동으로 기록돼요");
+      const isSalary = v.dir === "in" && (v.cat === "급여·수입" || /월급|급여/.test(v.name));
+      if (isSalary) { profile.monthlyIncome = Math.round(v.amount / 1e4); profile.payday = v.day; saveProfile(); }
+      ui.modal = null; render(); toast((f ? "고쳤어요" : "추가했어요. 매달 자동으로 기록돼요") + (isSalary ? " · 자산의 월 소득·월급날에도 넣었어요" : ""));
       break;
     }
     case "fixed-rm":
