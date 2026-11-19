@@ -218,10 +218,20 @@ async function virtualMarket() {
   const index = days.map((d, i) => [d, Math.round((core.reduce((s, c) => s + series[c.id][i][2] / series[c.id][0][1], 0) / core.length) * 100000) / 100]);
   // 힌트 묶음: 오늘·어제 보도자료 소식 + 수상한 회사의 '소문'(근거 없음). 사람마다 이 중 몇 개를 무작위로 본다
   const pool = [];
+  const byTitle = new Map(); // 보도자료 하나가 여러 업종에 걸리면 힌트 하나로 합친다(업종·회사를 모아서)
   for (const d of [today, ymdAdd(today, -1)]) for (const sec of secs) for (const [j, n] of (news[`${sec}|${d}`] || []).slice(0, 2).entries()) {
     const cos = COMPANIES.filter((c) => c.sector === sec && !c.suspect).map((c) => c.id);
-    pool.push({ id: `n-${sec}-${d}-${j}`, kind: "news", sector: SECTORS[sec].name, dir: n.tone > 0 ? "up" : "down", days: 3 + Math.floor(seeded(d, sec, j) * 3),
-      title: n.title, stocks: cos.length ? cos : COMPANIES.filter((c) => c.sector === sec).map((c) => c.id), sources: [{ title: n.title, url: n.url, source: n.org || "정책브리핑" }] });
+    const stocks = cos.length ? cos : COMPANIES.filter((c) => c.sector === sec).map((c) => c.id);
+    const same = byTitle.get(n.title);
+    if (same) {
+      if (!same.sector.split(", ").includes(SECTORS[sec].name)) same.sector += `, ${SECTORS[sec].name}`;
+      for (const id of stocks) if (!same.stocks.includes(id)) same.stocks.push(id);
+      continue;
+    }
+    const h = { id: `n-${sec}-${d}-${j}`, kind: "news", sector: SECTORS[sec].name, dir: n.tone > 0 ? "up" : "down", days: 3 + Math.floor(seeded(d, sec, j) * 3),
+      title: n.title, stocks: [...stocks], sources: [{ title: n.title, url: n.url, source: n.org || "정책브리핑" }] };
+    byTitle.set(n.title, h);
+    pool.push(h);
   }
   if (sample) for (const sec of secs) if (S(sec, today) || S(sec, ymdAdd(today, -1))) {
     const v = S(sec, today) || S(sec, ymdAdd(today, -1));
