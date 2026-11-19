@@ -4874,7 +4874,7 @@ function viewOnboard() {
 // 같은 날이면 누구에게나 같은 값(순위가 공정하게). 수상한 두 회사 중 하나는 시즌마다 '폭탄주'(부실을 숨기고 오르다가 시즌 중간에 폭락).
 // 누구나 바로 시작: 시즌(한 달)마다 가상 1,000만 원. 하루 가격은 하나(오늘 종가)라 언제든 바로 사고판다.
 // 채권·예금·CMA는 게임 금리만큼 날마다 이자. 기록은 이 기기에, 로그인하면 계정에도(SYNC_DATA). 순위는 로그인한 사람끼리(Firestore invest/{시즌}/players/{uid}).
-// 평가: 팔 때·시즌 끝에, 산 뒤 오른 비율을 같은 기간 루미지수(가상 시장 평균)와 비교하고, 고른 힌트의 방향·기간이 맞았는지 본다.
+// 평가: 팔 때·시즌 끝에, 산 뒤 오른 비율을 같은 기간 코스피(가상 시장은 실제 코스피를 이틀 늦게 따라감, 못 받으면 루미지수)와 비교하고, 고른 힌트의 방향·기간이 맞았는지 본다.
 const INV_KEY = "myeco.invest.v2";
 const INV_START = 10000000;
 const INV_BONUS = { bomb: 1000000 }; // 폭탄주 찾기 100만 원 (퀴즈 보너스는 없앰: 모두 같은 돈으로 겨룬다)
@@ -4914,6 +4914,7 @@ function quote(id) { // 오늘 시가·종가와 어제보다
   return { date: d, o, v: c, pct: Math.round(((c - prev) / prev) * 10000) / 100 };
 }
 function invPrice(id) { return quote(id)?.v ?? inv.px[id] ?? null; }
+function idxName() { return invData.game?.indexName || inv.idxName || "코스피"; }
 function curIdx() { const I = invData.game?.index; return I?.length ? I[I.length - 1][1] : inv.lastIdx ?? null; }
 function lotValue(l, at = Date.now()) { return l.amt * (1 + (l.rate / 100) * Math.max(0, at - l.at) / (365 * 86400e3)); }
 function holdValue(h, at) {
@@ -4959,6 +4960,10 @@ async function loadInvest() {
     const g = await getJson("/api/market?game=1");
     invData.game = g;
     for (const c of g.companies) { const q = quote(c.id); if (q) inv.px[c.id] = q.v; }
+    if (g.indexName && inv.idxName !== g.indexName) { // 비교 지수가 바뀌면(루미지수 → 코스피) 예전 기준값은 버린다
+      inv.idxName = g.indexName; inv.idx0 = null;
+      for (const h of Object.values(inv.hold)) for (const l of h.lots || []) if (h.kind === "stock") l.idx = null;
+    }
     if (inv.idx0 == null && g.index?.length) inv.idx0 = g.index[0][1];
     inv.lastIdx = curIdx();
     settleBomb();
@@ -5095,7 +5100,7 @@ function afterTrade(msg, keepModal) {
   pushRank();
 }
 
-// ── 평가: 산 뒤 오른 비율 vs 같은 기간 루미지수, 고른 힌트의 방향·기간 ──
+// ── 평가: 산 뒤 오른 비율 vs 같은 기간 시장 지수(코스피), 고른 힌트의 방향·기간 ──
 function evalLots(name, lots, price, idxNow, seasonEnd) {
   const qty = lots.reduce((s, l) => s + l.qty, 0) || 1;
   const cost = lots.reduce((s, l) => s + l.qty * l.price, 0) || 1;
@@ -5118,7 +5123,7 @@ function evalLots(name, lots, price, idxNow, seasonEnd) {
   else if (hint && hint.early) text = `힌트 기간(${daysText(hint.days)})보다 일찍 정리해서 근거가 맞았는지는 아직 판단하기 어려워요. ${beat ? "그래도 시장보다는 잘했어요." : "시장보다는 덜 올랐어요."}`;
   else if (hint && hint.ok) text = beat ? "근거도 맞고 시장보다도 잘했어요!" : "근거는 맞았는데 시장 전체가 더 많이 움직였어요.";
   else if (hint) text = ret > 0 ? "힌트와 다르게 움직였지만 결과는 좋았어요. 다른 이유가 있었는지 살펴봐요." : "힌트와 반대로 움직였어요. 같은 기간 다른 소식이 있었는지 살펴봐요.";
-  else text = excess == null ? (ret >= 0 ? "벌었어요!" : "이번엔 잃었어요.") : beat ? "시장(루미지수)보다 잘했어요." : "이번엔 시장(루미지수)보다 덜 올랐어요.";
+  else text = excess == null ? (ret >= 0 ? "벌었어요!" : "이번엔 잃었어요.") : beat ? `시장(${idxName()})보다 잘했어요.` : `이번엔 시장(${idxName()})보다 덜 올랐어요.`;
   return { id: String(Date.now()) + Math.random().toString(36).slice(2, 5), at: Date.now(), name, qty, heldDays, ret: Math.round(ret * 100) / 100,
     kret: kret == null ? null : Math.round(kret * 100) / 100, hint, reasonText, text, seasonEnd, good: !!(hint && !hint.rumor && hint.ok && beat) };
 }
@@ -5134,7 +5139,7 @@ function invBadgeList() {
     { id: "analyst", icon: "🔍", name: "분석왕", desc: "근거도 맞고 시장보다 잘한 매매 3번", ok: (inv.good || 0) >= 3 },
     { id: "bomb", icon: "💣", name: "폭탄 해체반", desc: "폭탄주를 터지기 전에 찾았어요", ok: !!inv.badges.bomb },
     { id: "season", icon: "🏁", name: "시즌 완주", desc: "한 시즌을 끝까지 했어요", ok: !!inv.badges.season },
-    { id: "beat", icon: "🏆", name: "시장 이기기", desc: "한 시즌 수익률이 루미지수보다 높았어요", ok: !!inv.badges.beat },
+    { id: "beat", icon: "🏆", name: "시장 이기기", desc: "한 시즌 수익률이 시장 지수(코스피)보다 높았어요", ok: !!inv.badges.beat },
   ];
 }
 function checkInvBadges() {
@@ -5244,7 +5249,7 @@ function chartBlock() {
   if (per === "1y") body = seasonBars();
   else {
     const pts = invChartPoints(per);
-    body = pts.length >= 2 ? `${lineChart(pts)}<div class="inv-legend"><span><i class="me"></i>내 자산</span>${per !== "1d" ? `<span><i class="k"></i>루미지수 (같은 비율로)</span>` : ""}<span><i class="base"></i>시작 금액</span></div>`
+    body = pts.length >= 2 ? `${lineChart(pts)}<div class="inv-legend"><span><i class="me"></i>내 자산</span>${per !== "1d" ? `<span><i class="k"></i>${idxName()} (같은 비율로)</span>` : ""}<span><i class="base"></i>시작 금액</span></div>`
       : `<p class="hint inv-empty">${invData.game ? "날이 쌓이면 그래프가 그려져요." : "그래프를 불러오는 중…"}</p>`;
   }
   return `<div class="inv-seg" role="tablist">${seg}</div>${body}`;
@@ -5312,7 +5317,7 @@ function lumiInvestLine() {
   const best = Object.values(inv.hold).filter((h) => h.kind === "stock").map((h) => ({ h, r: (holdValue(h) / h.cost - 1) * 100 })).sort((a, b) => Math.abs(b.r) - Math.abs(a.r))[0];
   if (best && Math.abs(best.r) >= 1) return `${esc(best.h.name)}${josa(best.h.name, "이", "가")} 산 뒤로 ${fmt(Math.abs(best.r), 1)}% ${best.r > 0 ? "올랐어요" : "내렸어요"}. 왜 그런지 오늘 힌트를 볼까요?`;
   if (invGroups().현금 / invTotal() > 0.8) return "아직 현금이 많아요. 주식이 부담되면 채권이나 CMA에 조금 넣어 두는 방법도 있어요.";
-  return `${seasonLabel(inv.season)}이 ${seasonLeft()}일 남았어요. 루미지수보다 잘하는 게 목표예요!`;
+  return `${seasonLabel(inv.season)}이 ${seasonLeft()}일 남았어요. ${idxName()}보다 잘하는 게 목표예요!`;
 }
 function rankBlock() {
   if (!sync.on) return `<section class="card inv-rank"><div class="sec-title" style="margin:0"><h2>순위</h2><span>${seasonLabel(inv.season)}</span></div>
@@ -5370,7 +5375,7 @@ function evalCard(e, full) {
     <div class="sec-title" style="margin:0"><h3>${esc(e.name)}</h3><span>${e.seasonEnd ? "시즌 끝 평가" : `${e.heldDays}일 갖고 있다가 팜`}</span></div>
     <div class="ev-grid">
       <span class="hint">내 수익</span><b class="num ${tone(e.ret)}">${e.ret > 0 ? "+" : ""}${fmt(e.ret, 2)}%</b>
-      <span class="hint">같은 기간 루미지수</span><span class="num">${e.kret == null ? "-" : `${e.kret > 0 ? "+" : ""}${fmt(e.kret, 2)}%`}</span>
+      <span class="hint">같은 기간 ${idxName()}</span><span class="num">${e.kret == null ? "-" : `${e.kret > 0 ? "+" : ""}${fmt(e.kret, 2)}%`}</span>
       ${e.kret == null ? "" : `<span class="hint">시장보다</span><b class="num" style="color:var(--green)">${e.ret - e.kret >= 0 ? "+" : ""}${fmt(e.ret - e.kret, 2)}%p ${e.ret - e.kret >= 0 ? "잘했어요" : "덜 올랐어요"}</b>`}
       ${h ? `<span class="hint">고른 ${h.rumor ? "소문" : "힌트"} · ${DIR[h.dir]?.[0] || ""}</span><span>${h.rumor ? `<span class="badge b-warn">근거 없음</span>` : h.early ? `<span class="badge b-flat">기간 전</span>` : h.ok ? `<span class="badge b-ok">방향 맞음</span>` : `<span class="badge b-no">방향 다름</span>`}</span>` : ""}
       ${!h && e.reasonText ? `<span class="hint">내가 적은 이유</span><span>${esc(e.reasonText)}</span>` : ""}
@@ -5403,7 +5408,7 @@ function viewInvest() {
     </section>
 
     <section class="card inv-search">
-      <div class="sec-title" style="margin:0 0 8px"><h2>가상 시장</h2><span>루미지수 ${curIdx() ? fmt(curIdx(), 1) : "-"}</span></div>
+      <div class="sec-title" style="margin:0 0 8px"><h2>가상 시장</h2><span>${idxName()} ${curIdx() ? fmt(curIdx(), 2) : "-"}${invData.game?.indexDate ? ` · ${ymdLabel(invData.game.indexDate)} 종가` : ""}</span></div>
       <div class="searchbox inv-sbox">${SEARCH_ICON}<label for="inv-q" class="sr">회사·채권·예금 찾기</label>
         <input id="inv-q" type="search" autocomplete="off" placeholder="회사 이름이나 업종으로 찾기 (예: 반도체, 채권)" value="${esc(ui.invQ || "")}"></div>
       <div id="inv-results">${invMarketList()}</div>
@@ -5429,7 +5434,7 @@ function viewInvest() {
     <section class="card"><div class="sec-title" style="margin:0"><h2>모의투자 배지</h2><span>${badges.filter((b) => b.ok).length}/${badges.length}</span></div>
       <div class="inv-badges">${badges.map((b) => `<div class="${b.ok ? "ok" : ""}" title="${esc(b.desc)}"><span>${b.icon}</span><b>${b.name}</b><small>${esc(b.desc)}</small></div>`).join("")}</div></section>
 
-    <p class="foot">가상 돈과 가상 회사로 하는 게임이에요. 회사와 숫자는 모두 지어낸 것이고, 가격은 실제 정부 보도자료(정책브리핑)의 업종별 소식에 반응해요. 하루 가격은 오늘 종가 하나라 언제든 바로 사고팔아요. ${RATE_NOTE} 힌트와 평가는 투자 권유가 아닌 공부용 참고예요.</p>
+    <p class="foot">가상 돈과 가상 회사로 하는 게임이에요. 회사와 숫자는 모두 지어낸 것이고, 가격은 실제 정부 보도자료(정책브리핑)의 업종별 소식에 반응해요. 실제 코스피 흐름도 이틀 늦게 따라가요(코스피: 금융위원회·한국거래소 자료). 하루 가격은 오늘 종가 하나라 언제든 바로 사고팔아요. ${RATE_NOTE} 힌트와 평가는 투자 권유가 아닌 공부용 참고예요.</p>
   </main>`;
 }
 // 힌트 팝업

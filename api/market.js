@@ -157,6 +157,23 @@ function newsTone(text) {
 }
 function roundPrice(v) { return v >= 10000 ? Math.round(v / 50) * 50 : v >= 1000 ? Math.round(v / 10) * 10 : Math.round(v); }
 
+// 업종마다 시장(코스피)을 얼마나 따라 움직이는지 (1이면 코스피만큼)
+const BETA = { chip: 1.3, car: 1.0, bank: 0.7, battery: 1.2, content: 0.9, build: 0.8, food: 0.5, platform: 1.1, bio: 1.2 };
+// 실제 코스피 날마다 종가 [[YYYYMMDD, 값]] (오래된 날부터). ECOS 키가 있으면 한국은행 ECOS, 없으면 공공데이터포털 금융위원회
+async function kospiDaily(from) {
+  if (process.env.ECOS_KEY) {
+    try {
+      const url = `https://ecos.bok.or.kr/api/StatisticSearch/${encodeURIComponent(process.env.ECOS_KEY)}/json/kr/1/100/802Y001/D/${from}/${kstYmd(0)}/0001000`;
+      const r = await fetch(url, { signal: AbortSignal.timeout(6000) });
+      const rows = ((r.ok ? await r.json() : {}).StatisticSearch?.row || []).map((x) => [x.TIME, num(x.DATA_VALUE)]).filter((x) => x[1] != null);
+      if (rows.length) return rows.sort((a, b) => (a[0] < b[0] ? -1 : 1));
+    } catch (e) { console.error("kospi ecos", e.message); }
+  }
+  if (!process.env.DATA_GO_KR_KEY) return [];
+  const items = await dataGo("GetMarketIndexInfoService_V2/getStockMarketIndex_V2", { idxNm: "코스피", beginBasDt: from, numOfRows: "100" });
+  return items.map((it) => [it.basDt, num(it.clpr)]).filter((x) => x[1] != null).sort((a, b) => (a[0] < b[0] ? -1 : 1));
+}
+
 async function virtualMarket() {
   const today = kstYmd(0), season = `${today.slice(0, 4)}-${today.slice(4, 6)}`;
   const start = `${today.slice(0, 6)}01`;
@@ -188,6 +205,15 @@ async function virtualMarket() {
   const secs = Object.keys(SECTORS);
   const allSig = (d) => secs.reduce((s, sec) => s + S(sec, d), 0) / secs.length;
 
+  // 실제 코스피: 가상 회사도 코스피 흐름을 따라 움직이고, 비교선(지수)도 실제 코스피.
+  // 그날 종가는 다음 날 오후에야 공개돼서, 값이 낮에 바뀌지 않게 '이틀 전' 코스피를 쓴다(가상 시장은 실제 시장을 이틀 늦게 따라간다)
+  let K = [];
+  try { K = await kospiDaily(ymdAdd(start, -14)); } catch (e) { console.error("kospi", e.message); }
+  const kAt = (d) => { let v = null; for (const x of K) { if (x[0] <= d) v = x[1]; else break; } return v; };
+  const kLag = (d) => kAt(ymdAdd(d, -2));
+  const kChg = (d) => { const a = kLag(d), b = kLag(ymdAdd(d, -1)); return a && b ? a / b - 1 : 0; };
+  const realIdx = days.every((d) => kLag(d) != null);
+
   const bomb = seeded(season, "bomb") < 0.5 ? "daebak" : "beonjjeok";
   const crashAt = 11 + Math.floor(seeded(season, "crash") * 15); // 12~26일
   const series = {}, info = {};
@@ -197,7 +223,8 @@ async function virtualMarket() {
     days.forEach((d, i) => {
       let effect = 0;
       for (let lag = 1; lag <= 4; lag++) effect += S(c.sector, ymdAdd(d, -lag)) * 0.0035 * c.sens * (1 - (lag - 1) * 0.2);
-      const mkt = (seeded(season, "mkt", d) - 0.5) * 0.012 + allSig(ymdAdd(d, -1)) * 0.003;
+      const mkt = realIdx ? kChg(d) * BETA[c.sector] + allSig(ymdAdd(d, -1)) * 0.002
+        : (seeded(season, "mkt", d) - 0.5) * 0.012 + allSig(ymdAdd(d, -1)) * 0.003;
       const noise = (seeded(season, c.id, d) - 0.5) * 2 * c.vol;
       let r = effect + mkt + noise + 0.0003 - (prev / c.base - 1) * 0.02; // 너무 멀리 가면 조금씩 제자리로
       if (c.id === bomb) {
@@ -213,9 +240,10 @@ async function virtualMarket() {
     series[c.id] = rows;
     info[c.id] = c.suspect ? (c.id === bomb ? BOMB_INFO : HONEST_INFO) : c.info;
   }
-  // 가상 시장 지수(루미지수): 수상한 두 회사를 뺀 8곳의 평균 변화, 시즌 첫날 시가 = 1,000
+  // 비교 지수: 실제 코스피(이틀 전 종가). 코스피를 못 받으면 가상 시장 평균(루미지수, 시즌 첫날 1,000)
   const core = COMPANIES.filter((c) => !c.suspect);
-  const index = days.map((d, i) => [d, Math.round((core.reduce((s, c) => s + series[c.id][i][2] / series[c.id][0][1], 0) / core.length) * 100000) / 100]);
+  const index = realIdx ? days.map((d) => [d, kLag(d)])
+    : days.map((d, i) => [d, Math.round((core.reduce((s, c) => s + series[c.id][i][2] / series[c.id][0][1], 0) / core.length) * 100000) / 100]);
   // 힌트 묶음: 오늘·어제 보도자료 소식 + 수상한 회사의 '소문'(근거 없음). 사람마다 이 중 몇 개를 무작위로 본다
   const pool = [];
   const byTitle = new Map(); // 보도자료 하나가 여러 업종에 걸리면 힌트 하나로 합친다(업종·회사를 모아서)
@@ -243,6 +271,7 @@ async function virtualMarket() {
   const crashed = days.length > crashAt ? { id: bomb, day: days[crashAt] } : null;
   return {
     season, today, sample, index, series, crashed,
+    indexName: realIdx ? "코스피" : "루미지수", indexDate: realIdx ? K.filter((x) => x[0] <= ymdAdd(today, -2)).pop()?.[0] : null,
     companies: COMPANIES.map((c) => ({ id: c.id, name: c.name, sector: SECTORS[c.sector].name, desc: c.desc, suspect: !!c.suspect, info: info[c.id] })),
     pool,
   };
