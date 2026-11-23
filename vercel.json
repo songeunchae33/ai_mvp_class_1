@@ -1,5 +1,14 @@
 {
   "rewrites": [
-    { "source": "/__/auth/:path*", "destination": "/api/fbauth?path=:path*" }
+    {
+      "source": "/__/auth/:path*",
+      "destination": "/api/fbauth?path=:path*"
+    }
+  ],
+  "crons": [
+    {
+      "path": "/api/market?cron=daily",
+      "schedule": "0 23 * * *"
+    }
   ]
 }

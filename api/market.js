@@ -8,6 +8,7 @@
 import { kstYmd, fetchJson, num, dataGoItems, dataGoKey, cache } from "./_util.js";
 import { pressReleases, isEcon } from "./_policy.js";
 import { generate } from "./_ai.js";
+import crypto from "node:crypto";
 
 const BASE = "https://apis.data.go.kr/1160100"; // 금융위원회 시세 API (V2 주소)
 
@@ -285,11 +286,188 @@ async function gameHints() {
   return { pool, reviewed, at: new Date().toISOString() };
 }
 
+// ───────────────────────── 서버 관리자 일: 순위 검증 · 아침 알림 ─────────────────────────
+// Firebase 서버용 열쇠(FIREBASE_SA, 서비스 계정 JSON)로 Firestore에 관리자로 들어간다(보안 규칙을 거치지 않음).
+// 새 라이브러리 없이 Node 기본 crypto로 서명한다.
+// · 순위: 휴대폰은 거래 기록만 invest/{시즌}/trades/{uid}에 올리고, 서버가 공식 종가로 다시 계산해 invest/{시즌}/players/{uid}에 쓴다.
+//   (규칙: players는 서버만 쓰기, trades는 본인만) 산 가격이 그날 공식 종가와 다르거나 돈이 모자란 거래는 빼고 bad로 센다.
+// · 알림: 웹 푸시(VAPID). 내용 없이 '깨우기'만 보내고, 휴대폰(sw.js)이 /api/market?push=today 로 문구를 받아 띄운다.
+// GET  /api/market?cron=daily     → Vercel이 매일 아침(vercel.json) 부름: 순위 다시 계산 + 알림 보내기 (CRON_SECRET 확인)
+// GET  /api/market?game=settle    → 순위 다시 계산 (10분에 한 번만 실제로 계산)
+// POST /api/market?push=subscribe { endpoint } · ?push=unsubscribe { endpoint }
+// GET  /api/market?push=today     → 알림 문구 { title, body }
+
+const RATES_SV = { cma: 2.2, dep: 2.8, ktb3: 2.7, corp3: 3.3 }; // index.html RATES와 같은 게임 금리
+let saToken = null;
+async function adminToken() {
+  if (saToken && saToken.exp > Date.now() + 60e3) return saToken.v;
+  const sa = JSON.parse(process.env.FIREBASE_SA);
+  const now = Math.floor(Date.now() / 1000);
+  const enc = (o) => Buffer.from(JSON.stringify(o)).toString("base64url");
+  const unsigned = `${enc({ alg: "RS256", typ: "JWT" })}.${enc({ iss: sa.client_email, scope: "https://www.googleapis.com/auth/datastore", aud: "https://oauth2.googleapis.com/token", iat: now, exp: now + 3600 })}`;
+  const sig = crypto.createSign("RSA-SHA256").update(unsigned).sign(sa.private_key, "base64url");
+  const r = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({ grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer", assertion: `${unsigned}.${sig}` }),
+    signal: AbortSignal.timeout(8000),
+  });
+  const j = await r.json();
+  if (!j.access_token) throw new Error(`firebase 열쇠 오류 ${String(j.error || "").slice(0, 60)}`);
+  saToken = { v: j.access_token, exp: Date.now() + 3500e3 };
+  return saToken.v;
+}
+function adminReady() { return !!(process.env.FIREBASE_SA && process.env.FIREBASE_PROJECT_ID); }
+async function fsReq(path, opt = {}) {
+  const t = await adminToken();
+  const r = await fetch(`https://firestore.googleapis.com/v1/projects/${process.env.FIREBASE_PROJECT_ID}/databases/(default)/documents/${path}`, {
+    ...opt, headers: { Authorization: `Bearer ${t}`, "Content-Type": "application/json" }, signal: AbortSignal.timeout(10000) });
+  if (r.status === 404) return null;
+  if (!r.ok) throw new Error(`firestore ${r.status} ${(await r.text()).slice(0, 120)}`);
+  return r.json();
+}
+function toFs(v) {
+  if (v === null || v === undefined) return { nullValue: null };
+  if (typeof v === "boolean") return { booleanValue: v };
+  if (typeof v === "number") return Number.isInteger(v) ? { integerValue: String(v) } : { doubleValue: v };
+  if (typeof v === "string") return { stringValue: v };
+  if (Array.isArray(v)) return { arrayValue: { values: v.map(toFs) } };
+  return { mapValue: { fields: Object.fromEntries(Object.entries(v).map(([k, x]) => [k, toFs(x)])) } };
+}
+function fromFs(x) {
+  if (!x) return null;
+  if ("stringValue" in x) return x.stringValue;
+  if ("integerValue" in x) return Number(x.integerValue);
+  if ("doubleValue" in x) return x.doubleValue;
+  if ("booleanValue" in x) return x.booleanValue;
+  if ("timestampValue" in x) return x.timestampValue;
+  if ("arrayValue" in x) return (x.arrayValue.values || []).map(fromFs);
+  if ("mapValue" in x) return Object.fromEntries(Object.entries(x.mapValue.fields || {}).map(([k, v]) => [k, fromFs(v)]));
+  return null;
+}
+async function fsList(coll) {
+  const out = [];
+  let token = "";
+  do {
+    const j = await fsReq(`${coll}?pageSize=300${token ? `&pageToken=${encodeURIComponent(token)}` : ""}`);
+    out.push(...(j?.documents || []));
+    token = j?.nextPageToken || "";
+  } while (token);
+  return out.map((d) => ({ id: d.name.split("/").pop(), ...fromFs({ mapValue: { fields: d.fields || {} } }) }));
+}
+const fsSet = (path, data) => fsReq(path, { method: "PATCH", body: JSON.stringify({ fields: toFs(data).mapValue.fields }) });
+const fsDel = (path) => fsReq(path, { method: "DELETE" });
+const kstDay = (at) => new Date(at + 9 * 3600e3).toISOString().slice(0, 10).replace(/-/g, "");
+
+// 순위 다시 계산: 시즌의 모든 거래 기록을 공식 종가로 따라가며 검증
+async function settle(force) {
+  const today = kstYmd(0), season = `${today.slice(0, 4)}-${today.slice(4, 6)}`;
+  const meta = await fsReq(`invest/${season}`);
+  const last = fromFs(meta?.fields?.settledAt) || 0;
+  if (!force && Date.now() - last < 10 * 60e3) return { season, skipped: true };
+  const players = await fsList(`invest/${season}/trades`);
+  const logs = {}, names = new Set();
+  for (const p of players) {
+    try { logs[p.id] = JSON.parse(p.log || "[]"); } catch { logs[p.id] = []; }
+    for (const t of logs[p.id]) if (t?.kind === "stock") names.add(String(t.id));
+  }
+  const S = {};
+  await Promise.all([...names].slice(0, 80).map((n) => stockDaily(n, ymdAdd(`${today.slice(0, 6)}01`, -10)).then((v) => (S[n] = v.rows)).catch(() => {})));
+  const now = Date.now(), YEAR = 365 * 86400e3;
+  for (const p of players) {
+    let cash = 10000000, bad = 0;
+    const qty = {}, lots = [];
+    for (const t of (logs[p.id] || []).filter((x) => x && x.at <= now + 60e3).sort((a, b) => a.at - b.at)) {
+      if (t.kind === "stock") {
+        const rows = S[t.id], d = kstDay(t.at);
+        const fair = rows && Number.isInteger(t.qty) && t.qty > 0 && rows.filter((r) => r[0] <= d).slice(-2).some((r) => r[2] === t.price);
+        if (!fair) { bad++; continue; }
+        if (t.side === "buy") { if (t.qty * t.price > cash + 1) { bad++; continue; } cash -= t.qty * t.price; qty[t.id] = (qty[t.id] || 0) + t.qty; }
+        else { if ((qty[t.id] || 0) < t.qty) { bad++; continue; } cash += t.qty * t.price; qty[t.id] -= t.qty; }
+      } else if (t.kind === "rate" && RATES_SV[t.id]) {
+        if (t.side === "buy") { if (!(t.amt > 0) || t.amt > cash + 1) { bad++; continue; } cash -= t.amt; lots.push({ id: t.id, amt: t.amt, at: t.at }); }
+        else {
+          const mine = lots.filter((l) => l.id === t.id);
+          if (!mine.length) { bad++; continue; }
+          cash += mine.reduce((s, l) => s + l.amt * (1 + (RATES_SV[l.id] / 100) * Math.max(0, t.at - l.at) / YEAR), 0);
+          for (let i = lots.length - 1; i >= 0; i--) if (lots[i].id === t.id) lots.splice(i, 1);
+        }
+      } else bad++;
+    }
+    let total = cash + lots.reduce((s, l) => s + l.amt * (1 + (RATES_SV[l.id] / 100) * Math.max(0, now - l.at) / YEAR), 0);
+    for (const [id, q] of Object.entries(qty)) if (q > 0) { const r = S[id]; total += q * (r?.length ? r[r.length - 1][2] : 0); }
+    total = Math.round(total);
+    await fsSet(`invest/${season}/players/${p.id}`, { nick: String(p.nick || "익명").slice(0, 12), total, ret: Math.round((total / 1e7 - 1) * 10000) / 100, at: now, verified: true, bad });
+  }
+  await fsSet(`invest/${season}`, { settledAt: now, players: players.length });
+  return { season, players: players.length };
+}
+
+// 웹 푸시: 내용 없이 VAPID 서명만 붙여 보낸다 (내용이 없으면 암호화가 필요 없다)
+function vapidHeaders(endpoint) {
+  const pub = process.env.VAPID_PUBLIC, raw = Buffer.from(pub, "base64url");
+  const key = crypto.createPrivateKey({ key: { kty: "EC", crv: "P-256", d: process.env.VAPID_PRIVATE, x: raw.subarray(1, 33).toString("base64url"), y: raw.subarray(33, 65).toString("base64url") }, format: "jwk" });
+  const enc = (o) => Buffer.from(JSON.stringify(o)).toString("base64url");
+  const unsigned = `${enc({ typ: "JWT", alg: "ES256" })}.${enc({ aud: new URL(endpoint).origin, exp: Math.floor(Date.now() / 1000) + 12 * 3600, sub: "https://aimvpclass1.vercel.app" })}`;
+  const sig = crypto.sign("sha256", Buffer.from(unsigned), { key, dsaEncoding: "ieee-p1363" }).toString("base64url");
+  return { Authorization: `vapid t=${unsigned}.${sig}, k=${pub}`, TTL: "43200", Urgency: "normal", "Content-Length": "0" };
+}
+const subId = (endpoint) => crypto.createHash("sha256").update(endpoint).digest("hex").slice(0, 40);
+async function pushAll() {
+  const subs = await fsList("pushSubs");
+  let sent = 0, gone = 0;
+  for (let i = 0; i < subs.length; i += 10) {
+    await Promise.all(subs.slice(i, i + 10).map(async (s) => {
+      try {
+        const r = await fetch(s.endpoint, { method: "POST", headers: vapidHeaders(s.endpoint), body: "", signal: AbortSignal.timeout(8000) });
+        if (r.status === 404 || r.status === 410) { gone++; await fsDel(`pushSubs/${s.id}`); } else if (r.ok) sent++;
+      } catch (e) { console.error("push", e.message); }
+    }));
+  }
+  return { subs: subs.length, sent, gone };
+}
+// 알림 문구: 실제 코스피 마지막 거래일 움직임 + 앱으로 오라는 말
+async function pushToday() {
+  let body = "오늘 나에게 중요한 3가지를 1분 만에 확인해 보세요.";
+  try {
+    const K = await kospiDaily(kstYmd(10));
+    if (K.length > 1) {
+      const [d, v] = K[K.length - 1], c = (v / K[K.length - 2][1] - 1) * 100;
+      body = `코스피 ${Number(d.slice(4, 6))}/${Number(d.slice(6, 8))} ${c > 0 ? "+" : ""}${c.toFixed(1)}%. 오늘 나에게 중요한 3가지를 1분 만에 확인해 보세요.`;
+    }
+  } catch {}
+  return { title: "루미의 아침 1분", body };
+}
+
 export default async function handler(req, res) {
   const hasData = !!process.env.DATA_GO_KR_KEY;
   const hasExim = !!process.env.KOREAEXIM_KEY;
   const hasEcos = !!process.env.ECOS_KEY;
 
+  // 매일 아침 자동 실행 (vercel.json crons): 순위 다시 계산 + 아침 알림
+  if (req.query.cron === "daily") {
+    if (process.env.CRON_SECRET && req.headers.authorization !== `Bearer ${process.env.CRON_SECRET}`) return res.status(401).json({ error: "no" });
+    const out = {};
+    if (adminReady()) {
+      try { out.settle = await settle(true); } catch (e) { out.settle = { error: e.message.slice(0, 80) }; }
+      if (process.env.VAPID_PUBLIC && process.env.VAPID_PRIVATE) { try { out.push = await pushAll(); } catch (e) { out.push = { error: e.message.slice(0, 80) }; } }
+    }
+    return res.status(200).json(out);
+  }
+  if (req.query.game === "settle") {
+    if (!adminReady()) return res.status(200).json({ available: false });
+    try { return res.status(200).json(await settle(false)); } catch (e) { console.error(e); return res.status(200).json({ error: "순위를 계산하지 못했어요" }); }
+  }
+  if (req.query.push === "today") { cache(res, 1800); return res.status(200).json(await pushToday()); }
+  if (req.query.push === "subscribe" || req.query.push === "unsubscribe") {
+    const endpoint = String(req.body?.endpoint || "");
+    if (req.method !== "POST" || !/^https:\/\/[^\s]{10,600}$/.test(endpoint)) return res.status(400).json({ error: "잘못된 요청이에요" });
+    if (!adminReady()) return res.status(200).json({ available: false });
+    try {
+      if (req.query.push === "subscribe") await fsSet(`pushSubs/${subId(endpoint)}`, { endpoint, at: Date.now() });
+      else await fsDel(`pushSubs/${subId(endpoint)}`);
+      return res.status(200).json({ ok: true });
+    } catch (e) { console.error(e); return res.status(200).json({ error: "알림 설정을 저장하지 못했어요" }); }
+  }
   if (req.query.game === "hints") {
     try {
       const out = await gameHints();

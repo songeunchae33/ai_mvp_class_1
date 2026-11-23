@@ -1,7 +1,7 @@
 // 앱처럼 설치(PWA)하기 위한 서비스 워커.
 // 화면(index.html)은 늘 인터넷에서 새로 받고, 인터넷이 끊겼을 때만 저장해 둔 것을 보여준다.
 // 시세·뉴스 같은 /api 응답은 저장하지 않는다(오래된 숫자를 보여주지 않게).
-const CACHE = "myeco-v2";
+const CACHE = "myeco-v3";
 const SHELL = ["/", "/manifest.json", "/img/lumi/app-192.png", "/img/lumi/icon.png", "/img/lumi/main.png"];
 
 self.addEventListener("install", (e) => {
@@ -33,4 +33,19 @@ self.addEventListener("fetch", (e) => {
       return r;
     })));
   }
+});
+
+// 아침 알림: 서버가 내용 없이 깨우면, 오늘 문구를 받아서 띄운다. 누르면 앱 홈으로
+self.addEventListener("push", (e) => {
+  e.waitUntil(fetch("/api/market?push=today").then((r) => r.json()).catch(() => ({}))
+    .then((m) => self.registration.showNotification(m.title || "루미의 아침 1분", {
+      body: m.body || "오늘 나에게 중요한 3가지를 1분 만에 확인해 보세요.", icon: "/img/lumi/app-192.png", badge: "/img/lumi/app-192.png", tag: "morning", data: { url: "/" },
+    })));
+});
+self.addEventListener("notificationclick", (e) => {
+  e.notification.close();
+  e.waitUntil(self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((list) => {
+    const w = list.find((c) => new URL(c.url).origin === location.origin);
+    return w ? w.focus().then((c) => c.navigate?.("/")) : self.clients.openWindow("/");
+  }));
 });

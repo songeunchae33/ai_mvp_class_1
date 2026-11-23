@@ -4918,6 +4918,54 @@ function viewLetters() {
   </main>`;
 }
 // 기타: 아직 어디에 넣기 애매한 것들
+// ───────── 아침 알림 (웹 푸시): 매일 아침 8시쯤 한 번 "오늘 나에게 중요한 3가지"를 보러 오라고 알린다 ─────────
+// 켜면 이 기기의 알림 주소(endpoint)만 서버에 맡긴다(이름·기록은 보내지 않음). 문구는 sw.js가 /api/market?push=today 에서 받는다.
+// 아이폰은 사파리에서 '홈 화면에 추가'로 설치한 앱에서만 된다(iOS 16.4 이상).
+const PUSH_KEY = "myeco.push.v1";
+function pushState() {
+  if (!("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window)) return "unsupported";
+  try { return localStorage.getItem(PUSH_KEY) === "on" && Notification.permission === "granted" ? "on" : Notification.permission === "denied" ? "denied" : "off"; } catch { return "off"; }
+}
+function pushCard() {
+  const st = pushState();
+  const ios = /iPhone|iPad/.test(navigator.userAgent) && !window.matchMedia?.("(display-mode: standalone)").matches;
+  return `<section class="card form" id="sec-push">
+      <div class="sec-title"><h2>아침 알림</h2><span>매일 아침 8시쯤 한 번</span></div>
+      <p class="hint" style="margin:0">"오늘 나에게 중요한 3가지"를 보러 오라고 알려 드려요. 알림 주소만 서버에 맡기고, 이름이나 기록은 보내지 않아요.</p>
+      ${st === "unsupported" ? `<p style="margin:0;font-size:14px;line-height:1.6">${ios ? "아이폰은 사파리 아래쪽 공유 버튼 → <b>홈 화면에 추가</b>로 앱을 설치한 뒤, 그 앱에서 켤 수 있어요(iOS 16.4 이상)." : "이 브라우저는 알림을 지원하지 않아요. 크롬이나 사파리에서 열어 주세요."}</p>`
+        : st === "denied" ? `<p style="margin:0;font-size:14px;line-height:1.6">알림이 꺼져 있어요. 휴대폰 설정 → 이 앱(또는 브라우저) → 알림에서 허용한 뒤 다시 눌러 주세요.</p><button class="btn ghost" data-act="push-on">다시 시도</button>`
+        : st === "on" ? `<button class="btn ghost" data-act="push-off">아침 알림 끄기</button>` : `<button class="btn" data-act="push-on">아침 알림 받기</button>`}
+    </section>`;
+}
+function b64ToBytes(s) { const b = atob(s.replace(/-/g, "+").replace(/_/g, "/") + "===".slice((s.length + 3) % 4)); return Uint8Array.from(b, (c) => c.charCodeAt(0)); }
+async function pushOn() {
+  try {
+    const cfg = await getJson("/api/config");
+    if (!cfg.vapidPublic) return toast("알림 기능이 아직 준비되지 않았어요");
+    if ((await Notification.requestPermission()) !== "granted") { render(); return toast("알림을 허용해야 받을 수 있어요"); }
+    const reg = await navigator.serviceWorker.ready;
+    const sub = (await reg.pushManager.getSubscription()) || await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64ToBytes(cfg.vapidPublic) });
+    const j = await getJson("/api/market?push=subscribe", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ endpoint: sub.endpoint }) });
+    if (!j.ok) throw new Error(j.error || "저장 실패");
+    try { localStorage.setItem(PUSH_KEY, "on"); } catch {}
+    toast("내일 아침부터 알림을 보내 드려요");
+  } catch (e) { toast("알림을 켜지 못했어요. 잠시 후 다시 해 주세요"); }
+  render();
+}
+async function pushOff() {
+  try {
+    const sub = await (await navigator.serviceWorker.ready).pushManager.getSubscription();
+    if (sub) { await getJson("/api/market?push=unsubscribe", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ endpoint: sub.endpoint }) }).catch(() => {}); await sub.unsubscribe(); }
+  } catch {}
+  try { localStorage.removeItem(PUSH_KEY); } catch {}
+  toast("아침 알림을 껐어요");
+  render();
+}
+document.addEventListener("click", (e) => {
+  const el = e.target.closest("[data-act]");
+  if (el?.dataset.act === "push-on") pushOn();
+  else if (el?.dataset.act === "push-off") pushOff();
+});
 function viewEtc() {
   const S = mySections();
   return `${pageHead("기타")}
@@ -4926,10 +4974,11 @@ function viewEtc() {
       <div class="sec-title"><h2>루미 움직임</h2><span>홈에서 코스피 분위기대로 움직여요</span></div>
       <button class="btn ${ui.lumiStill ? "" : "ghost"}" data-act="lumi-move">${ui.lumiStill ? "움직이게 하기" : "멈추기"}</button>
     </section>
+    ${pushCard()}
     ${S.privacy}
     <section class="card" id="sec-info">
       <div class="sec-title"><h2>앱 정보</h2><span>v0.5</span></div>
-      <p style="margin:0;font-size:14px;line-height:1.7">주가·지수: 공공데이터포털(금융위원회, 전일 종가) · 환율: 한국수출입은행 · 뉴스: 네이버(제목·링크) · 쉽게 풀이·화제순: 정책브리핑 정책뉴스 · 혜택: 정부24 공공서비스 정보 · AI: Google Gemini(무료 등급 먼저, 보낸 내용을 구글이 서비스 개선에 쓸 수 있음) · OpenAI</p>
+      <p style="margin:0;font-size:14px;line-height:1.7">주가·지수: 공공데이터포털(금융위원회, 전일 종가) · 환율: 한국수출입은행 · 뉴스: 네이버·정책브리핑·NewsData(국내), GDELT(해외) — 제목·링크만 · 쉽게 풀이·화제순: 정책브리핑 정책뉴스 · 혜택: 정부24 공공서비스 정보 · AI: Google Gemini(무료 등급 먼저, 보낸 내용을 구글이 서비스 개선에 쓸 수 있음) · OpenAI</p>
       <p class="hint" style="margin:8px 0 0">이 앱의 정보는 투자 권유가 아닌 참고용이에요.</p>
     </section>
   </main>`;
@@ -5257,11 +5306,15 @@ async function invUser() {
   await fb.auth.authStateReady?.();
   return fb.auth.currentUser;
 }
+// 순위는 서버가 정한다: 휴대폰은 거래 기록만 올리고(invest/{시즌}/trades/{uid}), 서버(/api/market?game=settle·매일 아침)가
+// 공식 종가로 다시 계산해 invest/{시즌}/players에 쓴다. 휴대폰은 자기 점수를 직접 쓸 수 없다(Firestore 규칙).
 async function pushRank() {
   try {
     const u = await invUser();
     if (!u) return;
-    await fb.F.setDoc(fb.F.doc(fb.db, "invest", inv.season, "players", u.uid), { nick: String(profile?.nickname || "익명").slice(0, 12), total: Math.round(invTotal()), ret: Math.round(invRet() * 100) / 100, at: Date.now() });
+    const log = inv.trades.filter((t) => t.kind === "stock" || t.kind === "rate")
+      .map(({ at, kind, side, id, qty, price, amt }) => ({ at, kind, side, id, qty, price, amt }));
+    await fb.F.setDoc(fb.F.doc(fb.db, "invest", inv.season, "trades", u.uid), { nick: String(profile?.nickname || "익명").slice(0, 12), log: JSON.stringify(log), at: Date.now() });
   } catch {}
 }
 async function loadRank() {
@@ -5269,10 +5322,12 @@ async function loadRank() {
   try {
     const u = await invUser();
     if (!u) { invData.rank = null; return; }
+    await pushRank();
+    await getJson("/api/market?game=settle").catch(() => {}); // 서버가 다시 계산 (10분에 한 번만 실제로 함)
     const F = fb.F;
     const snap = await F.getDocs(F.query(F.collection(fb.db, "invest", inv.season, "players"), F.orderBy("total", "desc"), F.limit(50)));
     const list = snap.docs.map((d) => ({ uid: d.id, ...d.data() }));
-    if (!list.some((x) => x.uid === u.uid)) list.push({ uid: u.uid, nick: profile?.nickname || "나", total: Math.round(invTotal()), ret: invRet() });
+    if (!list.some((x) => x.uid === u.uid)) list.push({ uid: u.uid, nick: profile?.nickname || "나", total: Math.round(invTotal()), ret: invRet(), pending: true });
     list.sort((a, b) => b.total - a.total);
     const me = list.findIndex((x) => x.uid === u.uid);
     invData.rank = { list, me, n: list.length };
@@ -5431,6 +5486,7 @@ function rankBlock() {
       <span class="bar"><i style="width:${Math.max(6, Math.round(((x.total - mn) / (mx - mn || 1)) * 100))}%"></i></span><span class="num ${x.ret >= 0 ? "up" : "down"}">${x.ret > 0 ? "+" : ""}${fmt(x.ret, 1)}%</span></div>`;
   return `<section class="card inv-rank"><div class="sec-title" style="margin:0"><h2>순위</h2><span>${seasonLabel(inv.season)} · ${R.n}명</span></div>
     <p style="margin:0">로그인한 ${R.n}명 중 <b style="color:var(--green)">${R.me + 1}위</b>예요</p>
+    <p class="hint" style="margin:0">${R.list[R.me]?.pending ? "내 순위는 서버가 확인하는 중이에요(최대 10분)." : "순위는 서버가 모두의 거래를 공식 종가로 다시 계산한 값이에요."}${R.list[R.me]?.bad ? ` 확인되지 않은 거래 ${R.list[R.me].bad}건은 빼고 계산했어요.` : ""}</p>
     <div class="rk-list">${top.map(row).join("")}${R.me >= 5 ? `<div class="rk-gap">…</div>${row(R.list[R.me], R.me)}` : ""}</div></section>`;
 }
 // 주식 시장 목록: 대표 종목 12개(+ 산 종목). 검색하면 모든 종목에서 찾는다
@@ -6139,7 +6195,7 @@ document.addEventListener("click", async (e) => {
     case "wipe":
       if (confirm(sync.on ? "이 기기와 구글 계정에 저장된 내 정보를 모두 지우고 연결도 끊을까요? 되돌릴 수 없어요." : "이 기기에 저장된 내 정보를 모두 지울까요? 되돌릴 수 없어요.")) {
         await deleteRemote();
-        try { [STORE_KEY, UI_KEY, LEARN_KEY, LEDGER_KEY, AI_KEY, LAST_KEY, INV_KEY].forEach((k) => localStorage.removeItem(k)); } catch {}
+        try { [STORE_KEY, UI_KEY, LEARN_KEY, LEDGER_KEY, AI_KEY, LAST_KEY, INV_KEY, PUSH_KEY].forEach((k) => localStorage.removeItem(k)); } catch {}
         ledger.tx = []; ledger.uploads = {}; ledger.fixed = []; ledger.cats = { added: [], hidden: [] }; learnState.answers = {}; learnState.notes = {}; learnState.days = {}; learnState.today = null;
         profile = null; ui.onb = { step: 0, draft: null }; location.hash = ""; render();
       }
