@@ -39,11 +39,10 @@ const OX = { type: "object", additionalProperties: false, required: ["q", "a", "
   ex: { type: "string", description: "왜 맞고 틀린지 쉬운 해설 1~2문장" },
 } };
 const TOPIC_SCHEMA = {
-  type: "object", additionalProperties: false, required: ["ok", "name", "concepts"],
+  type: "object", additionalProperties: false, required: ["name", "concepts", "offTopic"],
   properties: {
-    ok: { type: "boolean", description: "돈·경제와 조금이라도 이어지면 true (연금·보험·세금·월급·직장·부동산·소비·투자·정책 모두 true). 분명히 상관없을 때만 false" },
     name: { type: "string", description: "사용자가 적은 주제 그대로" },
-    concepts: { type: "array", description: "개념 3개 (ok가 false면 빈 배열)", items: {
+    concepts: { type: "array", description: "개념 3개 (offTopic이면 빈 배열)", items: {
       type: "object", additionalProperties: false, required: ["term", "kw", "short", "body", "me", "quizzes"],
       properties: {
         term: { type: "string", description: "개념 이름 (15자 이내)" },
@@ -54,6 +53,7 @@ const TOPIC_SCHEMA = {
         quizzes: { type: "array", description: "OX 3문제: 1단계 기본 → 2단계 심화 → 3단계 도전", items: OX },
       },
     } },
+    offTopic: { type: "boolean", description: "돈과 분명히 상관없거나 나쁜 뜻의 주제여서 concepts를 비웠을 때만 true. 연금·보험·세금·월급·부동산 같은 생활 속 돈 이야기는 false" },
   },
 };
 const TOPIC_RULES = `너는 '나만의 경제' 앱의 루미야. 경제를 처음 공부하는 20대가 주제를 하나 적으면, 그 주제의 핵심 개념 3개와 개념마다 OX 퀴즈 3문제를 만들어.
@@ -62,17 +62,17 @@ const TOPIC_RULES = `너는 '나만의 경제' 앱의 루미야. 경제를 처�
 - 퀴즈 답은 설명(body) 안에서 알 수 있게 내고, 세 문제의 답이 모두 같지 않게 O와 X를 섞어.
 - 특정 종목·상품을 사라고 권하지 마.
 - 사용자가 적은 주제를 그대로 다뤄. 비슷한 다른 주제로 바꾸지 마(예: '금리 인하'를 '금리 인상'으로 바꾸지 않기).
-- 퇴직연금·보험·세금·월급·전세처럼 생활 속 돈 이야기는 모두 경제 주제야. 돈과 분명히 상관없는 주제(연예, 게임 공략 등)나 나쁜 뜻의 주제일 때만 ok를 false로 하고 concepts는 빈 배열로.`;
+- 퇴직연금·보험·세금·월급·전세처럼 생활 속 돈 이야기는 모두 경제 주제야. 돈과 분명히 상관없는 주제(연예, 게임 공략 등)나 나쁜 뜻의 주제일 때만 concepts를 빈 배열로 하고 offTopic을 true로.`;
 const cut = (v, n) => String(v || "").trim().slice(0, n);
 async function makeTopic(topic) {
   const out = await generate({ system: TOPIC_RULES, text: `[주제]\n${topic}`, schema: TOPIC_SCHEMA, schemaName: "topic", maxTokens: 2600 });
   const j = JSON.parse(out.text);
-  if (!j.ok) return { ok: false };
   const concepts = (j.concepts || []).slice(0, 4).map((c) => ({
     term: cut(c.term, 24), kw: cut(c.kw, 20), short: cut(c.short, 60), body: cut(c.body, 600), me: cut(c.me, 200),
     quizzes: (c.quizzes || []).filter((q) => q && q.q && (q.a === "O" || q.a === "X")).slice(0, 3).map((q) => ({ q: cut(q.q, 200), a: q.a, ex: cut(q.ex, 300) })),
   })).filter((c) => c.term && c.body && c.quizzes.length === 3);
-  if (!concepts.length) throw new Error("빈 주제");
+  // 쓸 만한 개념이 나왔으면 받아들이고, 비었을 때만 주제 거절(offTopic) 또는 실패로 본다
+  if (!concepts.length) { if (j.offTopic) return { ok: false }; throw new Error("빈 주제"); }
   return { ok: true, name: topic, concepts, ai: out.ai }; // 이름은 AI가 바꾸지 않게 적은 그대로
 }
 
