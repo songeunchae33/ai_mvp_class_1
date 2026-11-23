@@ -66,12 +66,14 @@ async function openai({ system, text, images, schema, schemaName, maxTokens }) {
 export function aiReady() { return !!(process.env.GEMINI_API_KEY || process.env.OPENAI_API_KEY); }
 
 // → { text, ai: "gemini" | "openai" }. images는 data:image/...;base64 주소들
-export async function generate({ system, text, images = [], schema, schemaName, maxTokens = 800 }) {
+// geminiOnly: 제미나이가 실패해도 OpenAI(유료 크레딧)로 넘기지 않고 오류를 낸다 (모의투자 힌트 검수처럼 없어도 되는 곳)
+export async function generate({ system, text, images = [], schema, schemaName, maxTokens = 800, geminiOnly = false }) {
   const req = { system, text, images, schema, schemaName, maxTokens };
   if (process.env.GEMINI_API_KEY) {
     try { return { text: await gemini(req), ai: "gemini" }; }
     catch (e) { console.error("gemini 실패 → openai:", e.message); var why = String(e.message).slice(0, 300); }
   }
+  if (geminiOnly) throw new Error(why ? `gemini only: ${why}` : "GEMINI_API_KEY가 없어요");
   if (!process.env.OPENAI_API_KEY) throw new Error("AI 키가 없어요");
   // ai: 화면에는 안 보임. Gemini가 실패했으면 이유(오류 코드·메시지, 키는 없음)를 붙여 확인할 수 있게
   return { text: await openai(req), ai: why ? `openai (${why})` : "openai" };

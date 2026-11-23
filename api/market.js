@@ -2,10 +2,12 @@
 // ECOS_KEY가 아직 없으면 지수는 금융위원회, 환율은 한국수출입은행으로 예전처럼 받는다.
 // GET /api/market?stocks=삼성전자,카카오   → 홈 화면 데이터
 // GET /api/market?search=삼성              → 종목 이름 검색 (관심 종목 추가용)
-// GET /api/market?game=1&extra=종목,종목   → 모의투자 '실제 시장' (대표 종목 12개 + 산 종목의 이번 시즌 시가·종가, 실제 코스피, 보도자료 힌트)
+// GET /api/market?game=1&extra=종목,종목   → 모의투자 '실제 시장' (대표 종목 12개 + 산 종목의 이번 시즌 시가·종가, 실제 코스피)
+// GET /api/market?game=hints              → 모의투자 힌트 (시장 소식 + 보도자료, 제미나이 검수)
 // 키가 없거나 호출이 실패하면 예시 데이터를 sample:true 로 돌려준다.
 import { kstYmd, fetchJson, num, dataGoItems, dataGoKey, cache } from "./_util.js";
 import { pressReleases, isEcon } from "./_policy.js";
+import { generate } from "./_ai.js";
 
 const BASE = "https://apis.data.go.kr/1160100"; // 금융위원회 시세 API (V2 주소)
 
@@ -96,7 +98,8 @@ async function usd() {
 // 실제 종목·실제 가격(금융위원회 주식시세, 전일 종가)으로 겨룬다. 비교 지수는 실제 코스피.
 // 주의: 시세는 공공누리 제4유형(상업적 이용 금지·변경 금지, 원천 한국거래소)이라 광고·구독 등 상업화 전에는 다시 검토해야 한다.
 // 힌트는 실제 정부 보도자료(정책브리핑, 공공저작물)에서 업종별 좋은·나쁜 소식을 골라, 그 업종의 대표 종목과 이어 준다(방향은 가능성일 뿐).
-// GET /api/market?game=1&extra=종목A,종목B → { season, today, index, series: { 종목: [[YYYYMMDD, 시가, 종가]] }, companies, pool, indexName, indexDate, sample }
+// GET /api/market?game=1&extra=종목A,종목B → { season, today, index, series: { 종목: [[YYYYMMDD, 시가, 종가]] }, companies, indexName, indexDate, sample }
+// GET /api/market?game=hints → { pool: 힌트들, reviewed: 제미나이 검수 여부 }
 const SECTORS = { // 보도자료 '제목'에 이 낱말이 있으면 그 업종 소식으로 본다
   chip: { name: "반도체", words: ["반도체", "메모리", "파운드리", "데이터센터"] },
   car: { name: "자동차·수출", words: ["자동차", "전기차", "완성차", "관세", "수출"] },
@@ -185,39 +188,101 @@ async function realMarket(extra) {
   // 비교 지수: 실제 코스피. 시즌 안의 날들(아직 없으면 시즌 전 마지막 날 하나)
   let index = K.filter((x) => x[0] >= start);
   if (!index.length) index = K.slice(-1);
-  // 힌트 묶음: 최근 7일 보도자료(새 것 먼저)에서 업종별 소식을 골라 그 업종 대표 종목과 잇는다 (같은 보도자료는 하나로 합침)
-  const pool = [];
-  try {
-    const rel = sample ? [] : (await pressReleases(7)).sort((x, y) => (relYmd(y.at) > relYmd(x.at) ? 1 : -1)); // 주말에도 힌트가 있게 최근 7일, 새 소식 먼저
-    const byTitle = new Map();
-    for (const r of rel) {
-      const d = relYmd(r.at);
-      if (d && d < ymdAdd(today, -6)) continue;
-      if (!isEcon(r)) continue; // 경제와 관련된 보도자료만
-      const t = newsTone(`${r.title} ${r.sub}`);
-      if (!t) continue;
-      for (const [sec, S] of Object.entries(SECTORS)) if (S.words.some((w) => r.title.includes(w))) {
-        const stocks = UNIVERSE.filter(([, s]) => s === sec).map(([n]) => n);
-        const same = byTitle.get(r.title);
-        if (same) {
-          if (!same.sector.split(", ").includes(S.name)) same.sector += `, ${S.name}`;
-          for (const n of stocks) if (!same.stocks.includes(n)) same.stocks.push(n);
-          continue;
-        }
-        const h = { id: `n-${sec}-${pool.length}-${d}`, kind: "news", sector: S.name, dir: t > 0 ? "up" : "down", days: 3 + Math.floor(seeded(r.title, sec) * 5),
-          title: r.title, stocks: [...stocks], sources: [{ title: r.title, url: r.url, source: r.org || "정책브리핑" }] };
-        byTitle.set(r.title, h);
-        pool.push(h);
-      }
-    }
-  } catch (e) { console.error("hints", e.message); }
-  if (sample) pool.push({ id: "s-chip", kind: "news", sector: "반도체", dir: "up", days: 5, title: "(예시) 반도체 쪽에 좋은 정부 발표가 나왔어요", stocks: ["삼성전자", "SK하이닉스"], sources: [] });
   const sectorOf = Object.fromEntries(UNIVERSE.map(([n, s]) => [n, SECTORS[s].name]));
   return {
     season, today, sample, index, series, indexName: "코스피", indexDate: K[K.length - 1]?.[0] || null,
     companies: names.filter((n) => series[n]).map((n) => ({ id: n, name: n, sector: sectorOf[n] || meta[n]?.market || "", code: meta[n]?.code || "", core: !!sectorOf[n] })),
-    pool: pool.slice(0, 12),
   };
+}
+
+// ── 모의투자 힌트 (/api/market?game=hints, 모두에게 같은 묶음을 1시간 재사용) ──
+// ① 시장 소식: 실제 코스피·대표 종목의 마지막 거래일 움직임 (늘 있어서 힌트가 0개가 되지 않는다)
+// ② 정책 소식: 최근 7일 경제 보도자료 중 제목에 업종 낱말이 있는 것
+// ③ 제미나이 검수: ②를 하나씩 보고 실제로 그 종목에 영향이 있을 만한 것만 남기고, 종목·방향을 고치고, 이유를 한 줄로 쓴다
+//    (제미나이가 안 되면 ②는 규칙으로 고른 그대로, OpenAI로 넘기지 않는다)
+const REVIEW_SCHEMA = {
+  type: "object", additionalProperties: false, required: ["items"],
+  properties: { items: { type: "array", items: { type: "object", additionalProperties: false, required: ["i", "keep", "stocks", "dir", "why"],
+    properties: {
+      i: { type: "integer", description: "후보 번호" },
+      keep: { type: "boolean", description: "이 소식이 고른 종목의 주가에 실제로 영향을 줄 만하면 true, 관계가 약하거나 엉뚱하면 false" },
+      stocks: { type: "array", items: { type: "string" }, description: "영향받을 종목 1~3개, 반드시 주어진 종목 목록의 이름 그대로" },
+      dir: { type: "string", enum: ["up", "down"], description: "그 종목들에 좋은 소식이면 up, 나쁜 소식이면 down" },
+      why: { type: "string", description: "왜 그 종목에 영향이 있을 수 있는지 쉬운 존댓말 한 문장(60자 이내). 사람 이름·사라/팔라는 말 금지" },
+    } } } },
+};
+const REVIEW_RULES = `너는 20대에게 경제 소식을 알려주는 모의투자 게임의 힌트 검수자야.
+- 후보마다 보도자료 제목이 주어진 종목들의 주가에 실제로 영향을 줄 만한지 엄격하게 판단해. 업종 낱말만 겹치고 내용이 무관하면 keep=false.
+- 예: '김 수출 최대' → 자동차 회사와 무관(keep=false 또는 식품 종목으로 바꿈). 'AI 데이터센터 구축 지원' → 반도체·인터넷 종목과 관련(keep=true).
+- stocks는 아래 종목 목록의 이름만 그대로 써. 목록에 맞는 종목이 없으면 keep=false.
+- why는 확정이 아니라 가능성으로("~할 수 있어요"). 추천·사람 이름·없는 숫자 금지.`;
+
+async function gameHints() {
+  const today = kstYmd(0), from = ymdAdd(today, -12);
+  const sectorOf = Object.fromEntries(UNIVERSE.map(([n, s]) => [n, SECTORS[s].name]));
+  const pool = [];
+  // ① 시장 소식
+  if (process.env.DATA_GO_KR_KEY) {
+    const last = {};
+    let K = [];
+    await Promise.all([
+      kospiDaily(from).then((v) => (K = v)).catch(() => {}),
+      ...UNIVERSE.map(([n]) => stockDaily(n, from).then((v) => { const r = v.rows; if (r.length > 1) last[n] = { d: r[r.length - 1][0], pct: (r[r.length - 1][2] / r[r.length - 2][2] - 1) * 100 }; }).catch(() => {})),
+    ]);
+    const md = (d) => `${Number(d.slice(4, 6))}월 ${Number(d.slice(6, 8))}일`;
+    const movers = Object.entries(last).sort((a, b) => Math.abs(b[1].pct) - Math.abs(a[1].pct));
+    const src = [{ title: "금융위원회 주식·지수 시세", url: "https://www.data.go.kr/data/15094808/openapi.do", source: "금융위원회" }];
+    if (K.length > 1) {
+      const [d, v] = K[K.length - 1], c = (v / K[K.length - 2][1] - 1) * 100;
+      if (Math.abs(c) >= 1) pool.push({ id: `m-kospi-${d}`, kind: "market", sector: "시장 전체", dir: "swing", days: 3,
+        title: `코스피가 ${md(d)} 하루 ${Math.abs(c).toFixed(1)}% ${c < 0 ? "떨어졌어요" : "올랐어요"}`,
+        why: `시장 전체가 크게 움직인 날 뒤에는 며칠 더 출렁이기도 해요. 이날 가장 크게 움직인 대표 종목이에요.`,
+        stocks: movers.slice(0, 3).map(([n]) => n), sources: src });
+    }
+    // 크게 움직인 대표 종목 (없으면 가장 많이 움직인 하나라도 → 힌트가 0개가 되지 않게)
+    const big = movers.filter(([, x]) => Math.abs(x.pct) >= 4).slice(0, 2);
+    for (const [n, x] of big.length ? big : movers.slice(0, 1)) pool.push({ id: `m-${n}-${x.d}`, kind: "market", sector: sectorOf[n], dir: "swing", days: 3,
+      title: `${n}${/[가-힣]$/.test(n) && (n.charCodeAt(n.length - 1) - 44032) % 28 ? "이" : "가"} ${md(x.d)} 하루 ${x.pct > 0 ? "+" : ""}${x.pct.toFixed(1)}% 움직였어요`,
+      why: `크게 움직인 종목은 다음 며칠 동안도 오르내림이 커질 수 있어요.`, stocks: [n], sources: src });
+  }
+  // ② 정책 소식 후보
+  const cands = [];
+  try {
+    const rel = !process.env.DATA_GO_KR_KEY ? [] : (await pressReleases(7)).sort((x, y) => (relYmd(y.at) > relYmd(x.at) ? 1 : -1));
+    const seen = new Set();
+    for (const r of rel) {
+      const d = relYmd(r.at);
+      if ((d && d < ymdAdd(today, -6)) || !isEcon(r) || seen.has(r.title)) continue;
+      const t = newsTone(`${r.title} ${r.sub}`);
+      const secs = Object.entries(SECTORS).filter(([, S]) => S.words.some((w) => r.title.includes(w))).map(([k]) => k);
+      if (!t || !secs.length) continue;
+      seen.add(r.title);
+      cands.push({ d, title: r.title, sub: r.sub, dir: t > 0 ? "up" : "down", sector: secs.map((k) => SECTORS[k].name).join(", "),
+        stocks: UNIVERSE.filter(([, s]) => secs.includes(s)).map(([n]) => n), sources: [{ title: r.title, url: r.url, source: r.org || "정책브리핑" }] });
+      if (cands.length >= 15) break;
+    }
+  } catch (e) { console.error("hint news", e.message); }
+  // ③ 제미나이 검수
+  let reviewed = false, news = cands;
+  if (cands.length && process.env.GEMINI_API_KEY) {
+    try {
+      const list = UNIVERSE.map(([n, s]) => `${n}(${SECTORS[s].name})`).join(", ");
+      const text = `종목 목록: ${list}\n\n후보:\n` + cands.map((c, i) => `[${i}] ${c.title} — ${c.sub || ""} (규칙이 고른 종목: ${c.stocks.join("·")}, 방향: ${c.dir})`).join("\n");
+      const out = await generate({ system: REVIEW_RULES, text, schema: REVIEW_SCHEMA, schemaName: "review", maxTokens: 1500, geminiOnly: true });
+      const names = new Set(UNIVERSE.map(([n]) => n));
+      news = [];
+      for (const it of JSON.parse(out.text).items || []) {
+        const c = cands[it.i], stocks = (it.stocks || []).filter((n) => names.has(n)).slice(0, 3);
+        if (!c || !it.keep || !stocks.length) continue;
+        news.push({ ...c, stocks, dir: it.dir === "down" ? "down" : "up", why: String(it.why || "").slice(0, 80), sector: [...new Set(stocks.map((n) => sectorOf[n]))].join(", ") });
+      }
+      reviewed = true;
+    } catch (e) { console.error("hint review", e.message); }
+  }
+  news.slice(0, 9).forEach((c, k) => pool.push({ id: `n-${k}-${c.d}-${c.title.length}`, kind: "news", sector: c.sector, dir: c.dir, days: 3 + Math.floor(seeded(c.title) * 5),
+    title: c.title, why: c.why || "", stocks: c.stocks, sources: c.sources }));
+  if (!pool.length) pool.push({ id: "s-chip", kind: "news", sector: "반도체", dir: "up", days: 5, title: "(예시) 반도체 쪽에 좋은 정부 발표가 나왔어요", stocks: ["삼성전자", "SK하이닉스"], sources: [] });
+  return { pool, reviewed, at: new Date().toISOString() };
 }
 
 export default async function handler(req, res) {
@@ -225,11 +290,21 @@ export default async function handler(req, res) {
   const hasExim = !!process.env.KOREAEXIM_KEY;
   const hasEcos = !!process.env.ECOS_KEY;
 
+  if (req.query.game === "hints") {
+    try {
+      const out = await gameHints();
+      cache(res, out.reviewed ? 3600 : 600);
+      return res.status(200).json(out);
+    } catch (e) {
+      console.error(e);
+      return res.status(200).json({ pool: [], error: "힌트를 만들지 못했어요" });
+    }
+  }
   if (req.query.game !== undefined) {
     try {
       const extra = String(req.query.extra || "").split(",").map((x) => x.trim()).filter(Boolean).slice(0, 10);
       const out = await realMarket(extra);
-      cache(res, out.sample ? 120 : 1800);
+      cache(res, out.sample ? 120 : 600); // 새 종가가 올라오면 10분 안에 보이게
       return res.status(200).json(out);
     } catch (e) {
       console.error(e);

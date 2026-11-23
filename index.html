@@ -4930,22 +4930,23 @@ function invGroups() {
 }
 const INV_COLORS = { 주식: "#245296", 채권: "#4E9BD1", "예금·CMA": "#9DB8E0", 현금: "#D2D6DD" };
 
-// ── 힌트: 오늘·어제 보도자료 소식 + 소문. 사람마다(기기마다) 날마다 다르게 몇 개를 고른다 ──
+// ── 힌트 (/api/market?game=hints): 시장 소식(코스피·크게 움직인 종목, 늘 있음) + 제미나이가 검수한 보도자료 소식.
+// 시장 소식은 모두에게, 보도자료 소식은 사람마다(기기마다) 날마다 다르게 3개를 고른다 ──
 function hashStr(s) { let h = 2166136261; for (const ch of s) h = Math.imul(h ^ ch.charCodeAt(0), 16777619); return (h >>> 0) / 4294967296; }
 function hintText(h) {
-  const names = h.stocks.map((id) => company(id)?.name).filter(Boolean).join("·");
-  if (h.kind === "rumor") return `커뮤니티에 이런 글이 많아요. 확인된 근거는 없어요. 기업 정보를 먼저 살펴볼까요?`;
+  if (h.why) return h.why;
+  const names = h.stocks.map((id) => company(id)?.name || id).join("·");
   return `${h.sector} 소식이에요. ${names}에 ${h.dir === "up" ? "좋은" : "부담이 되는"} 영향이 있을 수 있어요.`;
 }
 function invHints() {
-  const pool = invData.game?.pool || [];
-  const day = invData.game?.today || "";
+  const pool = invData.hints?.pool || [];
+  const day = invData.game?.today || ymd(today0());
   const r = (h) => hashStr(`${inv.seed}|${day}|${h.id}`);
+  const market = pool.filter((h) => h.kind === "market").slice(0, 2);
   const news = pool.filter((h) => h.kind === "news").sort((a, b) => r(a) - r(b)).slice(0, 3);
-  const rumor = pool.filter((h) => h.kind === "rumor").sort((a, b) => r(a) - r(b)).slice(0, hashStr(`${inv.seed}|${day}|rumor`) < 0.6 ? 1 : 0);
-  return [...news, ...rumor];
+  return [...news, ...market];
 }
-function hintById(id) { return (invData.game?.pool || []).find((h) => h.id === id); }
+function hintById(id) { return (invData.hints?.pool || []).find((h) => h.id === id); }
 const DIR = { up: ["오를 수도", "up"], down: ["내릴 수도", "down"], swing: ["크게 출렁일 수도", "swing"] };
 function dirPill(dir) { const [t, c] = DIR[dir] || DIR.swing; return `<span class="badge b-${c === "swing" ? "warn" : c}">${t}</span>`; }
 function daysText(d) { return d <= 3 ? "오늘~며칠" : d <= 7 ? "일주일쯤" : d <= 14 ? "며칠~2주" : "몇 주~한 달"; }
@@ -4968,7 +4969,7 @@ async function loadInvest() {
     inv.lastIdx = curIdx();
     saveInvQuiet();
   } catch { invData.error = true; }
-  await loadRank();
+  await Promise.all([loadRank(), invData.hints ? null : getJson("/api/market?game=hints").then((j) => (invData.hints = j)).catch(() => (invData.hints = { pool: [] }))]);
   invData.loading = false;
   if (invData.again) { invData.again = false; return loadInvest(); } // 불러오는 사이 새로 연 종목이 있으면 한 번 더
   pushRank();
@@ -5373,7 +5374,7 @@ function viewInvest() {
     ${!inv.trades.some((t) => t.kind !== "bonus") || ui.invMixOpen ? mixBlock() : `<button class="card inv-mixmini" data-act="inv-mix"><span><b>내 성향에 맞는 나눠 담기</b><small class="hint">${esc(mixCompare() || `${riskType(profile.avert)} 예시 비율과 지금 비교하기`)}</small></span><span class="plus" aria-hidden="true">+</span></button>`}
 
     <section class="card inv-hintbar">
-      <button class="inv-hint-open" data-act="inv-hints">${mascot(30)}<span><b>루미의 오늘 힌트</b><small class="hint">${invData.game ? `${hints.length}개 · 나에게만 고른 오늘의 소식` : "만드는 중…"}</small></span><span class="plus" aria-hidden="true">+</span></button>
+      <button class="inv-hint-open" data-act="inv-hints">${mascot(30)}<span><b>루미의 오늘 힌트</b><small class="hint">${invData.hints ? `${hints.length}개 · 시장 소식과 나에게만 고른 정책 소식` : "만드는 중…"}</small></span><span class="plus" aria-hidden="true">+</span></button>
     </section>
 
     <section class="card inv-search">
@@ -5408,13 +5409,13 @@ function viewInvest() {
 function modalInvHints() {
   const hints = invHints();
   return `<div class="sec-title" style="margin:0"><h2>루미의 오늘 힌트</h2><span>나에게만 고른 ${hints.length}개</span></div>
-    <p class="hint" style="margin:0">사람마다 다른 힌트를 받아요. 소식은 실제 정부 보도자료에서 왔고, 이어 둔 종목은 그 업종의 대표 종목이에요. 실제 주가가 꼭 그렇게 움직이지는 않아요.</p>
-    ${hints.length ? hints.map((h) => `<div class="inv-hint ${h.kind === "rumor" ? "rumor" : ""}">
-      <div class="r">${h.kind === "rumor" ? `<span class="badge b-warn">소문 · 근거 없음</span>` : dirPill(h.dir)}<span class="hint">${daysText(h.days)}</span></div>
+    <p class="hint" style="margin:0">정책 소식은 사람마다 다르게 골라요. 실제 정부 보도자료에서 왔고, 관련 없는 소식은 AI(제미나이)가 한 번 걸러 냈어요. 시장 소식은 실제 코스피·종목의 마지막 거래일 움직임이에요. 실제 주가가 꼭 그렇게 움직이지는 않아요.</p>
+    ${hints.length ? hints.map((h) => `<div class="inv-hint">
+      <div class="r">${h.kind === "market" ? `<span class="badge b-flat">시장 소식</span>` : dirPill(h.dir)}<span class="hint">${daysText(h.days)}</span></div>
       <b>${esc(h.title)}</b><p>${esc(hintText(h))}</p>
-      <div class="r"><span class="hint">${h.sources.length ? `근거 ${h.sources.map((s) => (s.url ? `<a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.source)} 보도자료</a>` : esc(s.source))).join(" · ")}` : h.kind === "rumor" ? "출처 없음" : "예시 소식"}</span>
-        <span class="inv-hs">${h.stocks.map((id) => `<button class="chip small" data-act="inv-open" data-k="stock:${id}">${esc(company(id)?.name || id)}</button>`).join("")}</span></div>
-    </div>`).join("") : `<p class="hint">${invData.game ? "오늘은 눈에 띄는 소식이 없어요." : "힌트를 만드는 중이에요…"}</p>`}
+      <div class="r"><span class="hint">${h.sources.length ? `근거 ${h.sources.map((s) => (s.url ? `<a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.source)}${h.kind === "news" ? " 보도자료" : ""}</a>` : esc(s.source))).join(" · ")}` : "예시 소식"}</span>
+        <span class="inv-hs">${h.stocks.map((id) => `<button class="chip small" data-act="inv-open" data-k="stock:${esc(id)}">${esc(company(id)?.name || id)}</button>`).join("")}</span></div>
+    </div>`).join("") : `<p class="hint">${invData.hints ? "힌트를 불러오지 못했어요. 잠시 후 다시 열어 주세요." : "힌트를 만드는 중이에요…"}</p>`}
     <p class="hint" style="margin:0">사라·팔라는 뜻이 아니에요.</p>
     <button class="btn ghost" data-act="modal-close">닫기</button>`;
 }
