@@ -4868,16 +4868,14 @@ function viewOnboard() {
     </div></main>`;
 }
 
-// ───────────────────────── 모의투자 (가상 시장 게임) ─────────────────────────
-// 실제 주가는 한국거래소 자료라 화면에 다시 보여줄 수 없어서(공공누리 제4유형), 가상 기업 10곳으로 겨룬다.
-// 가격은 /api/market?game=1 이 만든다: 실제 정부 보도자료(정책브리핑)의 업종별 좋은·나쁜 소식이 1~4일 뒤 가격에 반영되고,
-// 같은 날이면 누구에게나 같은 값(순위가 공정하게). 수상한 두 회사 중 하나는 시즌마다 '폭탄주'(부실을 숨기고 오르다가 시즌 중간에 폭락).
-// 누구나 바로 시작: 시즌(한 달)마다 가상 1,000만 원. 하루 가격은 하나(오늘 종가)라 언제든 바로 사고판다.
+// ───────────────────────── 모의투자 (실제 종목 게임) ─────────────────────────
+// 실제 종목·실제 가격(금융위원회 주식시세, 전일 종가)으로 겨룬다. 데이터는 /api/market?game=1 (대표 종목 12개 + 산 종목 + 실제 코스피 + 보도자료 힌트).
+// 시세는 공공누리 제4유형(상업적 이용 금지, 원천 한국거래소)이라 지금은 수익 없는 시제품에서만 쓴다. 광고·구독을 붙이기 전에 다시 검토한다.
+// 누구나 바로 시작: 시즌(한 달)마다 가상 1,000만 원. 가장 최근 종가로 언제든 바로 사고판다(거래 시간 제한 없음).
 // 채권·예금·CMA는 게임 금리만큼 날마다 이자. 기록은 이 기기에, 로그인하면 계정에도(SYNC_DATA). 순위는 로그인한 사람끼리(Firestore invest/{시즌}/players/{uid}).
-// 평가: 팔 때·시즌 끝에, 산 뒤 오른 비율을 같은 기간 코스피(가상 시장은 실제 코스피를 이틀 늦게 따라감, 못 받으면 루미지수)와 비교하고, 고른 힌트의 방향·기간이 맞았는지 본다.
-const INV_KEY = "myeco.invest.v2";
+// 평가: 팔 때·시즌 끝에, 산 뒤 오른 비율을 같은 기간 코스피와 비교하고, 고른 힌트의 방향·기간이 맞았는지 본다.
+const INV_KEY = "myeco.invest.v3";
 const INV_START = 10000000;
-const INV_BONUS = { bomb: 1000000 }; // 폭탄주 찾기 100만 원 (퀴즈 보너스는 없앰: 모두 같은 돈으로 겨룬다)
 function seasonKey(d = new Date()) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`; }
 function seasonLabel(k) { return `${Number(k.slice(5))}월 시즌`; }
 function seasonLeft() { const d = new Date(); return new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate() - d.getDate(); }
@@ -4887,11 +4885,11 @@ function loadInv() {
   return { ...invNewSeason(), seasons: [], badges: {}, px: {}, good: 0, seed: Math.random().toString(36).slice(2, 10) };
 }
 let inv = loadInv();
-try { localStorage.removeItem("myeco.invest.v1"); } catch {} // 실제 종목으로 하던 예전 게임 기록은 지운다
+try { ["myeco.invest.v1", "myeco.invest.v2"].forEach((k) => localStorage.removeItem(k)); } catch {} // 예전 게임(실제 종목 1차·가상 시장) 기록은 지운다
 if (!inv.seed) inv.seed = Math.random().toString(36).slice(2, 10);
 function saveInv() { try { localStorage.setItem(INV_KEY, JSON.stringify(inv)); } catch {} syncSoon(); }
 function saveInvQuiet() { try { localStorage.setItem(INV_KEY, JSON.stringify(inv)); } catch {} }
-const invData = { game: null, rank: null, loading: false };
+const invData = { game: null, rank: null, loading: false, extra: [], search: [] };
 
 // 이자 상품: 실제 금리를 받지 않고 '루미의 경제 진단'으로 정한 게임 금리 (실제 금리 아님)
 // 진단(가정): 기준금리 2%대 중반, 물가는 안정 흐름 → 단기(CMA) < 예금 < 국고채 < 회사채 순으로 조금씩 높게
@@ -4905,7 +4903,7 @@ const RATES = [
 function rateProducts() { return RATES; }
 function rateById(id) { return RATES.find((p) => p.id === id); }
 
-// ── 가상 시장 값 ──
+// ── 시세 값 ──
 function company(id) { return invData.game?.companies.find((c) => c.id === id); }
 function quote(id) { // 오늘 시가·종가와 어제보다
   const s = invData.game?.series[id];
@@ -4954,10 +4952,12 @@ function daysText(d) { return d <= 3 ? "오늘~며칠" : d <= 7 ? "일주일쯤"
 
 // ── 불러오기 ──
 async function loadInvest() {
-  if (invData.loading) return;
+  if (invData.loading) { invData.again = true; return; }
   invData.loading = true;
   try {
-    const g = await getJson("/api/market?game=1");
+    const core = new Set((invData.game?.companies || []).filter((c) => c.core).map((c) => c.id));
+    const extra = [...new Set([...Object.values(inv.hold).filter((h) => h.kind === "stock").map((h) => h.id), ...invData.extra])].filter((n) => !core.has(n)).slice(0, 10);
+    const g = await getJson(`/api/market?game=1${extra.length ? `&extra=${encodeURIComponent(extra.join(","))}` : ""}`);
     invData.game = g;
     for (const c of g.companies) { const q = quote(c.id); if (q) inv.px[c.id] = q.v; }
     if (g.indexName && inv.idxName !== g.indexName) { // 비교 지수가 바뀌면(루미지수 → 코스피) 예전 기준값은 버린다
@@ -4966,50 +4966,15 @@ async function loadInvest() {
     }
     if (inv.idx0 == null && g.index?.length) inv.idx0 = g.index[0][1];
     inv.lastIdx = curIdx();
-    settleBomb();
     saveInvQuiet();
   } catch { invData.error = true; }
   await loadRank();
   invData.loading = false;
+  if (invData.again) { invData.again = false; return loadInvest(); } // 불러오는 사이 새로 연 종목이 있으면 한 번 더
   pushRank();
   if (route() === "invest") render();
 }
 
-// ── 폭탄주를 찾아라: 시즌에 한 번 신고, 폭탄이 터지면 정답 확인 ──
-function reportBomb(id) {
-  if (inv.bomb || invData.game?.crashed) return;
-  inv.bomb = { pick: id, at: Date.now() };
-  saveInv(); render();
-  toast(`${company(id)?.name}${josa(company(id)?.name || "", "을", "를")} 폭탄주로 신고했어요. 폭탄이 터지면 정답을 알 수 있어요`);
-}
-function settleBomb() {
-  const cr = invData.game?.crashed;
-  if (!cr || !inv.bomb || inv.bomb.done) return;
-  const crashStart = new Date(`${cr.day.slice(0, 4)}-${cr.day.slice(4, 6)}-${cr.day.slice(6, 8)}T00:00:00+09:00`).getTime();
-  const ok = inv.bomb.pick === cr.id && inv.bomb.at < crashStart;
-  inv.bomb.done = true; inv.bomb.ok = ok;
-  if (ok) {
-    inv.cash += INV_BONUS.bomb; inv.bonusTotal = (inv.bonusTotal || 0) + INV_BONUS.bomb;
-    inv.trades.unshift({ at: Date.now(), kind: "bonus", amt: INV_BONUS.bomb, label: "폭탄주 찾기" });
-    inv.badges.bomb = inv.badges.bomb || Date.now();
-    setTimeout(() => toast(`💣 정답! 폭탄주를 찾아서 +${invMan(INV_BONUS.bomb)}`), 800);
-  }
-  saveInv();
-}
-function bombBlock() {
-  const cr = invData.game?.crashed, B = inv.bomb;
-  const pickName = B ? company(B.pick)?.name || "" : "";
-  let body, tone = "";
-  if (cr) {
-    const bombName = company(cr.id)?.name || "";
-    if (B?.ok) { body = `정답이에요! <b>${esc(bombName)}</b>${josa(bombName, "이", "가")} 폭탄주였어요. +${invMan(INV_BONUS.bomb)}을 받았어요.`; tone = "ok"; }
-    else if (B) body = `아쉬워요. 폭탄주는 <b>${esc(bombName)}</b>였어요(신고: ${esc(pickName)}). 기업 정보의 단서를 다시 볼까요?`;
-    else body = `폭탄이 터졌어요! <b>${esc(bombName)}</b>${josa(bombName, "이", "가")} 빚과 적자를 숨기고 있었어요. 기업 정보의 단서를 다시 볼까요?`;
-    body += ` <button class="link-btn" data-act="inv-open" data-k="stock:${cr.id}">단서 보기 ›</button>`;
-  } else if (B) body = `<b>${esc(pickName)}</b>${josa(pickName, "을", "를")} 신고했어요. 폭탄이 터지면 정답을 알려 드려요.`;
-  else body = `이번 시즌 가상 시장 10곳 중 1곳은 빚과 적자를 숨기고 있어요. 기업 정보를 보고 찾아서 신고하면 <b>+${invMan(INV_BONUS.bomb)}</b>! (시즌에 한 번)`;
-  return `<section class="card inv-bomb ${tone}"><div class="sec-title" style="margin:0"><h2>💣 폭탄주를 찾아라</h2><span>${seasonLabel(inv.season)}</span></div><p>${body}</p></section>`;
-}
 
 // ── 시즌: 달이 바뀌면 마지막 값으로 평가하고 기록을 남긴 뒤 1,000만 원으로 다시 시작 ──
 function rollSeason() {
@@ -5137,7 +5102,6 @@ function invBadgeList() {
     { id: "first", icon: "💰", name: "첫 매매", desc: "처음으로 사 봤어요", ok: !!inv.badges.first || inv.trades.some((t) => t.kind !== "bonus") },
     { id: "mix", icon: "🧺", name: "나눠 담기", desc: "주식·채권·예금 중 두 종류 이상을 함께 가졌어요", ok: !!inv.badges.mix || groups >= 2 },
     { id: "analyst", icon: "🔍", name: "분석왕", desc: "근거도 맞고 시장보다 잘한 매매 3번", ok: (inv.good || 0) >= 3 },
-    { id: "bomb", icon: "💣", name: "폭탄 해체반", desc: "폭탄주를 터지기 전에 찾았어요", ok: !!inv.badges.bomb },
     { id: "season", icon: "🏁", name: "시즌 완주", desc: "한 시즌을 끝까지 했어요", ok: !!inv.badges.season },
     { id: "beat", icon: "🏆", name: "시장 이기기", desc: "한 시즌 수익률이 시장 지수(코스피)보다 높았어요", ok: !!inv.badges.beat },
   ];
@@ -5292,7 +5256,7 @@ function mixBlock() {
     <div class="mix-row"><span class="hint">지금</span>${bar(now)}</div>
     <div class="mix-leg">${Object.keys(mix).map((g) => `<div><i style="background:${INV_COLORS[g]}"></i><span>${g}</span><b class="num">${mix[g]}%</b><small class="hint num">지금 ${fmt(Math.round(now[g]))}%</small></div>`).join("")}</div>
     ${mixCompare() ? `<p class="mix-cmp">${esc(mixCompare())}</p>` : ""}
-    <div class="lumi-says inv-says">${mascot(36)}<p class="bubble-onb">${MIX_WHY[type]} 주식 ${mix.주식}%(약 ${invMan(total * mix.주식 / 100)})는 아래 가상 시장에서 직접 골라 보세요.</p></div>
+    <div class="lumi-says inv-says">${mascot(36)}<p class="bubble-onb">${MIX_WHY[type]} 주식 ${mix.주식}%(약 ${invMan(total * mix.주식 / 100)})는 아래 주식 시장에서 직접 골라 보세요.</p></div>
     ${canFill ? `<button class="btn ghost block inv-fill" data-act="inv-fill">예시 비율만큼 채권·예금 담기<small>${need.filter(([, v]) => v > 0).map(([g, v]) => `${g} ${invMan(v)}`).join(" · ")}</small></button>` : ""}
     <button class="link-btn" data-act="inv-risktest" style="align-self:flex-start;padding-left:0">${profile.riskTest ? "투자 성향 진단 다시 받기 ›" : "7문항 투자 성향 진단 받기 ›"}</button>
   </section>`;
@@ -5307,13 +5271,13 @@ function fillMix() {
     addRateLot(id, amt);
     done += amt;
   }
-  if (done) afterTrade(`채권·예금에 ${invMan(done)}을 나눠 담았어요. 주식은 가상 시장에서 골라 보세요`);
+  if (done) afterTrade(`채권·예금에 ${invMan(done)}을 나눠 담았어요. 종목은 아래 주식 시장에서 골라 보세요`);
 }
 
 // ── 화면 ──
 function lumiInvestLine() {
-  if (!invData.game) return "가상 시장을 여는 중이에요…";
-  if (!inv.trades.some((t) => t.kind !== "bonus")) return "가상 1,000만 원이 들어왔어요! 가상 시장의 10개 회사 중에서 골라 볼까요? 오늘 힌트도 있어요.";
+  if (!invData.game) return "시세를 불러오는 중이에요…";
+  if (!inv.trades.some((t) => t.kind !== "bonus")) return "가상 1,000만 원이 들어왔어요! 대표 종목이나 검색으로 첫 종목을 골라 볼까요? 오늘 힌트도 있어요.";
   const best = Object.values(inv.hold).filter((h) => h.kind === "stock").map((h) => ({ h, r: (holdValue(h) / h.cost - 1) * 100 })).sort((a, b) => Math.abs(b.r) - Math.abs(a.r))[0];
   if (best && Math.abs(best.r) >= 1) return `${esc(best.h.name)}${josa(best.h.name, "이", "가")} 산 뒤로 ${fmt(Math.abs(best.r), 1)}% ${best.r > 0 ? "올랐어요" : "내렸어요"}. 왜 그런지 오늘 힌트를 볼까요?`;
   if (invGroups().현금 / invTotal() > 0.8) return "아직 현금이 많아요. 주식이 부담되면 채권이나 CMA에 조금 넣어 두는 방법도 있어요.";
@@ -5333,20 +5297,25 @@ function rankBlock() {
     <p style="margin:0">로그인한 ${R.n}명 중 <b style="color:var(--green)">${R.me + 1}위</b>예요</p>
     <div class="rk-list">${top.map(row).join("")}${R.me >= 5 ? `<div class="rk-gap">…</div>${row(R.list[R.me], R.me)}` : ""}</div></section>`;
 }
-// 가상 시장 목록 (검색어로 거르기)
+// 주식 시장 목록: 대표 종목 12개(+ 산 종목). 검색하면 모든 종목에서 찾는다
 function invMarketList() {
   const G = invData.game;
-  if (!G) return `<p class="hint">${invData.error ? "가상 시장을 불러오지 못했어요. 잠시 후 다시 열어 주세요." : "가상 시장을 여는 중…"}</p>`;
+  if (!G) return `<p class="hint">${invData.error ? "시세를 불러오지 못했어요. 잠시 후 다시 열어 주세요." : "시세를 불러오는 중…"}</p>`;
   const q = (ui.invQ || "").trim().toLowerCase();
-  const hit = (c) => !q || `${c.name} ${c.sector} ${c.desc}`.toLowerCase().includes(q);
+  const hit = (c) => !q || `${c.name} ${c.sector}`.toLowerCase().includes(q);
   const rates = RATES.filter((p) => !q || p.name.toLowerCase().includes(q) || p.words.some((w) => w.includes(q) || q.includes(w)));
-  const rows = G.companies.filter(hit).map((c) => {
-    const Q = quote(c.id), crashed = G.crashed?.id === c.id;
-    return `<button class="inv-sr" data-act="inv-open" data-k="stock:${c.id}"><span><b>${esc(c.name)}${crashed ? ` <span class="badge b-no">💥 폭탄</span>` : ""}</b><small class="hint">${esc(c.sector)}</small></span>
+  const row = (c) => {
+    const Q = quote(c.id);
+    return `<button class="inv-sr" data-act="inv-open" data-k="stock:${esc(c.id)}"><span><b>${esc(c.name)}</b><small class="hint">${esc(c.sector || "")}</small></span>
       <span class="inv-px"><b class="num">${Q ? fmt(Q.v) : "-"}원</b><small class="num ${tone(Q?.pct)}">${Q ? pct(Q.pct) : ""}</small></span></button>`;
-  }).join("");
+  };
+  const shown = G.companies.filter(hit);
+  const more = q ? (invData.search || []).filter((r) => !G.companies.some((c) => c.id === r.name)).slice(0, 8)
+    .map((r) => `<button class="inv-sr" data-act="inv-open" data-k="stock:${esc(r.name)}"><span><b>${esc(r.name)}</b><small class="hint">${esc(r.market || "")}</small></span><span class="inv-px"><small class="hint">눌러서 가격 보기 ›</small></span></button>`).join("") : "";
   const rr = rates.map((p) => `<button class="inv-sr" data-act="inv-open" data-k="rate:${p.id}"><span><b>${esc(p.name)}</b><small class="hint">${p.group}</small></span><span class="inv-px"><b class="num">연 ${fmt(p.rate, 1)}%</b><small class="hint">게임 금리</small></span></button>`).join("");
-  return `${rows ? `<p class="hint inv-sub">주식 · 오늘 종가</p>${rows}` : ""}${rr ? `<p class="hint inv-sub">채권 · 예금 · CMA</p>${rr}` : ""}${!rows && !rr ? `<p class="hint">찾는 게 없어요.</p>` : ""}`;
+  return `${shown.length ? `<p class="hint inv-sub">${q ? "찾은 종목" : "대표 종목"} · ${ymdLabel(quote(shown[0].id)?.date)} 종가</p>${shown.map(row).join("")}` : ""}${more}
+    ${q && ui.invSearching ? `<p class="hint">찾는 중…</p>` : ""}
+    ${rr ? `<p class="hint inv-sub">채권 · 예금 · CMA</p>${rr}` : ""}${!shown.length && !more && !rr && !ui.invSearching ? `<p class="hint">찾는 종목이 없어요. 이름을 조금 다르게 적어 보세요.</p>` : ""}`;
 }
 function holdRow(h) {
   const v = holdValue(h);
@@ -5397,7 +5366,7 @@ function viewInvest() {
     <section class="card inv-top">
       <div class="sec-title" style="margin:0"><span class="hint">내 가상 자산</span><span class="badge b-flat">${seasonLabel(inv.season)} · D-${seasonLeft()}</span></div>
       <div class="inv-total"><b class="num">${won(Math.round(total))}</b><span class="badge b-${tone(ret)}">${ret > 0 ? "+" : ""}${fmt(ret, 2)}%</span></div>
-      <p class="hint num" style="margin:0">현금 ${won(Math.round(inv.cash))} · 투자 ${won(Math.round(total - inv.cash))}${inv.bonusTotal ? ` · 보너스 +${won(inv.bonusTotal)}` : ""}${invData.game?.sample ? ` <span class="badge b-sample">예시 소식</span>` : ""}</p>
+      <p class="hint num" style="margin:0">현금 ${won(Math.round(inv.cash))} · 투자 ${won(Math.round(total - inv.cash))}${inv.bonusTotal ? ` · 보너스 +${won(inv.bonusTotal)}` : ""}${invData.game?.sample ? ` <span class="badge b-sample">예시 데이터</span>` : ""}</p>
       ${chartBlock()}
     </section>
 
@@ -5408,20 +5377,18 @@ function viewInvest() {
     </section>
 
     <section class="card inv-search">
-      <div class="sec-title" style="margin:0 0 8px"><h2>가상 시장</h2><span>${idxName()} ${curIdx() ? fmt(curIdx(), 2) : "-"}${invData.game?.indexDate ? ` · ${ymdLabel(invData.game.indexDate)} 종가` : ""}</span></div>
-      <div class="searchbox inv-sbox">${SEARCH_ICON}<label for="inv-q" class="sr">회사·채권·예금 찾기</label>
-        <input id="inv-q" type="search" autocomplete="off" placeholder="회사 이름이나 업종으로 찾기 (예: 반도체, 채권)" value="${esc(ui.invQ || "")}"></div>
+      <div class="sec-title" style="margin:0 0 8px"><h2>주식 시장</h2><span>${idxName()} ${curIdx() ? fmt(curIdx(), 2) : "-"}${invData.game?.indexDate ? ` · ${ymdLabel(invData.game.indexDate)} 종가` : ""}</span></div>
+      <div class="searchbox inv-sbox">${SEARCH_ICON}<label for="inv-q" class="sr">종목·채권·예금 찾기</label>
+        <input id="inv-q" type="search" autocomplete="off" placeholder="종목 이름으로 찾기 (예: 하이닉스, 포스코, 채권)" value="${esc(ui.invQ || "")}"></div>
       <div id="inv-results">${invMarketList()}</div>
     </section>
-
-    ${bombBlock()}
 
     <section class="card">
       <div class="sec-title" style="margin:0"><h2>내 포트폴리오</h2><span>${holds.length ? `${holds.length}개 상품` : "아직 없어요"}</span></div>
       <div class="inv-mix">${donut(G, total)}
         <div class="inv-leg">${Object.entries(G).map(([g, v]) => `<div><i style="background:${INV_COLORS[g]}"></i><span>${g}</span><b class="num">${fmt(Math.round((v / total) * 100))}%</b><small class="hint num">${invMan(v)}</small></div>`).join("")}</div>
       </div>
-      ${holds.length ? `<div class="inv-holds">${holds.map(holdRow).join("")}</div>` : `<p class="hint" style="margin:0">위 가상 시장에서 회사나 채권·예금을 골라 담아 보세요.</p>`}
+      ${holds.length ? `<div class="inv-holds">${holds.map(holdRow).join("")}</div>` : `<p class="hint" style="margin:0">아래 주식 시장에서 종목이나 채권·예금을 골라 담아 보세요.</p>`}
     </section>
 
     ${rankBlock()}
@@ -5434,28 +5401,29 @@ function viewInvest() {
     <section class="card"><div class="sec-title" style="margin:0"><h2>모의투자 배지</h2><span>${badges.filter((b) => b.ok).length}/${badges.length}</span></div>
       <div class="inv-badges">${badges.map((b) => `<div class="${b.ok ? "ok" : ""}" title="${esc(b.desc)}"><span>${b.icon}</span><b>${b.name}</b><small>${esc(b.desc)}</small></div>`).join("")}</div></section>
 
-    <p class="foot">가상 돈과 가상 회사로 하는 게임이에요. 회사와 숫자는 모두 지어낸 것이고, 가격은 실제 정부 보도자료(정책브리핑)의 업종별 소식에 반응해요. 실제 코스피 흐름도 이틀 늦게 따라가요(코스피: 금융위원회·한국거래소 자료). 하루 가격은 오늘 종가 하나라 언제든 바로 사고팔아요. ${RATE_NOTE} 힌트와 평가는 투자 권유가 아닌 공부용 참고예요.</p>
+    <p class="foot">가상 돈으로 하는 게임이에요. 주식 가격은 실제 전일 종가(금융위원회·한국거래소 자료)이고, 가장 최근 종가로 언제든 바로 사고팔아요. 코스피도 실제 값이에요. ${RATE_NOTE} 힌트와 평가는 투자 권유가 아닌 공부용 참고예요.</p>
   </main>`;
 }
 // 힌트 팝업
 function modalInvHints() {
   const hints = invHints();
   return `<div class="sec-title" style="margin:0"><h2>루미의 오늘 힌트</h2><span>나에게만 고른 ${hints.length}개</span></div>
-    <p class="hint" style="margin:0">사람마다 다른 힌트를 받아요. 소식은 실제 정부 보도자료에서 왔고, 가상 회사 값에 하루~나흘 뒤 반영될 수 있어요.</p>
+    <p class="hint" style="margin:0">사람마다 다른 힌트를 받아요. 소식은 실제 정부 보도자료에서 왔고, 이어 둔 종목은 그 업종의 대표 종목이에요. 실제 주가가 꼭 그렇게 움직이지는 않아요.</p>
     ${hints.length ? hints.map((h) => `<div class="inv-hint ${h.kind === "rumor" ? "rumor" : ""}">
       <div class="r">${h.kind === "rumor" ? `<span class="badge b-warn">소문 · 근거 없음</span>` : dirPill(h.dir)}<span class="hint">${daysText(h.days)}</span></div>
       <b>${esc(h.title)}</b><p>${esc(hintText(h))}</p>
       <div class="r"><span class="hint">${h.sources.length ? `근거 ${h.sources.map((s) => (s.url ? `<a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.source)} 보도자료</a>` : esc(s.source))).join(" · ")}` : h.kind === "rumor" ? "출처 없음" : "예시 소식"}</span>
         <span class="inv-hs">${h.stocks.map((id) => `<button class="chip small" data-act="inv-open" data-k="stock:${id}">${esc(company(id)?.name || id)}</button>`).join("")}</span></div>
-    </div>`).join("") : `<p class="hint">${invData.game ? "오늘은 눈에 띄는 소식이 없어요. 회사 정보를 살펴보세요." : "힌트를 만드는 중이에요…"}</p>`}
-    <p class="hint" style="margin:0">사라·팔라는 뜻이 아니에요. 소문은 일부러 섞어 둔 함정일 수도 있어요.</p>
+    </div>`).join("") : `<p class="hint">${invData.game ? "오늘은 눈에 띄는 소식이 없어요." : "힌트를 만드는 중이에요…"}</p>`}
+    <p class="hint" style="margin:0">사라·팔라는 뜻이 아니에요.</p>
     <button class="btn ghost" data-act="modal-close">닫기</button>`;
 }
 // 회사 그래프(이번 시즌 종가)
 function companyChart(id) {
   const s = invData.game?.series[id] || [];
   if (s.length < 2) return "";
-  return lineChart(s.map((r) => ({ d: r[0], v: r[2] })), { h: 96, base: s[0][1], label: "이번 시즌 가격" });
+  const ss = s.filter((r) => r[0] >= inv.season.replace("-", "") + "01"); const use = ss.length >= 2 ? ss : s;
+  return lineChart(use.map((r) => ({ d: r[0], v: r[2] })), { h: 96, base: use[0][2], label: "이번 시즌 가격" });
 }
 // 사고팔기 팝업 (주식은 회사 정보·폭탄주 신고 포함)
 function modalInvTrade(m) {
@@ -5475,37 +5443,24 @@ function modalInvTrade(m) {
       ${h ? `<button class="btn ghost" data-act="inv-withdraw" data-id="${id}">전부 빼기 (${won(v)})</button>` : ""}`;
   }
   const c = company(id), Q = quote(id), h = inv.hold[holdKey("stock", id)];
-  if (!c || !Q) return `<div class="sec-title" style="margin:0"><h2>회사 정보</h2>${close}</div><p class="hint">가상 시장을 여는 중이에요…</p>`;
-  const crashed = invData.game.crashed?.id === id;
+  if (!c || !Q) {
+    if (invData.game && !invData.extra.includes(id)) { invData.extra.push(id); loadInvest(); }
+    return `<div class="sec-title" style="margin:0"><h2>${esc(id)}</h2>${close}</div><p class="hint">${invData.game && invData.extra.includes(id) && !invData.loading ? "이 종목의 가격을 찾지 못했어요. 검색에서 정확한 이름을 골라 주세요." : "가격을 불러오는 중이에요…"}</p>`;
+  }
   const qty = Math.max(1, m.qty || 1), max = side === "buy" ? Math.floor(inv.cash / Q.v) : h?.qty || 0;
   const rel = invHints().filter((x) => x.dir).sort((a, b) => b.stocks.includes(id) - a.stocks.includes(id)).slice(0, 3);
   const rs = m.reason || {};
   const chip = (type, label, extra = "") => `<button class="chip ${rs.type === type && (type !== "hint" || rs.hintId === extra) ? "on" : ""}" data-act="inv-reason" data-t="${type}" data-h="${extra}">${label}</button>`;
-  const I = c.info || {};
-  const B = inv.bomb;
-  const bombBtn = invData.game.crashed ? "" : B ? (B.pick === id ? `<p class="hint" style="margin:0">💣 이 회사를 폭탄주로 신고했어요</p>` : "")
-    : `<button class="btn ghost block" data-act="inv-bomb" data-id="${id}">💣 이 회사를 폭탄주로 신고하기 (시즌에 한 번)</button>`;
   return `<div class="sec-title" style="margin:0"><h2>${esc(c.name)}</h2>${close}</div>
-    <p class="hint" style="margin:-4px 0 0">${esc(c.sector)} · ${esc(c.desc)}</p>
-    ${crashed ? `<div class="inv-q" style="background:var(--up-bg);color:var(--up)"><b>💥 폭탄이 터졌어요.</b> 숨겨 둔 빚과 적자가 드러났어요. 아래 단서를 확인해 보세요.</div>` : ""}
+    <p class="hint" style="margin:-4px 0 0">${esc(c.sector || "주식")}${c.code ? ` · <a href="https://finance.naver.com/item/main.naver?code=${esc(c.code)}" target="_blank" rel="noopener">네이버 증권에서 회사 정보 보기 ›</a>` : ""}</p>
     ${h ? `<div class="inv-seg"><button class="${side === "buy" ? "on" : ""}" data-act="inv-side" data-v="buy">사기</button><button class="${side === "sell" ? "on" : ""}" data-act="inv-side" data-v="sell">팔기 (${fmt(h.qty)}주)</button></div>` : ""}
     <div class="inv-q">
-      <div class="r"><span class="hint">오늘 시가</span><span class="num">${fmt(Q.o)}원</span></div>
-      <div class="r"><span class="hint">오늘 종가 · 이 값으로 바로 ${side === "buy" ? "사요" : "팔아요"}</span><b class="num">${fmt(Q.v)}원</b></div>
-      <div class="r"><span class="hint">어제보다</span><span class="num ${tone(Q.pct)}">${pct(Q.pct)}</span></div>
+      <div class="r"><span class="hint">${ymdLabel(Q.date)} 시가</span><span class="num">${fmt(Q.o)}원</span></div>
+      <div class="r"><span class="hint">${ymdLabel(Q.date)} 종가 · 이 값으로 바로 ${side === "buy" ? "사요" : "팔아요"}</span><b class="num">${fmt(Q.v)}원</b></div>
+      <div class="r"><span class="hint">전날보다</span><span class="num ${tone(Q.pct)}">${pct(Q.pct)}</span></div>
+      ${invData.game.sample ? `<span class="badge b-sample">예시 데이터</span>` : ""}
       ${companyChart(id)}
     </div>
-    <details class="inv-info" ${m.info ? "open" : ""}><summary><b>기업 정보</b> <span class="hint">폭탄주 단서가 여기 있어요</span></summary>
-      <div class="ev-grid">
-        <span class="hint">부채비율 (빚 ÷ 자기 돈)</span><span>${esc(I.debt || "-")}</span>
-        <span class="hint">영업이익 (본업으로 번 돈)</span><span>${esc(I.op || "-")}</span>
-        <span class="hint">매출 증가</span><span>${esc(I.sales || "-")}</span>
-        <span class="hint">감사의견</span><span>${esc(I.audit || "-")}</span>
-        <span class="hint">최근 공시</span><span>${esc(I.notice || "-")}</span>
-      </div>
-      <p class="hint" style="margin:6px 0 0">빚이 아주 많거나, 몇 년째 적자인데 매출만 크게 늘거나, 감사인이 걱정을 적었거나, 대표가 주식을 팔면 위험 신호일 수 있어요.</p>
-      ${bombBtn}
-    </details>
     <div class="r"><b>수량</b><span class="inv-step"><button class="icon-btn" data-act="inv-qty" data-d="-1" aria-label="하나 빼기">−</button>
       <input class="field num" id="inv-qty" inputmode="numeric" value="${qty}" aria-label="수량"><button class="icon-btn" data-act="inv-qty" data-d="1" aria-label="하나 더하기">+</button>
       <button class="chip small" data-act="inv-max">최대 ${fmt(max)}</button></span></div>
@@ -5563,7 +5518,6 @@ document.addEventListener("click", (e) => {
       buyStock(id, qty, reason);
       break;
     }
-    case "inv-bomb": reportBomb(el.dataset.id); break;
     case "inv-deposit": depositRate(el.dataset.id, Math.round((parseFloat(document.getElementById("inv-amt")?.value) || 0) * 10000)); break;
     case "inv-withdraw": withdrawRate(el.dataset.id); break;
     case "inv-mix": ui.invMixOpen = !ui.invMixOpen; render(); break;
@@ -5571,10 +5525,24 @@ document.addEventListener("click", (e) => {
     case "inv-risktest": ui.rtFrom = "invest"; ui.rt = null; go("#risktest"); break;
   }
 });
+let invTimer;
 document.addEventListener("toggle", (e) => { if (e.target.classList?.contains("inv-info") && ui.modal?.kind === "inv-trade") ui.modal.info = e.target.open; }, true);
 document.addEventListener("input", (e) => {
   const el = e.target;
-  if (el.id === "inv-q") { ui.invQ = el.value; const box = document.getElementById("inv-results"); if (box) box.innerHTML = invMarketList(); return; }
+  if (el.id === "inv-q") {
+    ui.invQ = el.value;
+    const q = el.value.trim();
+    const paint = () => { const box = document.getElementById("inv-results"); if (box) box.innerHTML = invMarketList(); };
+    clearTimeout(invTimer);
+    invData.search = []; ui.invSearching = q.length >= 1;
+    paint();
+    if (!q) return;
+    invTimer = setTimeout(async () => {
+      try { const j = await getJson(`/api/market?search=${encodeURIComponent(q)}`); if ((ui.invQ || "").trim() === q) invData.search = j.results || []; } catch { invData.search = []; }
+      ui.invSearching = false; paint();
+    }, 300);
+    return;
+  }
   if (el.id === "inv-qty" && ui.modal?.kind === "inv-trade") {
     const m = ui.modal, P = invPrice(m.k.slice(6)), q = Math.max(0, parseInt(el.value, 10) || 0);
     m.qty = q || 1;

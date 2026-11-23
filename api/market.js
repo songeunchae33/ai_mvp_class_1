@@ -2,7 +2,7 @@
 // ECOS_KEY가 아직 없으면 지수는 금융위원회, 환율은 한국수출입은행으로 예전처럼 받는다.
 // GET /api/market?stocks=삼성전자,카카오   → 홈 화면 데이터
 // GET /api/market?search=삼성              → 종목 이름 검색 (관심 종목 추가용)
-// GET /api/market?game=1                   → 모의투자 '가상 시장' (가상 기업 10곳, 실제 정부 보도자료에 반응하는 가격, api/_game 참고 아래)
+// GET /api/market?game=1&extra=종목,종목   → 모의투자 '실제 시장' (대표 종목 12개 + 산 종목의 이번 시즌 시가·종가, 실제 코스피, 보도자료 힌트)
 // 키가 없거나 호출이 실패하면 예시 데이터를 sample:true 로 돌려준다.
 import { kstYmd, fetchJson, num, dataGoItems, dataGoKey, cache } from "./_util.js";
 import { pressReleases } from "./_policy.js";
@@ -92,13 +92,11 @@ async function usd() {
   return { v: today.v, vs, pct: prev ? Math.round((vs / prev.v) * 10000) / 100 : 0, date: today.date };
 }
 
-// ───────────────────────── 모의투자 '가상 시장' ─────────────────────────
-// 실제 주가는 한국거래소 자료라 앱 화면에 다시 보여줄 수 없어서(공공누리 제4유형), 가상 기업 10곳으로 겨룬다.
-// 가격은 실제 정부 보도자료(정책브리핑, 공공저작물)에 반응한다: 날마다 업종별 좋은 소식·나쁜 소식을 세고,
-// 그 소식이 하루~나흘 뒤 가격에 조금씩 반영된다(힌트를 보고 판단할 시간이 있게). 나머지는 정해진 무작위.
-// 같은 날·같은 시즌이면 누구에게나 같은 값이 나온다(순위가 공정하게). GAME_SECRET이 있으면 폭탄주를 미리 계산할 수 없다.
-// 수상한 두 회사(대박바이오·번쩍에너지) 중 하나가 시즌마다 '폭탄주': 부실을 숨기고 오르다가 시즌 중간(12~26일)에 크게 떨어진다.
-const GAME_SECRET = process.env.GAME_SECRET || "lumi-market";
+// ───────────────────────── 모의투자 '실제 시장' ─────────────────────────
+// 실제 종목·실제 가격(금융위원회 주식시세, 전일 종가)으로 겨룬다. 비교 지수는 실제 코스피.
+// 주의: 시세는 공공누리 제4유형(상업적 이용 금지·변경 금지, 원천 한국거래소)이라 광고·구독 등 상업화 전에는 다시 검토해야 한다.
+// 힌트는 실제 정부 보도자료(정책브리핑, 공공저작물)에서 업종별 좋은·나쁜 소식을 골라, 그 업종의 대표 종목과 이어 준다(방향은 가능성일 뿐).
+// GET /api/market?game=1&extra=종목A,종목B → { season, today, index, series: { 종목: [[YYYYMMDD, 시가, 종가]] }, companies, pool, indexName, indexDate, sample }
 const SECTORS = {
   chip: { name: "반도체", words: ["반도체", "메모리", "인공지능", "AI", "파운드리", "칩"] },
   car: { name: "자동차·수출", words: ["자동차", "전기차", "수출", "관세", "통상"] },
@@ -110,36 +108,17 @@ const SECTORS = {
   platform: { name: "인터넷·플랫폼", words: ["플랫폼", "디지털", "데이터", "인터넷", "온라인", "AI"] },
   bio: { name: "바이오", words: ["바이오", "신약", "의약", "제약", "임상", "헬스"] },
 };
+// 모의투자 첫 화면에 늘 보여 줄 대표 종목 (업종별, 너무 많지 않게 12개). 다른 종목은 검색으로 산다
+const UNIVERSE = [
+  ["삼성전자", "chip"], ["SK하이닉스", "chip"], ["현대차", "car"], ["KB금융", "bank"], ["LG에너지솔루션", "battery"], ["하이브", "content"],
+  ["현대건설", "build"], ["CJ제일제당", "food"], ["NAVER", "platform"], ["카카오", "platform"], ["삼성바이오로직스", "bio"], ["셀트리온", "bio"],
+];
 const POS = ["호조", "증가", "확대", "지원", "성장", "최대", "개선", "상승", "회복", "활성화", "타결", "완화", "육성", "유치", "기대", "흑자"];
 const NEG = ["감소", "둔화", "하락", "규제", "위기", "우려", "적자", "부진", "축소", "단속", "과징금", "제재", "피해", "중단"];
-const COMPANIES = [
-  { id: "lumichip", name: "루미반도체", sector: "chip", base: 82000, vol: 0.02, sens: 1.2, desc: "메모리 반도체를 만들어요. AI 서버가 늘면 많이 팔려요.",
-    info: { debt: "45%", op: "흑자 · 1년 1.8조 원", sales: "+12%", audit: "적정", notice: "새 공장 투자를 발표했어요" } },
-  { id: "saessak", name: "새싹자동차", sector: "car", base: 64000, vol: 0.015, sens: 1, desc: "자동차를 만들어 해외에 많이 팔아요. 수출·관세 소식에 움직여요.",
-    info: { debt: "110%", op: "흑자 · 1년 9,800억 원", sales: "+6%", audit: "적정", notice: "해외 공장 가동을 시작했어요" } },
-  { id: "dundun", name: "든든은행", sector: "bank", base: 21000, vol: 0.01, sens: 0.8, desc: "예금을 받아 대출해 주고 이자 차이로 벌어요. 금리 소식에 민감해요.",
-    info: { debt: "은행은 따로 봐요", op: "흑자 · 1년 2.4조 원", sales: "+3%", audit: "적정", notice: "배당을 늘린다고 했어요" } },
-  { id: "banjjak", name: "반짝배터리", sector: "battery", base: 45000, vol: 0.022, sens: 1.1, desc: "전기차 배터리를 만들어요. 전기차가 잘 팔리면 같이 커요.",
-    info: { debt: "150%", op: "흑자 · 1년 2,100억 원", sales: "-4%", audit: "적정", notice: "유럽 공장 증설을 미뤘어요" } },
-  { id: "kkuljaem", name: "꿀잼엔터", sector: "content", base: 28000, vol: 0.019, sens: 1.1, desc: "드라마·예능·공연을 만들어요. 한류와 관광 소식에 움직여요.",
-    info: { debt: "70%", op: "흑자 · 1년 650억 원", sales: "+18%", audit: "적정", notice: "해외 공동제작 계약을 맺었어요" } },
-  { id: "teunteun", name: "튼튼건설", sector: "build", base: 17000, vol: 0.014, sens: 1, desc: "아파트와 도로를 지어요. 주택 공급·부동산 정책에 따라 움직여요.",
-    info: { debt: "190% (건설사는 원래 높은 편)", op: "흑자 · 1년 1,200억 원", sales: "+2%", audit: "적정", notice: "신도시 공사를 따냈어요" } },
-  { id: "basak", name: "바삭식품", sector: "food", base: 36000, vol: 0.008, sens: 0.6, desc: "과자와 라면을 만들어요. 경기가 나빠도 잘 안 흔들리는 편이에요.",
-    info: { debt: "60%", op: "흑자 · 1년 900억 원", sales: "+5%", audit: "적정", notice: "원재료 값이 올라 가격 인상을 검토해요" } },
-  { id: "gureum", name: "구름플랫폼", sector: "platform", base: 52000, vol: 0.018, sens: 1, desc: "메신저와 쇼핑 앱을 운영해요. 디지털·AI 정책에 민감해요.",
-    info: { debt: "55%", op: "흑자 · 1년 1,500억 원", sales: "+9%", audit: "적정", notice: "AI 비서 서비스를 내놨어요" } },
-  { id: "daebak", name: "대박바이오", sector: "bio", base: 15000, vol: 0.028, sens: 1.3, suspect: true, desc: "신약을 개발해요. 성공하면 크게 오르지만 실패하면 크게 떨어져요." },
-  { id: "beonjjeok", name: "번쩍에너지", sector: "battery", base: 9000, vol: 0.028, sens: 1.3, suspect: true, desc: "새로운 배터리 소재를 개발한다고 해요. 요즘 관심이 많아요." },
-];
-// 폭탄주의 기업 정보(단서): 빚이 많고, 적자인데 매출만 크게 늘고, 감사인이 '계속기업 불확실성'을 적었고, 대표가 주식을 판다
-const BOMB_INFO = { debt: "380%", op: "3년째 적자 · 1년 -380억 원", sales: "+85%", audit: "적정이지만 '계속기업 불확실성'이 적혀 있어요", notice: "대표가 자기 주식을 일부 팔았어요 · 전환사채를 또 발행했어요" };
-// 수상하지만 실제로는 괜찮은 회사의 정보: 위험해 보이지만 숫자는 나아지는 중
-const HONEST_INFO = { debt: "140%", op: "적자가 줄어드는 중 · 1년 -40억 원", sales: "+35%", audit: "적정", notice: "새 제품 시험 결과를 곧 발표해요" };
 
-function seeded(...k) { // 0~1 사이 정해진 무작위 (같은 열쇠면 같은 값)
+function seeded(...k) { // 0~1 사이 정해진 무작위 (같은 열쇠면 같은 값) — 힌트 기간, 키가 없을 때 예시 값에만 쓴다
   let h = 2166136261;
-  for (const ch of `${GAME_SECRET}|${k.join("|")}`) h = Math.imul(h ^ ch.charCodeAt(0), 16777619);
+  for (const ch of k.join("|")) h = Math.imul(h ^ ch.charCodeAt(0), 16777619);
   h ^= h >>> 15; h = Math.imul(h, 2246822507); h ^= h >>> 13; h = Math.imul(h, 3266489909); h ^= h >>> 16;
   return (h >>> 0) / 4294967296;
 }
@@ -155,10 +134,6 @@ function newsTone(text) {
   const p = POS.filter((w) => text.includes(w)).length, n = NEG.filter((w) => text.includes(w)).length;
   return p > n ? 1 : n > p ? -1 : 0;
 }
-function roundPrice(v) { return v >= 10000 ? Math.round(v / 50) * 50 : v >= 1000 ? Math.round(v / 10) * 10 : Math.round(v); }
-
-// 업종마다 시장(코스피)을 얼마나 따라 움직이는지 (1이면 코스피만큼)
-const BETA = { chip: 1.3, car: 1.0, bank: 0.7, battery: 1.2, content: 0.9, build: 0.8, food: 0.5, platform: 1.1, bio: 1.2 };
 // 실제 코스피 날마다 종가 [[YYYYMMDD, 값]] (오래된 날부터). ECOS 키가 있으면 한국은행 ECOS, 없으면 공공데이터포털 금융위원회
 async function kospiDaily(from) {
   if (process.env.ECOS_KEY) {
@@ -169,111 +144,78 @@ async function kospiDaily(from) {
       if (rows.length) return rows.sort((a, b) => (a[0] < b[0] ? -1 : 1));
     } catch (e) { console.error("kospi ecos", e.message); }
   }
-  if (!process.env.DATA_GO_KR_KEY) return [];
   const items = await dataGo("GetMarketIndexInfoService_V2/getStockMarketIndex_V2", { idxNm: "코스피", beginBasDt: from, numOfRows: "100" });
   return items.map((it) => [it.basDt, num(it.clpr)]).filter((x) => x[1] != null).sort((a, b) => (a[0] < b[0] ? -1 : 1));
 }
+// 한 종목의 날마다 [날짜, 시가, 종가] (오래된 날부터) + 종목 코드
+async function stockDaily(name, from) {
+  const items = await dataGo("GetStockSecuritiesInfoService_V2/getStockPriceInfo_V2", { itmsNm: name, beginBasDt: from, numOfRows: "100" });
+  const mine = items.filter((it) => it.itmsNm === name);
+  return { code: mine[0]?.srtnCd || "", market: mine[0]?.mrktCtg || "", rows: mine.map((it) => [it.basDt, num(it.mkp), num(it.clpr)]).filter((r) => r[2] != null).sort((a, b) => (a[0] < b[0] ? -1 : 1)) };
+}
+// 키가 없을 때(로컬 확인용) 예시 값: 평일만, 이름마다 같은 모양
+function sampleDaily(seed, from, base) {
+  const out = [];
+  let v = base;
+  for (let d = from; d <= kstYmd(1); d = ymdAdd(d, 1)) {
+    const wd = new Date(`${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6, 8)}T00:00:00Z`).getUTCDay();
+    if (wd === 0 || wd === 6) continue;
+    const o = Math.round(v * (1 + (seeded(seed, d, "o") - 0.5) * 0.01));
+    v = Math.round(v * (1 + (seeded(seed, d) - 0.49) * 0.03));
+    out.push([d, o, v]);
+  }
+  return out;
+}
 
-async function virtualMarket() {
+async function realMarket(extra) {
   const today = kstYmd(0), season = `${today.slice(0, 4)}-${today.slice(4, 6)}`;
-  const start = `${today.slice(0, 6)}01`;
-  const days = [];
-  for (let d = start; d <= today; d = ymdAdd(d, 1)) days.push(d);
-  // 업종별 그날의 소식 점수(-2~2)와 근거 보도자료
-  const sig = {}, news = {};
-  let sample = !process.env.DATA_GO_KR_KEY;
-  if (!sample) {
-    try {
-      const rel = await pressReleases(Math.min(35, days.length + 5));
-      if (!rel.length) sample = true;
-      for (const r of rel) {
-        const d = relYmd(r.at), text = `${r.title} ${r.sub}`, t = newsTone(text);
-        if (!d || !t) continue;
-        for (const [sec, S] of Object.entries(SECTORS)) if (S.words.some((w) => text.includes(w))) {
-          const k = `${sec}|${d}`;
-          sig[k] = Math.max(-2, Math.min(2, (sig[k] || 0) + t));
-          (news[k] ||= []).push({ title: r.title, url: r.url, org: r.org, tone: t });
-        }
-      }
-    } catch (e) { console.error("game news", e.message); sample = true; }
-  }
-  if (sample) for (const sec of Object.keys(SECTORS)) for (let d = ymdAdd(start, -5); d <= today; d = ymdAdd(d, 1)) {
-    const x = seeded("sample", sec, d);
-    if (x < 0.12) sig[`${sec}|${d}`] = -1; else if (x > 0.86) sig[`${sec}|${d}`] = 1;
-  }
-  const S = (sec, d) => sig[`${sec}|${d}`] || 0;
-  const secs = Object.keys(SECTORS);
-  const allSig = (d) => secs.reduce((s, sec) => s + S(sec, d), 0) / secs.length;
-
-  // 실제 코스피: 가상 회사도 코스피 흐름을 따라 움직이고, 비교선(지수)도 실제 코스피.
-  // 그날 종가는 다음 날 오후에야 공개돼서, 값이 낮에 바뀌지 않게 '이틀 전' 코스피를 쓴다(가상 시장은 실제 시장을 이틀 늦게 따라간다)
+  const start = `${today.slice(0, 6)}01`, from = ymdAdd(start, -10); // 전날 대비를 알 수 있게 시즌 전 며칠도 받는다
+  const sample = !process.env.DATA_GO_KR_KEY;
+  const names = [...UNIVERSE.map(([n]) => n), ...extra.filter((n) => !UNIVERSE.some(([u]) => u === n))];
+  const series = {}, meta = {};
   let K = [];
-  try { K = await kospiDaily(ymdAdd(start, -14)); } catch (e) { console.error("kospi", e.message); }
-  const kAt = (d) => { let v = null; for (const x of K) { if (x[0] <= d) v = x[1]; else break; } return v; };
-  const kLag = (d) => kAt(ymdAdd(d, -2));
-  const kChg = (d) => { const a = kLag(d), b = kLag(ymdAdd(d, -1)); return a && b ? a / b - 1 : 0; };
-  const realIdx = days.every((d) => kLag(d) != null);
-
-  const bomb = seeded(season, "bomb") < 0.5 ? "daebak" : "beonjjeok";
-  const crashAt = 11 + Math.floor(seeded(season, "crash") * 15); // 12~26일
-  const series = {}, info = {};
-  for (const c of COMPANIES) {
-    let prev = c.base * (0.95 + seeded(season, c.id, "start") * 0.1);
-    const rows = [];
-    days.forEach((d, i) => {
-      let effect = 0;
-      for (let lag = 1; lag <= 4; lag++) effect += S(c.sector, ymdAdd(d, -lag)) * 0.0035 * c.sens * (1 - (lag - 1) * 0.2);
-      const mkt = realIdx ? kChg(d) * BETA[c.sector] + allSig(ymdAdd(d, -1)) * 0.002
-        : (seeded(season, "mkt", d) - 0.5) * 0.012 + allSig(ymdAdd(d, -1)) * 0.003;
-      const noise = (seeded(season, c.id, d) - 0.5) * 2 * c.vol;
-      let r = effect + mkt + noise + 0.0003 - (prev / c.base - 1) * 0.02; // 너무 멀리 가면 조금씩 제자리로
-      if (c.id === bomb) {
-        if (i < crashAt) r = Math.abs(r) * 0.6 + 0.012;
-        else if (i === crashAt) r = -0.55;
-        else if (i <= crashAt + 3) r = -0.04 + noise * 0.5;
-      }
-      const open = roundPrice(prev * (1 + (seeded(season, c.id, d, "gap") - 0.5) * 0.01 + effect * 0.4));
-      const close = roundPrice(Math.max(100, prev * (1 + r)));
-      rows.push([d, open, close]);
-      prev = close;
-    });
-    series[c.id] = rows;
-    info[c.id] = c.suspect ? (c.id === bomb ? BOMB_INFO : HONEST_INFO) : c.info;
+  if (!sample) {
+    await Promise.all([
+      kospiDaily(from).then((v) => (K = v)).catch((e) => console.error("kospi", e.message)),
+      ...names.map((n) => stockDaily(n, from).then((v) => { if (v.rows.length) { series[n] = v.rows; meta[n] = v; } }).catch((e) => console.error("stock", n, e.message))),
+    ]);
   }
-  // 비교 지수: 실제 코스피(이틀 전 종가). 코스피를 못 받으면 가상 시장 평균(루미지수, 시즌 첫날 1,000)
-  const core = COMPANIES.filter((c) => !c.suspect);
-  const index = realIdx ? days.map((d) => [d, kLag(d)])
-    : days.map((d, i) => [d, Math.round((core.reduce((s, c) => s + series[c.id][i][2] / series[c.id][0][1], 0) / core.length) * 100000) / 100]);
-  // 힌트 묶음: 오늘·어제 보도자료 소식 + 수상한 회사의 '소문'(근거 없음). 사람마다 이 중 몇 개를 무작위로 본다
+  if (!K.length) K = sampleDaily("코스피", from, 5000).map(([d, , c]) => [d, c]);
+  for (const n of names) if (!series[n] && sample) series[n] = sampleDaily(n, from, 20000 + Math.round(seeded(n) * 200000));
+  // 비교 지수: 실제 코스피. 시즌 안의 날들(아직 없으면 시즌 전 마지막 날 하나)
+  let index = K.filter((x) => x[0] >= start);
+  if (!index.length) index = K.slice(-1);
+  // 힌트 묶음: 오늘·어제 보도자료에서 업종별 소식을 골라 그 업종 대표 종목과 잇는다 (같은 보도자료는 하나로 합침)
   const pool = [];
-  const byTitle = new Map(); // 보도자료 하나가 여러 업종에 걸리면 힌트 하나로 합친다(업종·회사를 모아서)
-  for (const d of [today, ymdAdd(today, -1)]) for (const sec of secs) for (const [j, n] of (news[`${sec}|${d}`] || []).slice(0, 2).entries()) {
-    const cos = COMPANIES.filter((c) => c.sector === sec && !c.suspect).map((c) => c.id);
-    const stocks = cos.length ? cos : COMPANIES.filter((c) => c.sector === sec).map((c) => c.id);
-    const same = byTitle.get(n.title);
-    if (same) {
-      if (!same.sector.split(", ").includes(SECTORS[sec].name)) same.sector += `, ${SECTORS[sec].name}`;
-      for (const id of stocks) if (!same.stocks.includes(id)) same.stocks.push(id);
-      continue;
+  try {
+    const rel = sample ? [] : await pressReleases(3);
+    const byTitle = new Map();
+    for (const r of rel) {
+      const d = relYmd(r.at);
+      if (d && d < ymdAdd(today, -2)) continue;
+      const text = `${r.title} ${r.sub}`, t = newsTone(text);
+      if (!t) continue;
+      for (const [sec, S] of Object.entries(SECTORS)) if (S.words.some((w) => text.includes(w))) {
+        const stocks = UNIVERSE.filter(([, s]) => s === sec).map(([n]) => n);
+        const same = byTitle.get(r.title);
+        if (same) {
+          if (!same.sector.split(", ").includes(S.name)) same.sector += `, ${S.name}`;
+          for (const n of stocks) if (!same.stocks.includes(n)) same.stocks.push(n);
+          continue;
+        }
+        const h = { id: `n-${sec}-${pool.length}-${d}`, kind: "news", sector: S.name, dir: t > 0 ? "up" : "down", days: 3 + Math.floor(seeded(r.title, sec) * 5),
+          title: r.title, stocks: [...stocks], sources: [{ title: r.title, url: r.url, source: r.org || "정책브리핑" }] };
+        byTitle.set(r.title, h);
+        pool.push(h);
+      }
     }
-    const h = { id: `n-${sec}-${d}-${j}`, kind: "news", sector: SECTORS[sec].name, dir: n.tone > 0 ? "up" : "down", days: 3 + Math.floor(seeded(d, sec, j) * 3),
-      title: n.title, stocks: [...stocks], sources: [{ title: n.title, url: n.url, source: n.org || "정책브리핑" }] };
-    byTitle.set(n.title, h);
-    pool.push(h);
-  }
-  if (sample) for (const sec of secs) if (S(sec, today) || S(sec, ymdAdd(today, -1))) {
-    const v = S(sec, today) || S(sec, ymdAdd(today, -1));
-    pool.push({ id: `s-${sec}-${today}`, kind: "news", sector: SECTORS[sec].name, dir: v > 0 ? "up" : "down", days: 4,
-      title: `(예시) ${SECTORS[sec].name} 쪽에 ${v > 0 ? "좋은" : "나쁜"} 정부 발표가 나왔어요`, stocks: COMPANIES.filter((c) => c.sector === sec && !c.suspect).map((c) => c.id), sources: [] });
-  }
-  for (const c of COMPANIES.filter((x) => x.suspect)) pool.push({ id: `r-${c.id}-${today}`, kind: "rumor", sector: SECTORS[c.sector].name, dir: "up", days: 7,
-    title: `"${c.name} 곧 몇 배 간다"는 소문이 돌아요`, stocks: [c.id], sources: [] });
-  const crashed = days.length > crashAt ? { id: bomb, day: days[crashAt] } : null;
+  } catch (e) { console.error("hints", e.message); }
+  if (sample) pool.push({ id: "s-chip", kind: "news", sector: "반도체", dir: "up", days: 5, title: "(예시) 반도체 쪽에 좋은 정부 발표가 나왔어요", stocks: ["삼성전자", "SK하이닉스"], sources: [] });
+  const sectorOf = Object.fromEntries(UNIVERSE.map(([n, s]) => [n, SECTORS[s].name]));
   return {
-    season, today, sample, index, series, crashed,
-    indexName: realIdx ? "코스피" : "루미지수", indexDate: realIdx ? K.filter((x) => x[0] <= ymdAdd(today, -2)).pop()?.[0] : null,
-    companies: COMPANIES.map((c) => ({ id: c.id, name: c.name, sector: SECTORS[c.sector].name, desc: c.desc, suspect: !!c.suspect, info: info[c.id] })),
-    pool,
+    season, today, sample, index, series, indexName: "코스피", indexDate: K[K.length - 1]?.[0] || null,
+    companies: names.filter((n) => series[n]).map((n) => ({ id: n, name: n, sector: sectorOf[n] || meta[n]?.market || "", code: meta[n]?.code || "", core: !!sectorOf[n] })),
+    pool: pool.slice(0, 12),
   };
 }
 
@@ -284,7 +226,8 @@ export default async function handler(req, res) {
 
   if (req.query.game !== undefined) {
     try {
-      const out = await virtualMarket();
+      const extra = String(req.query.extra || "").split(",").map((x) => x.trim()).filter(Boolean).slice(0, 10);
+      const out = await realMarket(extra);
       cache(res, out.sample ? 120 : 1800);
       return res.status(200).json(out);
     } catch (e) {
