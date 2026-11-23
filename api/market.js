@@ -185,14 +185,14 @@ async function realMarket(extra) {
   // 비교 지수: 실제 코스피. 시즌 안의 날들(아직 없으면 시즌 전 마지막 날 하나)
   let index = K.filter((x) => x[0] >= start);
   if (!index.length) index = K.slice(-1);
-  // 힌트 묶음: 오늘·어제 보도자료에서 업종별 소식을 골라 그 업종 대표 종목과 잇는다 (같은 보도자료는 하나로 합침)
+  // 힌트 묶음: 최근 7일 보도자료(새 것 먼저)에서 업종별 소식을 골라 그 업종 대표 종목과 잇는다 (같은 보도자료는 하나로 합침)
   const pool = [];
   try {
-    const rel = sample ? [] : await pressReleases(3);
+    const rel = sample ? [] : (await pressReleases(7)).sort((x, y) => (relYmd(y.at) > relYmd(x.at) ? 1 : -1)); // 주말에도 힌트가 있게 최근 7일, 새 소식 먼저
     const byTitle = new Map();
     for (const r of rel) {
       const d = relYmd(r.at);
-      if (d && d < ymdAdd(today, -2)) continue;
+      if (d && d < ymdAdd(today, -6)) continue;
       const text = `${r.title} ${r.sub}`, t = newsTone(text);
       if (!t) continue;
       for (const [sec, S] of Object.entries(SECTORS)) if (S.words.some((w) => text.includes(w))) {
