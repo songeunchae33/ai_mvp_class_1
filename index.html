@@ -952,6 +952,28 @@
 
   /* ═════ 공부 게임 ═════ */
   .lv-card { display: flex; gap: 12px; align-items: center; }
+  .lv-prog { display: flex; flex-direction: column; gap: 4px; margin-top: 2px; }
+  .lv-prog > span { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--sub); }
+  .lv-prog em { font-style: normal; flex: 0 0 52px; }
+  .lv-prog > span.on em { color: var(--ink); font-weight: 700; }
+  .lv-pbar { flex: 1; height: 6px; border-radius: 999px; background: #E9EDF5; overflow: hidden; display: block; }
+  .lv-pbar i { display: block; height: 100%; border-radius: 999px; background: #3375D6; }
+  .lv-prog b { font-size: 12px; min-width: 48px; text-align: right; color: var(--ink); }
+  .topic-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+  .topic-card { position: relative; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-height: 92px; padding: 12px; border: 1px solid var(--line); border-radius: 16px; background: #fff; text-align: left; cursor: pointer; font: inherit; color: inherit; }
+  .topic-card b { font-size: 15px; font-weight: 700; }
+  .topic-card small { font-size: 11px; color: var(--sub); line-height: 1.35; }
+  .topic-card .tp-i { font-size: 20px; line-height: 1; margin-bottom: 4px; }
+  .topic-card .tp-n { position: absolute; top: 10px; right: 10px; font-size: 11px; color: var(--sub); }
+  .topic-card.clear { border-color: #3375D6; background: #F3F7FE; }
+  .topic-card.add { border-style: dashed; }
+  .topic-card.add.on { border-color: #3375D6; }
+  .topic-form { display: flex; flex-direction: column; gap: 8px; }
+  .cnews-btn { width: 100%; }
+  .cnews { display: flex; flex-direction: column; gap: 6px; padding: 12px; border: 1px solid var(--line); border-radius: 12px; }
+  .cnews h3 { margin: 0; font-size: 15px; }
+  .cnews-more { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 4px; }
+  .cnews-more .link-btn { padding-left: 0; }
   .lv-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
   .lv-top { display: flex; align-items: baseline; gap: 8px; }
   .lv-top b { font-size: 22px; color: #1E40AF; }
@@ -1787,7 +1809,48 @@ function qa(c, lv) { return learnState.answers[`${c.id}:${lv}`]; }
 function curLv(c) { const n = quizzesOf(c).length; let lv = 0; while (lv < n && qa(c, lv)?.ok) lv++; return lv; }
 function mastered(c) { return curLv(c) >= quizzesOf(c).length; }
 function isWrong(c) { const a = qa(c, curLv(c)); return !!a && !a.ok; }
-function conceptById(id) { return data.learn?.concepts.find((x) => x.id === id); }
+function conceptById(id) { ensureCustom(); return data.learn?.concepts.find((x) => x.id === id); }
+// ── 주제별 공부: 추천 주제(learn.json topics, cat = "t-" + id)와 '기타'로 직접 적어 루미(AI)가 만든 주제(learnState.custom, cat = 주제 id) ──
+const TOPIC_DAY = 2; // 직접 입력 주제는 하루 2개까지 만든다
+function ensureCustom() {
+  const L = data.learn;
+  if (!L) return;
+  const have = new Set(L.concepts.map((c) => c.id));
+  for (const t of learnState.custom || []) for (const c of t.concepts) if (!have.has(c.id)) L.concepts.push({ ...c, cat: t.id, ai: true });
+}
+function topicList() {
+  const pre = (data.learn?.topics || []).map((t) => ({ ...t, cat: "t-" + t.id }));
+  const mine = (learnState.custom || []).map((t) => ({ id: t.id, name: t.name, icon: "✏️", desc: "직접 고른 주제", cat: t.id, mine: true }));
+  return [...pre, ...mine];
+}
+function topicByCat(cat) { return topicList().find((t) => t.cat === cat); }
+function topicGenLeft() { const g = learnState.topicGen || {}; return TOPIC_DAY - (g.day === ymd(today0()) ? g.n : 0); }
+// 관련 뉴스 검색어: 개념에 적어 둔 kw, 없으면 이름의 앞부분("환율 표시와 매입·매도율" → "환율 표시")
+function conceptKw(c) {
+  if (c.kw) return c.kw;
+  return c.term.replace(/\([^)]*\)/g, "").split(/(?:와|과|및|·|,|\/) /)[0].split("·")[0].trim().split(/\s+/).slice(0, 2).join(" ") || c.term;
+}
+// 개념 화면의 '관련 뉴스 보기': 네이버 뉴스 제목·링크 그대로 3개(약관상 요약 안 함) + 더 보기 + 보도자료 쉽게 풀이
+function newsBlock(c) {
+  const kw = conceptKw(c);
+  if (ui.cnewsOpen !== c.id) return `<button class="btn ghost cnews-btn" data-act="cnews-toggle" data-id="${c.id}">📰 ‘${esc(kw)}’ 관련 뉴스 보기</button>`;
+  const got = data.cnews?.[kw];
+  const items = got?.items || [];
+  return `<div class="cnews">
+      <div class="sec-title" style="margin:0"><h3>‘${esc(kw)}’ 관련 뉴스</h3><button class="link-btn" data-act="cnews-toggle" data-id="${c.id}">접기</button></div>
+      <div class="nl">${!got ? `<p class="hint">불러오는 중…</p>` : items.length ? items.slice(0, 3).map(newsLine).join("") : `<p class="hint">지금은 관련 뉴스를 찾지 못했어요.</p>`}</div>
+      <div class="cnews-more"><a class="link-btn" href="https://search.naver.com/search.naver?where=news&query=${encodeURIComponent(kw)}" target="_blank" rel="noopener">뉴스 더 보기 ›</a><button class="link-btn" data-act="nav" data-route="news" data-target="">정부 보도자료 쉽게 풀이 ›</button></div>
+      <p class="hint" style="margin:0;font-size:11px">네이버 뉴스 검색 결과의 제목·링크를 그대로 보여줘요.</p>
+    </div>`;
+}
+function loadConceptNews(kw) {
+  data.cnews = data.cnews || {};
+  if (data.cnews[kw]) return;
+  getJson(`/api/news?q=${encodeURIComponent(kw)}`)
+    .then((j) => (data.cnews[kw] = { items: j.items || [] }))
+    .catch(() => (data.cnews[kw] = { items: [] }))
+    .finally(() => { if (route() === "quiz") render(); });
+}
 function markAttend() { const k = ymd(today0()); if (!learnState.days[k]) { learnState.days[k] = 1; saveLearn(); } }
 function attendRate() {
   const t = today0(), pre = ymd(t).slice(0, 8);
@@ -2079,6 +2142,7 @@ function modalConcept(m) {
     return `<div class="sec-title" style="margin:0"><h2>${esc(c.term)}</h2><span class="tagc">경제 기초</span></div>
       ${ev ? `<p class="hint" style="margin:0">요즘 화제 · ${esc(ev.title)}</p>` : ""}
       <div class="c-quiz">${quizBox(c, 0, false)}</div>
+      ${newsBlock(c)}
       <div class="inline">${ans ? `<button class="btn ghost" data-act="qp-back" style="flex:1">공부로</button>${next ? `<button class="btn" data-act="concept-open" data-id="${next.id}" style="flex:2">다음 문제 ›</button>` : ""}`
         : `<button class="btn ghost" data-act="note-toggle" data-id="${c.id}" style="flex:1">${learnState.notes[c.id] ? "★ 노트에서 빼기" : "☆ 노트에 담기"}</button><button class="btn ghost" data-act="qp-back" style="flex:1">공부로</button>`}</div>`;
   }
@@ -2088,6 +2152,7 @@ function modalConcept(m) {
     const ans = qa(c, 0);
     return `<div class="sec-title" style="margin:0"><h2>${esc(c.term)}</h2><span class="tagc">${c.island}섬 · ${k + 1}/${list.length}</span></div>
       <div class="c-quiz">${quizBox(c, 0, false)}</div>
+      ${newsBlock(c)}
       <div class="inline">${ans ? `<button class="btn ghost" data-act="qp-back" style="flex:1">섬으로</button>${next ? `<button class="btn" data-act="concept-open" data-id="${next.id}" style="flex:2">다음 문제 ›</button>` : ""}`
         : `<button class="btn ghost" data-act="note-toggle" data-id="${c.id}" style="flex:1">${learnState.notes[c.id] ? "★ 노트에서 빼기" : "☆ 노트에 담기"}</button><button class="btn ghost" data-act="qp-back" style="flex:1">섬으로</button>`}</div>`;
   }
@@ -2095,7 +2160,9 @@ function modalConcept(m) {
     <p class="hint" style="margin:0">${esc(c.short)}</p>
     <p style="margin:0;font-size:15px;line-height:1.7">${esc(c.body)}</p>
     <p class="me" style="margin:0"><b>나와 연결하면</b> ${esc(c.me)}</p>
+    ${c.ai ? `<p class="hint" style="margin:0;font-size:12px">루미(AI)가 만든 설명과 문제라 틀린 내용이 있을 수 있어요. 중요한 결정 전엔 공식 자료로 꼭 확인해 주세요.</p>` : ""}
     <div class="c-quiz"><span class="tagc">${done ? "3단계 모두 맞혔어요 · 다시 보기" : LV_NAME[m.lv]}</span>${quizBox(c, m.lv, false)}</div>
+    ${newsBlock(c)}
     <div class="inline"><button class="btn ghost" data-act="note-toggle" data-id="${c.id}" style="flex:1">${learnState.notes[c.id] ? "★ 노트에서 빼기" : "☆ 노트에 담기"}</button><button class="btn ghost" data-act="qp-back" style="flex:1">닫기</button></div>`;
 }
 function modalBadges() {
@@ -2137,7 +2204,7 @@ function viewQuizPage() {
     ${body ? `<section class="card form qpage">${body}</section>` : `<section class="card"><p class="hint" style="margin:0 0 10px">풀던 문제가 없어요. 공부에서 문제를 골라 주세요.</p><button class="btn" data-act="go-learn">공부로 가기</button></section>`}
   </main>`;
 }
-function catName(id) { return id === "basic" ? "경제 기초" : data.learn?.categories.find((c) => c.id === id)?.name || ""; }
+function catName(id) { return id === "basic" ? "경제 기초" : data.learn?.categories.find((c) => c.id === id)?.name || topicByCat(id)?.name || ""; }
 
 // ── 경제 기초 퀴즈: 요즘 화제(정부 보도자료 TOP 5)의 낱말마다 쉬운 객관식 문제 ──
 // words: /api/trending 의 화제 낱말(event.word)이나 보도자료 제목에 이 말이 있으면 이 문제를 낸다. 정답은 보기 첫 번째로 적고, 화면에서는 자리를 돌린다
@@ -2173,7 +2240,7 @@ const BASICS = BASIC_Q.map(([words, term, q, choices, ex], i) => {
   const r = i % 4, rot = [...choices.slice(r), ...choices.slice(0, r)]; // 정답 자리를 돌린다
   return { id: "basic-" + (i + 1), cat: "basic", words, term, quiz: { type: "mc", q, choices: rot, a: (choices.length - r) % choices.length, ex } };
 });
-function withBasics(j) { if (j && !j.concepts.some((c) => c.cat === "basic")) j.concepts.push(...BASICS.map((b) => ({ ...b }))); return j; }
+function withBasics(j) { if (j && !j.concepts.some((c) => c.cat === "basic")) j.concepts.push(...BASICS.map((b) => ({ ...b }))); data.learn = j; ensureCustom(); return j; }
 function basicList() { return (data.learn?.concepts || []).filter((c) => c.cat === "basic"); }
 function hotEvents() { return data.trending?.available ? data.trending.events || [] : []; }
 // 화제 하나에 이어지는 경제 기초 문제 (안 푼 것 먼저)
@@ -3809,7 +3876,9 @@ function viewLearn() {
   ensureTrending();
   markAttend();
   initGame();
+  ensureCustom();
   if (ui.learnStage && L.categories.some((c) => c.id === ui.learnStage)) return viewStage(ui.learnStage);
+  if (ui.learnTopic && topicByCat(ui.learnTopic)) return viewTopic(ui.learnTopic);
   const xp = xpTotal(), lv = levelOf(xp), inLv = xp % LEVEL_XP;
   const solved = solvedEntries();
   const mode = learnMode();
@@ -3833,6 +3902,18 @@ function viewLearn() {
       ${[["news", "", "뉴스 쉽게 풀이", "오늘의 경제를 쉬운 말로"], ["letters", "", "뉴스레터", "구독 관리·붙여넣기 풀이"], ["watch", "", "관심 종목", "추가·순서·보유 수량"]]
         .map(([r, t, n, d]) => `<button class="hub-item" data-act="nav" data-route="${r}" data-target="${t}"><b>${n}</b><span>${d}</span></button>`).join("")}
     </section>`;
+  // 레벨·칭호는 두 공부 방법이 함께 쌓는 하나라서 맨 위에 한 번만, 두 공부의 진행을 같이 보여준다
+  const prog = (list) => ({ n: list.length, ok: list.filter(mastered).length });
+  const pb = prog(basicList()), pe = prog(L.concepts.filter((c) => c.cat !== "basic"));
+  const lvCard = `<section class="card lv-card">
+      ${mascot(64, lv >= 5 ? "confident" : "happy", "")}
+      <div class="lv-main">
+        <div class="lv-top"><b class="num">Lv.${lv}</b><span class="lv-title">${titleOf(lv)}</span><button class="link-btn" data-act="badges-open">배지 ${badges.filter((b) => b.ok).length}/${badges.length} ›</button></div>
+        <div class="xpbar" role="progressbar" aria-valuenow="${inLv}" aria-valuemin="0" aria-valuemax="${LEVEL_XP}"><i style="width:${inLv}%"></i></div>
+        <span class="hint">경험치 ${xp} XP · 다음 레벨까지 ${LEVEL_XP - inLv} XP</span>
+        <div class="lv-prog">${[["경제 기초", pb, "basic"], ["시험 공부", pe, "exam"]].map(([n, p, k]) => `<span class="${mode === k ? "on" : ""}"><em>${n}</em><i class="lv-pbar"><i style="width:${p.n ? Math.round((p.ok / p.n) * 100) : 0}%"></i></i><b class="num">${p.ok}/${p.n}</b></span>`).join("")}</div>
+      </div>
+    </section>`;
   const modeSeg = `<div class="sortbar seg2" role="tablist" aria-label="공부 방법">
       <button class="${mode === "basic" ? "on" : ""}" role="tab" aria-selected="${mode === "basic"}" data-act="learn-mode" data-v="basic">경제 기초</button>
       <button class="${mode === "exam" ? "on" : ""}" role="tab" aria-selected="${mode === "exam"}" data-act="learn-mode" data-v="exam">시험 공부</button>
@@ -3840,9 +3921,10 @@ function viewLearn() {
   // 처음 열면 공부 방법부터 고른다
   if (!mode) return `${learnHead()}
   <main class="scroll">
-    ${lumiSays("어떤 공부를 할까요? 고른 건 위에서 언제든 바꿀 수 있어요.", "lookup", "flat")}
+    ${lvCard}
+    ${lumiSays("어떤 공부를 할까요? 두 공부의 경험치는 하나로 함께 쌓이고, 고른 건 위에서 언제든 바꿀 수 있어요.", "lookup", "flat")}
     <button class="card mode-pick" data-act="learn-mode" data-v="basic"><b>경제 기초 정보 습득</b><span class="hint">반도체 수출·FTA처럼 요즘 화제 뉴스로 쉬운 경제 퀴즈를 풀어요.</span></button>
-    <button class="card mode-pick" data-act="learn-mode" data-v="exam"><b>시험 공부 목적</b><span class="hint">국제금융·금융경제·베이지안 거시금융·투자운용사 수업 자료로 탈출 지도와 섬 문제를 풀어요.</span></button>
+    <button class="card mode-pick" data-act="learn-mode" data-v="exam"><b>시험 공부 목적</b><span class="hint">국제금융·금융경제·베이지안 거시금융·투자운용사 수업 자료로 탈출 지도와 섬 문제를 풀고, ETF·연말정산·청약 같은 주제나 직접 고른 주제도 공부해요.</span></button>
     ${hotBlock}
     ${hub}
   </main>`;
@@ -3863,16 +3945,9 @@ function viewLearn() {
   }).join("");
   return `${learnHead()}
   <main class="scroll">
+    ${lvCard}
     ${modeSeg}
     ${mode === "basic" ? hotBlock + hub : ""}
-    <section class="card lv-card">
-      ${mascot(64, lv >= 5 ? "confident" : "happy", "")}
-      <div class="lv-main">
-        <div class="lv-top"><b class="num">Lv.${lv}</b><span class="lv-title">${titleOf(lv)}</span><button class="link-btn" data-act="badges-open">배지 ${badges.filter((b) => b.ok).length}/${badges.length} ›</button></div>
-        <div class="xpbar" role="progressbar" aria-valuenow="${inLv}" aria-valuemin="0" aria-valuemax="${LEVEL_XP}"><i style="width:${inLv}%"></i></div>
-        <span class="hint">경험치 ${xp} XP · 다음 레벨까지 ${LEVEL_XP - inLv} XP</span>
-      </div>
-    </section>
     <section class="card mission" id="l-mission">
       <div class="sec-title" style="margin:0"><h2>오늘의 미션</h2><span>${learnState.missionDay === ymd(today0()) ? "완료 ✓" : `+${MISSION_XP} XP`}</span></div>
       <p style="margin:0;font-size:14px">문제 ${MISSION}개 풀기 · <b class="num">${todayN}/${MISSION}</b></p>
@@ -3887,6 +3962,7 @@ function viewLearn() {
     </section>
     ${mode === "exam" ? `<div class="sec-title" style="margin:6px 2px 0" id="l-map"><h2 style="font-size:20px">탈출 지도</h2><button class="link-btn" data-act="notes-open">내 노트 ${Object.keys(learnState.notes).length} ›</button></div>
     <div class="stage-grid">${stages}</div>
+    ${topicSection()}
     ${hub}
     <p class="foot">앞 개념의 1단계를 맞히면 다음 칸이 열리고, 틀리면 공룡이 한 칸 다가와요. 기록은 이 기기(연결하면 내 계정)에 저장돼요.</p>`
     : `<p class="foot">경제 기초 퀴즈는 요즘 화제 TOP 5(최근 3일 정부 보도자료, 적은 날은 7일)에 이어지는 문제예요. 기록은 이 기기(연결하면 내 계정)에 저장돼요.</p>`}
@@ -4159,6 +4235,65 @@ function startArcade() {
     arcRaf = requestAnimationFrame(tick);
   };
   arcRaf = requestAnimationFrame(tick);
+}
+// 시험 공부의 '주제별 공부': 추천 주제 + 기타(직접 적기)
+function topicSection() {
+  const left = topicGenLeft(), busy = ui.topicBusy;
+  return `<div class="sec-title" style="margin:6px 2px 0" id="l-topic"><h2 style="font-size:20px">주제별 공부</h2><span>2030에게 쓸모 있는 주제</span></div>
+    <div class="topic-grid">${topicList().map((t) => {
+      const list = stageConcepts(t.cat), ok = list.filter(mastered).length;
+      return `<button class="topic-card ${list.length && ok === list.length ? "clear" : ""}" data-act="topic-open" data-c="${t.cat}"><span class="tp-i" aria-hidden="true">${t.icon}</span><b>${esc(t.name)}</b><small>${esc(t.desc)}</small><span class="tp-n num">${ok}/${list.length}</span></button>`;
+    }).join("")}
+      <button class="topic-card add ${ui.topicInput ? "on" : ""}" data-act="topic-input" aria-expanded="${!!ui.topicInput}"><span class="tp-i" aria-hidden="true">＋</span><b>기타</b><small>주제 직접 적기</small></button>
+    </div>
+    ${ui.topicInput ? `<section class="card topic-form">
+      <label for="topicIn"><b>공부하고 싶은 주제</b></label>
+      <input class="field" id="topicIn" maxlength="20" autocomplete="off" placeholder="예: 퇴직연금, 금리 인하, 전세 계약" value="${esc(ui.topicDraft || "")}" ${busy ? "disabled" : ""}>
+      <button class="btn" data-act="topic-make" ${busy || left <= 0 ? "disabled" : ""}>${busy ? "루미가 만드는 중…" : left <= 0 ? "오늘은 다 만들었어요" : "이 주제로 공부 만들기"}</button>
+      <p class="hint" style="margin:0">루미(AI)가 개념 3개와 OX 퀴즈를 만들어요. 하루 ${TOPIC_DAY}개까지 · 오늘 ${Math.max(0, left)}개 남음. 만든 주제는 이 기기(연결하면 내 계정)에 저장돼서 다시 열 때는 한도를 쓰지 않아요.</p>
+    </section>` : ""}`;
+}
+function viewTopic(cat) {
+  const t = topicByCat(cat), list = stageConcepts(cat), ok = list.filter(mastered).length;
+  return `${learnHead()}
+  <main class="scroll">
+    <div class="stage-head"><button class="icon-btn" data-act="stage-close" aria-label="경제 공부로">${ICON.back}</button><div><h2>${t.icon} ${esc(t.name)}</h2><span class="hint">맞힌 개념 ${ok}/${list.length} · 개념마다 OX 3단계</span></div></div>
+    ${t.mine ? `<p class="hint" style="margin:0 2px">루미(AI)가 만든 주제라 틀린 내용이 있을 수 있어요.</p>` : ""}
+    <section class="card isl-list">${list.map((c, i) => {
+      const lv = curLv(c);
+      const [cls, word] = mastered(c) ? ["b-green", "완료"] : isWrong(c) ? ["b-up", "오답"] : lv ? ["b-down", `${lv + 1}단계`] : ["b-flat", "안 풂"];
+      return `<button class="isl-row" data-act="concept-open" data-id="${c.id}"><span class="isl-no num">${i + 1}</span><span class="isl-t">${esc(c.term)}<small class="hint" style="display:block;font-weight:400">${esc(c.short || "")}</small></span><span class="badge ${cls}">${word}</span></button>`;
+    }).join("")}</section>
+    ${t.mine ? `<button class="link-btn" style="align-self:center" data-act="topic-del" data-c="${cat}">이 주제 지우기</button>` : ""}
+    <p class="foot">개념을 누르면 설명·OX 퀴즈와 관련 뉴스를 볼 수 있어요.</p>
+  </main>`;
+}
+async function makeTopic() {
+  if (ui.topicBusy) return;
+  const topic = (document.getElementById("topicIn")?.value || "").replace(/\s+/g, " ").trim();
+  ui.topicDraft = topic;
+  if (!topic) { toast("공부할 주제를 적어 주세요"); return; }
+  const same = topicList().find((t) => t.name.replace(/\s/g, "") === topic.replace(/\s/g, ""));
+  if (same) { ui.learnTopic = same.cat; ui.topicInput = false; render(); window.scrollTo(0, 0); return; }
+  if (topicGenLeft() <= 0) { toast(`직접 적는 주제는 하루 ${TOPIC_DAY}개까지 만들 수 있어요. 내일 다시 해 주세요`); return; }
+  ui.topicBusy = true; render();
+  try {
+    const j = await getJson("/api/ask", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ topic }) });
+    const day = ymd(today0()), g = learnState.topicGen || {};
+    learnState.topicGen = { day, n: (g.day === day ? g.n : 0) + 1 };
+    if (!j.ok) { saveLearn(); toast(j.error || "경제·돈과 관련된 주제로 적어 주세요"); return; }
+    const id = "u" + Date.now().toString(36);
+    const concepts = j.concepts.map((c, i) => ({ id: `${id}-${i + 1}`, term: c.term, kw: c.kw, short: c.short, body: c.body, me: c.me, quiz: c.quizzes[0], more: c.quizzes.slice(1), added: day }));
+    learnState.custom = [...(learnState.custom || []), { id, name: j.name || topic, at: Date.now(), concepts }];
+    saveLearn(); ensureCustom();
+    ui.learnTopic = id; ui.topicInput = false; ui.topicDraft = "";
+    toast(`‘${j.name || topic}’ 공부를 만들었어요`);
+  } catch (err) {
+    toast(err.body?.error || "주제 공부를 만들지 못했어요. 잠시 후 다시 해 주세요");
+  } finally {
+    ui.topicBusy = false;
+    if (route() === "learn") { render(); window.scrollTo(0, 0); }
+  }
 }
 function viewStage(catId) {
   if (islandNames(catId).length) return viewIslands(catId);
@@ -5660,7 +5795,23 @@ document.addEventListener("click", async (e) => {
       break;
     }
     case "stage-open": ui.learnStage = el.dataset.c; render(); window.scrollTo(0, 0); break;
-    case "stage-close": ui.learnStage = null; ui.learnIsland = null; render(); window.scrollTo(0, 0); break;
+    case "stage-close": ui.learnStage = null; ui.learnIsland = null; ui.learnTopic = null; render(); window.scrollTo(0, 0); break;
+    case "topic-open": ui.learnTopic = el.dataset.c; ui.topicInput = false; render(); window.scrollTo(0, 0); break;
+    case "topic-input": ui.topicInput = !ui.topicInput; render(); if (ui.topicInput) document.getElementById("topicIn")?.focus(); break;
+    case "topic-make": makeTopic(); break;
+    case "topic-del": {
+      if (!confirm("직접 만든 이 주제를 지울까요? 푼 기록도 함께 목록에서 사라져요.")) break;
+      const id = el.dataset.c;
+      learnState.custom = (learnState.custom || []).filter((t) => t.id !== id);
+      if (data.learn) data.learn.concepts = data.learn.concepts.filter((c) => c.cat !== id);
+      saveLearn(); ui.learnTopic = null; render(); window.scrollTo(0, 0); break;
+    }
+    case "cnews-toggle": {
+      const c = conceptById(el.dataset.id); if (!c) break;
+      ui.cnewsOpen = ui.cnewsOpen === c.id ? null : c.id;
+      if (ui.cnewsOpen) loadConceptNews(conceptKw(c));
+      render(); break;
+    }
     case "island-open": ui.learnIsland = Number(el.dataset.i); render(); window.scrollTo(0, 0); break;
     case "island-close": ui.learnIsland = null; render(); window.scrollTo(0, 0); break;
     case "island-locked": toast("앞 섬의 문제를 모두 맞히면 열려요"); break;
@@ -6151,6 +6302,7 @@ document.addEventListener("pointerdown", (e) => {
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape" && ui.drawer) { ui.drawer = false; render(); }
   else if (e.key === "Escape" && ui.sheet) { ui.sheet = null; lastSet("sheet", null); render(); }
+  else if (e.key === "Enter" && e.target?.id === "topicIn") { e.preventDefault(); makeTopic(); }
   else if (e.key === "Escape" && ui.searchOpen) { ui.searchOpen = false; document.getElementById("searchwrap")?.classList.remove("open"); document.getElementById("q")?.blur(); }
 });
 

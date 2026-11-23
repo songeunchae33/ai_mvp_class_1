@@ -1,5 +1,6 @@
 // 하단 질문창: 사용자 상황(요약)과 오늘 시세를 붙여 짧게 답한다. Gemini 무료 등급 먼저, 안 되면 OpenAI (api/_ai.js).
 // POST /api/ask { question, profile, market }
+// POST /api/ask { topic }  → 경제 공부 '기타' 주제: 개념 3개 × OX 3단계를 만든다 (앱이 이 기기에 저장해 다시 부르지 않음)
 import { generate, aiReady } from "./_ai.js";
 
 const SYSTEM = `너는 '나만의 경제' 앱의 금융 길잡이 캐릭터 '루미'(이루미)야. 사용자의 길을 밝혀주는 다정한 친구 같은 말투로. 2030 사용자에게 경제를 친근한 존댓말(~요)로 설명해.
@@ -21,10 +22,76 @@ function allow(ip) {
   return true;
 }
 
+// 주제 공부 만들기 한도: 1인 하루 2주제는 앱이 지키고, 여기는 IP마다 넉넉히
+const TOPIC_DAILY = 6;
+const topicHits = new Map();
+function allowTopic(ip) {
+  const day = new Date().toISOString().slice(0, 10);
+  const h = topicHits.get(ip);
+  const n = h && h.day === day ? h.n : 0;
+  if (n >= TOPIC_DAILY) return false;
+  topicHits.set(ip, { day, n: n + 1 });
+  return true;
+}
+const OX = { type: "object", additionalProperties: false, required: ["q", "a", "ex"], properties: {
+  q: { type: "string", description: "'~다?'로 끝나는 OX 문제 한 문장" },
+  a: { type: "string", enum: ["O", "X"] },
+  ex: { type: "string", description: "왜 맞고 틀린지 쉬운 해설 1~2문장" },
+} };
+const TOPIC_SCHEMA = {
+  type: "object", additionalProperties: false, required: ["ok", "name", "concepts"],
+  properties: {
+    ok: { type: "boolean", description: "경제·돈·금융·세금·일자리·부동산 같은 주제면 true, 아니면 false" },
+    name: { type: "string", description: "주제 이름 (10자 이내)" },
+    concepts: { type: "array", description: "개념 3개 (ok가 false면 빈 배열)", items: {
+      type: "object", additionalProperties: false, required: ["term", "kw", "short", "body", "me", "quizzes"],
+      properties: {
+        term: { type: "string", description: "개념 이름 (15자 이내)" },
+        kw: { type: "string", description: "관련 뉴스 검색어 1~2낱말" },
+        short: { type: "string", description: "한 줄 설명 (30자 이내)" },
+        body: { type: "string", description: "쉬운 설명 3~4문장" },
+        me: { type: "string", description: "2030 사회초년생 생활과 연결한 한 문장" },
+        quizzes: { type: "array", description: "OX 3문제: 1단계 기본 → 2단계 심화 → 3단계 도전", items: OX },
+      },
+    } },
+  },
+};
+const TOPIC_RULES = `너는 '나만의 경제' 앱의 루미야. 경제를 처음 공부하는 20대가 주제를 하나 적으면, 그 주제의 핵심 개념 3개와 개념마다 OX 퀴즈 3문제를 만들어.
+- 존댓말(~요), 쉬운 단어. 어려운 용어는 괄호로 한 번 풀어줘.
+- 확실한 사실만 써. 해마다 바뀌는 한도·세율·금리 같은 숫자는 확실하지 않으면 쓰지 말고 '정해진 한도가 있어요'처럼 말해.
+- 퀴즈 답은 설명(body) 안에서 알 수 있게 내고, 세 문제의 답이 모두 같지 않게 O와 X를 섞어.
+- 특정 종목·상품을 사라고 권하지 마.
+- 경제·돈과 상관없는 주제(연예, 게임 공략 등)나 나쁜 뜻의 주제면 ok를 false로 하고 concepts는 빈 배열로.`;
+const cut = (v, n) => String(v || "").trim().slice(0, n);
+async function makeTopic(topic) {
+  const out = await generate({ system: TOPIC_RULES, text: `[주제]\n${topic}`, schema: TOPIC_SCHEMA, schemaName: "topic", maxTokens: 2600 });
+  const j = JSON.parse(out.text);
+  if (!j.ok) return { ok: false };
+  const concepts = (j.concepts || []).slice(0, 4).map((c) => ({
+    term: cut(c.term, 24), kw: cut(c.kw, 20), short: cut(c.short, 60), body: cut(c.body, 600), me: cut(c.me, 200),
+    quizzes: (c.quizzes || []).filter((q) => q && q.q && (q.a === "O" || q.a === "X")).slice(0, 3).map((q) => ({ q: cut(q.q, 200), a: q.a, ex: cut(q.ex, 300) })),
+  })).filter((c) => c.term && c.body && c.quizzes.length === 3);
+  if (!concepts.length) throw new Error("빈 주제");
+  return { ok: true, name: cut(j.name, 16) || topic, concepts, ai: out.ai };
+}
+
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "POST만 지원해요" });
   const ip = String(req.headers["x-forwarded-for"] || "").split(",")[0] || "local";
   if (!aiReady()) return res.status(503).json({ error: "AI 질문 기능이 아직 설정되지 않았어요" });
+
+  if (req.body?.topic !== undefined) {
+    const topic = String(req.body.topic || "").replace(/\s+/g, " ").trim();
+    if (!topic || topic.length > 20) return res.status(400).json({ error: "주제는 20자 이내로 적어 주세요" });
+    if (!allowTopic(ip)) return res.status(429).json({ error: "오늘은 주제를 다 만들었어요. 내일 다시 해 주세요!" });
+    try {
+      const r = await makeTopic(topic);
+      return res.status(200).json(r.ok ? r : { ok: false, error: "경제·돈과 관련된 주제로 적어 주세요" });
+    } catch (e) {
+      console.error(e);
+      return res.status(502).json({ error: "주제 공부를 만들지 못했어요. 잠시 후 다시 해 주세요" });
+    }
+  }
 
   const { question, profile, market } = req.body || {};
   if (typeof question !== "string" || !question.trim() || question.length > 300) {
