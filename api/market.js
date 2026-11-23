@@ -5,7 +5,7 @@
 // GET /api/market?game=1&extra=종목,종목   → 모의투자 '실제 시장' (대표 종목 12개 + 산 종목의 이번 시즌 시가·종가, 실제 코스피, 보도자료 힌트)
 // 키가 없거나 호출이 실패하면 예시 데이터를 sample:true 로 돌려준다.
 import { kstYmd, fetchJson, num, dataGoItems, dataGoKey, cache } from "./_util.js";
-import { pressReleases } from "./_policy.js";
+import { pressReleases, isEcon } from "./_policy.js";
 
 const BASE = "https://apis.data.go.kr/1160100"; // 금융위원회 시세 API (V2 주소)
 
@@ -97,16 +97,16 @@ async function usd() {
 // 주의: 시세는 공공누리 제4유형(상업적 이용 금지·변경 금지, 원천 한국거래소)이라 광고·구독 등 상업화 전에는 다시 검토해야 한다.
 // 힌트는 실제 정부 보도자료(정책브리핑, 공공저작물)에서 업종별 좋은·나쁜 소식을 골라, 그 업종의 대표 종목과 이어 준다(방향은 가능성일 뿐).
 // GET /api/market?game=1&extra=종목A,종목B → { season, today, index, series: { 종목: [[YYYYMMDD, 시가, 종가]] }, companies, pool, indexName, indexDate, sample }
-const SECTORS = {
-  chip: { name: "반도체", words: ["반도체", "메모리", "인공지능", "AI", "파운드리", "칩"] },
-  car: { name: "자동차·수출", words: ["자동차", "전기차", "수출", "관세", "통상"] },
-  bank: { name: "은행·금리", words: ["금리", "대출", "은행", "가계부채", "예금", "금융"] },
-  battery: { name: "배터리", words: ["배터리", "이차전지", "2차전지", "리튬", "전기차", "에너지"] },
-  content: { name: "콘텐츠·관광", words: ["콘텐츠", "관광", "한류", "문화", "게임", "공연", "K-"] },
-  build: { name: "건설·부동산", words: ["부동산", "주택", "건설", "청약", "공급", "SOC", "전세"] },
-  food: { name: "식품·생활", words: ["물가", "농산물", "식품", "외식", "소비", "생활"] },
-  platform: { name: "인터넷·플랫폼", words: ["플랫폼", "디지털", "데이터", "인터넷", "온라인", "AI"] },
-  bio: { name: "바이오", words: ["바이오", "신약", "의약", "제약", "임상", "헬스"] },
+const SECTORS = { // 보도자료 '제목'에 이 낱말이 있으면 그 업종 소식으로 본다
+  chip: { name: "반도체", words: ["반도체", "메모리", "파운드리", "데이터센터"] },
+  car: { name: "자동차·수출", words: ["자동차", "전기차", "완성차", "관세", "수출"] },
+  bank: { name: "은행·금리", words: ["금리", "대출", "은행", "가계부채", "예금"] },
+  battery: { name: "배터리", words: ["배터리", "이차전지", "2차전지", "리튬", "재생에너지", "전기차"] },
+  content: { name: "콘텐츠·관광", words: ["콘텐츠", "관광", "한류", "K-컬처", "공연", "영화", "드라마"] },
+  build: { name: "건설·부동산", words: ["부동산", "주택", "건설", "청약", "전세", "SOC", "아파트"] },
+  food: { name: "식품·생활", words: ["물가", "농산물", "식품", "외식", "먹거리"] },
+  platform: { name: "인터넷·플랫폼", words: ["플랫폼", "디지털", "인공지능", "AI", "온라인"] },
+  bio: { name: "바이오", words: ["바이오", "신약", "의약품", "제약", "임상"] },
 };
 // 모의투자 첫 화면에 늘 보여 줄 대표 종목 (업종별, 너무 많지 않게 12개). 다른 종목은 검색으로 산다
 const UNIVERSE = [
@@ -193,9 +193,10 @@ async function realMarket(extra) {
     for (const r of rel) {
       const d = relYmd(r.at);
       if (d && d < ymdAdd(today, -6)) continue;
-      const text = `${r.title} ${r.sub}`, t = newsTone(text);
+      if (!isEcon(r)) continue; // 경제와 관련된 보도자료만
+      const t = newsTone(`${r.title} ${r.sub}`);
       if (!t) continue;
-      for (const [sec, S] of Object.entries(SECTORS)) if (S.words.some((w) => text.includes(w))) {
+      for (const [sec, S] of Object.entries(SECTORS)) if (S.words.some((w) => r.title.includes(w))) {
         const stocks = UNIVERSE.filter(([, s]) => s === sec).map(([n]) => n);
         const same = byTitle.get(r.title);
         if (same) {
