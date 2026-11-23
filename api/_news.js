@@ -1,4 +1,7 @@
-// 뉴스 API들이 같이 쓰는 도구 (네이버 검색 API). 파일명이 _로 시작해서 주소로 노출되지 않는다.
+// 뉴스 API들이 같이 쓰는 도구. 파일명이 _로 시작해서 주소로 노출되지 않는다.
+// 출처를 여러 곳으로 나눈다(한 곳이 막혀도 뉴스가 끊기지 않게): 네이버 뉴스 검색 · 정책브리핑 보도자료(api/_policy.js)
+// · GDELT(전 세계 뉴스 목록, 무료 공개 데이터, 해외 뉴스) · NewsData.io(NEWSDATA_KEY가 있을 때만, 무료 등급 하루 200번).
+// 모두 제목과 링크만 보여준다(본문 없음, 네이버·NewsData 결과는 AI 요약에 쓰지 않음).
 import { fetchJson } from "./_util.js";
 
 // 취향(선호) → 그 사람에게 의미 있는 뉴스 검색어
@@ -114,3 +117,28 @@ export function searchUrl(q) {
   return `https://search.naver.com/search.naver?where=news&query=${encodeURIComponent(q)}`;
 }
 
+
+// ── 해외 뉴스: GDELT DOC API (https://api.gdeltproject.org, 무료·키 없음). 5초에 한 번만 부를 수 있어서 1시간 재사용과 함께 쓴다 ──
+const GLOBAL = { "reuters.com": "Reuters", "apnews.com": "AP", "cnbc.com": "CNBC", "bbc.com": "BBC", "bbc.co.uk": "BBC", "ft.com": "Financial Times",
+  "bloomberg.com": "Bloomberg", "wsj.com": "WSJ", "nytimes.com": "New York Times", "theguardian.com": "Guardian", "economist.com": "Economist", "aljazeera.com": "Al Jazeera" };
+export async function gdelt(max = 10) {
+  const q = `(economy OR stocks OR markets OR "interest rates" OR tariffs OR inflation) sourcelang:english (${Object.keys(GLOBAL).map((d) => `domain:${d}`).join(" OR ")})`;
+  const url = `https://api.gdeltproject.org/api/v2/doc/doc?query=${encodeURIComponent(q)}&mode=artlist&maxrecords=${Math.max(max * 2, 10)}&format=json&timespan=2d&sort=hybridrel`;
+  const r = await fetch(url, { signal: AbortSignal.timeout(8000) });
+  const t = (await r.text()).trim();
+  if (!t.startsWith("{")) throw new Error(`gdelt ${t.slice(0, 60)}`);
+  const seen = new Set();
+  return (JSON.parse(t).articles || []).filter((a) => a.title && a.url).map((a) => {
+    const d = String(a.seendate || "");
+    const at = d.length >= 15 ? `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6, 8)}T${d.slice(9, 11)}:${d.slice(11, 13)}:00Z` : new Date().toISOString();
+    const host = String(a.domain || "").replace(/^www\./, "");
+    return { title: clean(a.title), url: a.url, source: GLOBAL[host] || host, at, lang: "en" };
+  }).filter((a) => { const k = a.title.slice(0, 30); if (seen.has(k)) return false; seen.add(k); return true; }).slice(0, max);
+}
+
+// ── 국내 뉴스 보조: NewsData.io (NEWSDATA_KEY가 있을 때만) ──
+export async function newsdata() {
+  if (!process.env.NEWSDATA_KEY) return [];
+  const j = await fetchJson(`https://newsdata.io/api/1/latest?apikey=${encodeURIComponent(process.env.NEWSDATA_KEY)}&country=kr&language=ko&category=business`, {}, 8000);
+  return (j.results || []).filter((a) => a.title && a.link).map((a) => ({ title: clean(a.title), url: a.link, source: source(a.link) || a.source_name || a.source_id || "", at: new Date(a.pubDate ? a.pubDate.replace(" ", "T") + "Z" : Date.now()).toISOString() }));
+}

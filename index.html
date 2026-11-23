@@ -2273,7 +2273,7 @@ function homeBlocks() {
   // 뉴스: 진짜 중요한 것 두 줄 (오늘의 이슈 1 + 나를 위한 1) + 키워드·뉴스레터 한 줄
   const n = data.news;
   const letters = [...LETTERS.filter((l) => profile.letters.includes(l.id)), ...profile.customLetters];
-  const top = n ? [n.issues?.[0] && { ...n.issues[0], tag: "이슈" }, n.forYou?.[0]].filter(Boolean) : [];
+  const top = n ? [n.issues?.[0] && { ...n.issues[0], tag: "이슈" }, n.forYou?.[0], n.global?.[0] && { ...n.global[0], tag: "해외" }].filter(Boolean) : [];
   const kws = n?.keywords || [];
   const newsBlock = `<section class="card" id="h-news">
       <div class="sec-title"><h2>뉴스</h2><div style="display:flex;gap:6px;align-items:center">${n?.sample ? `<span class="badge b-sample">예시</span>` : ""}<button class="plus" data-act="news-more">+ 더보기</button></div></div>
@@ -2428,17 +2428,17 @@ function viewNews() {
   const tags = [...new Set((f?.forYou || []).map((x) => x.tag))];
   const kws = data.news?.keywords || [];
   const kwTabs = [...new Set([...kws, ...(N.tab.startsWith("kw:") ? [N.tab.slice(3)] : [])])];
-  const tabs = [["brief", "쉽게 풀이"], ["issues", "오늘의 이슈"], ["foryou", "나를 위한 뉴스"], ...tags.map((t) => ["tag:" + t, t]), ...kwTabs.map((k) => ["kw:" + k, "#" + k])];
+  const tabs = [["brief", "쉽게 풀이"], ["issues", "오늘의 이슈"], ["foryou", "나를 위한 뉴스"], ["global", "해외 뉴스"], ...tags.map((t) => ["tag:" + t, t]), ...kwTabs.map((k) => ["kw:" + k, "#" + k])];
   let items = null;
   if (N.tab.startsWith("kw:")) items = N.kwItems[N.tab.slice(3)];
-  else if (f) items = N.tab === "issues" ? f.issues : N.tab === "foryou" ? f.forYou : (f.forYou || []).filter((x) => "tag:" + x.tag === N.tab);
+  else if (f) items = N.tab === "issues" ? f.issues : N.tab === "foryou" ? f.forYou : N.tab === "global" ? f.global || [] : (f.forYou || []).filter((x) => "tag:" + x.tag === N.tab);
   const letters = [...LETTERS.filter((l) => profile.letters.includes(l.id)), ...profile.customLetters];
   return `${pageHead("뉴스", f?.sample ? `<span class="badge b-sample" style="margin-left:8px">예시 데이터</span>` : "")}
   <main class="scroll">
     <div class="tabs" role="tablist">${tabs.map(([id, label]) => `<button class="chip ${N.tab === id ? "on" : ""}" role="tab" aria-selected="${N.tab === id}" data-act="news-tab" data-t="${esc(id)}">${esc(label)}</button>`).join("")}</div>
     ${N.tab === "brief" ? viewBrief() : `<section class="card"><div class="news">${items ? newsList(items, N.tab === "issues") || `<p class="hint">뉴스가 없어요</p>` : `<p class="hint">불러오는 중…</p>`}</div></section>`}
     ${letters.length ? `<div class="chips"><span class="hint">구독 중</span>${letters.map((l) => `<a class="chip small" href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.name)} ${ICON.out}</a>`).join("")}</div>` : ""}
-    <p class="foot">제목을 누르면 언론사 원문으로 이동해요.</p>
+    <p class="foot">제목을 누르면 언론사 원문으로 이동해요. 국내 뉴스는 ${esc((f?.providers || []).filter((x) => x !== "GDELT").join("·") || "네이버 뉴스·정책브리핑")}에서, 해외 뉴스는 GDELT(전 세계 뉴스 목록)에서 제목과 링크만 가져와요. 해외 뉴스는 영어 원문이에요.</p>
   </main>`;
 }
 
