@@ -2438,7 +2438,7 @@ function viewNews() {
     <div class="tabs" role="tablist">${tabs.map(([id, label]) => `<button class="chip ${N.tab === id ? "on" : ""}" role="tab" aria-selected="${N.tab === id}" data-act="news-tab" data-t="${esc(id)}">${esc(label)}</button>`).join("")}</div>
     ${N.tab === "brief" ? viewBrief() : `<section class="card"><div class="news">${items ? newsList(items, N.tab === "issues") || `<p class="hint">뉴스가 없어요</p>` : `<p class="hint">불러오는 중…</p>`}</div></section>`}
     ${letters.length ? `<div class="chips"><span class="hint">구독 중</span>${letters.map((l) => `<a class="chip small" href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.name)} ${ICON.out}</a>`).join("")}</div>` : ""}
-    <p class="foot">제목을 누르면 언론사 원문으로 이동해요. 국내 뉴스는 ${esc((f?.providers || []).filter((x) => x !== "GDELT").join("·") || "네이버 뉴스·정책브리핑")}에서, 해외 뉴스는 GDELT(전 세계 뉴스 목록)에서 제목과 링크만 가져와요. 해외 뉴스는 영어 원문이에요.</p>
+    <p class="foot">제목을 누르면 언론사 원문으로 이동해요. 국내 뉴스는 ${esc((f?.providers || []).filter((x) => x !== "GDELT" && x !== "BBC").join("·") || "네이버 뉴스·정책브리핑")}에서, 해외 뉴스는 ${esc((f?.providers || []).includes("BBC") ? "BBC 경제 뉴스" : "GDELT(전 세계 뉴스 목록)")}에서 제목과 링크만 가져와요. 해외 뉴스는 영어 원문이에요.</p>
   </main>`;
 }
 
@@ -4978,7 +4978,7 @@ function viewEtc() {
     ${S.privacy}
     <section class="card" id="sec-info">
       <div class="sec-title"><h2>앱 정보</h2><span>v0.5</span></div>
-      <p style="margin:0;font-size:14px;line-height:1.7">주가·지수: 공공데이터포털(금융위원회, 전일 종가) · 환율: 한국수출입은행 · 뉴스: 네이버·정책브리핑·NewsData(국내), GDELT(해외) — 제목·링크만 · 쉽게 풀이·화제순: 정책브리핑 정책뉴스 · 혜택: 정부24 공공서비스 정보 · AI: Google Gemini(무료 등급 먼저, 보낸 내용을 구글이 서비스 개선에 쓸 수 있음) · OpenAI</p>
+      <p style="margin:0;font-size:14px;line-height:1.7">주가·지수: 공공데이터포털(금융위원회, 전일 종가) · 환율: 한국수출입은행 · 뉴스: 네이버·정책브리핑·NewsData(국내), GDELT·BBC(해외) — 제목·링크만 · 쉽게 풀이·화제순: 정책브리핑 정책뉴스 · 혜택: 정부24 공공서비스 정보 · AI: Google Gemini(무료 등급 먼저, 보낸 내용을 구글이 서비스 개선에 쓸 수 있음) · OpenAI</p>
       <p class="hint" style="margin:8px 0 0">이 앱의 정보는 투자 권유가 아닌 참고용이에요.</p>
     </section>
   </main>`;

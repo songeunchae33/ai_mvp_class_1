@@ -1,11 +1,11 @@
 // 뉴스: 여러 출처에서 제목 + 링크만 보여준다(본문은 가져오지 않음).
-// 오늘의 이슈 = 네이버 뉴스 검색 + 정책브리핑 보도자료 + NewsData(키가 있을 때)를 출처가 고르게 섞어서, 해외 뉴스 = GDELT.
+// 오늘의 이슈 = 네이버 뉴스 검색 + 정책브리핑 보도자료 + NewsData(키가 있을 때)를 출처가 고르게 섞어서, 해외 뉴스 = GDELT(막히면 BBC 경제 RSS).
 // 한 출처가 막혀도 나머지로 채운다.
 // GET /api/news?interests=삼성전자,여행   → { issues: 오늘의 이슈 3, forYou: 관심 뉴스 3, global: 해외 뉴스 3, keywords: 오늘의 키워드 3, providers }
 // GET /api/news?q=FOMC                     → { items: 해당 키워드 뉴스 3 }
 // 둘 다 &full=1 을 붙이면 '뉴스 더보기' 화면용으로 더 많이 돌려준다
 import { cache } from "./_util.js";
-import { PREF_QUERY, naver, dedupe, keywords, searchUrl, newsReady, byTrust, gdelt, newsdata } from "./_news.js";
+import { PREF_QUERY, naver, dedupe, keywords, searchUrl, newsReady, byTrust, globalNews, newsdata } from "./_news.js";
 import { pressReleases, isEcon } from "./_policy.js";
 
 // 화면에는 제목·링크만 보낸다
@@ -48,7 +48,7 @@ export default async function handler(req, res) {
     ready ? naver("증시 금리 환율", { display: 30, sort: "date" }).catch(() => []) : [],
     process.env.DATA_GO_KR_KEY ? got("정책브리핑", pressReleases(2).then((l) => l.filter(isEcon).slice(0, 15).map((r) => ({ title: r.title, url: r.url, source: r.org || "정책브리핑", at: new Date().toISOString() })))) : [],
     got("NewsData", newsdata()),
-    got("GDELT", gdelt(full ? 15 : 6)),
+    globalNews(full ? 15 : 6).then((g) => { if (g.items.length) providers.push(g.provider); return g.items; }).catch((e) => { console.error("global", e.message); return []; }),
   ]);
   if (!ready && !policy.length && !nd.length) return res.status(200).json({ ...sampleHome(interests), global, providers });
 

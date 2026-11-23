@@ -124,7 +124,7 @@ const GLOBAL = { "reuters.com": "Reuters", "apnews.com": "AP", "cnbc.com": "CNBC
 export async function gdelt(max = 10) {
   const q = `(economy OR stocks OR markets OR "interest rates" OR tariffs OR inflation) sourcelang:english (${Object.keys(GLOBAL).map((d) => `domain:${d}`).join(" OR ")})`;
   const url = `https://api.gdeltproject.org/api/v2/doc/doc?query=${encodeURIComponent(q)}&mode=artlist&maxrecords=${Math.max(max * 2, 10)}&format=json&timespan=2d&sort=hybridrel`;
-  const r = await fetch(url, { signal: AbortSignal.timeout(8000) });
+  const r = await fetch(url, { signal: AbortSignal.timeout(4000) }); // 오래 기다리지 않고 BBC로 넘어간다
   const t = (await r.text()).trim();
   if (!t.startsWith("{")) throw new Error(`gdelt ${t.slice(0, 60)}`);
   const seen = new Set();
@@ -141,4 +141,19 @@ export async function newsdata() {
   if (!process.env.NEWSDATA_KEY) return [];
   const j = await fetchJson(`https://newsdata.io/api/1/latest?apikey=${encodeURIComponent(process.env.NEWSDATA_KEY)}&country=kr&language=ko&category=business`, {}, 8000);
   return (j.results || []).filter((a) => a.title && a.link).map((a) => ({ title: clean(a.title), url: a.link, source: source(a.link) || a.source_name || a.source_id || "", at: new Date(a.pubDate ? a.pubDate.replace(" ", "T") + "Z" : Date.now()).toISOString() }));
+}
+
+// GDELT가 막히면(5초 제한 때문에 자주 429) BBC 경제 RSS로 대신한다 (제목·링크만, 출처 BBC 표시)
+export async function bbc(max = 10) {
+  const r = await fetch("https://feeds.bbci.co.uk/news/business/rss.xml", { signal: AbortSignal.timeout(8000) });
+  if (!r.ok) throw new Error(`bbc ${r.status}`);
+  const xml = await r.text();
+  const pick = (b, tag) => (b.match(new RegExp(String.raw`<${tag}>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?</${tag}>`)) || [])[1] || "";
+  return [...xml.matchAll(/<item>([\s\S]*?)<\/item>/g)].map((m) => ({ title: clean(pick(m[1], "title")), url: pick(m[1], "link").trim(), source: "BBC", at: new Date(pick(m[1], "pubDate") || Date.now()).toISOString(), lang: "en" }))
+    .filter((a) => a.title && a.url).slice(0, max);
+}
+// 해외 뉴스: GDELT 먼저, 안 되면 BBC → { items, provider }
+export async function globalNews(max = 10) {
+  try { const items = await gdelt(max); if (items.length) return { items, provider: "GDELT" }; } catch (e) { console.error("gdelt", e.message); }
+  return { items: await bbc(max), provider: "BBC" };
 }
