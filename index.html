@@ -190,6 +190,13 @@
   .ic-badge { display: inline-block; font-size: 12px; font-weight: 700; border-radius: 999px; padding: 3px 8px; }
   .ic-badge.ok { color: #1F5BB8; background: #DCE8FB; }
   .ic-badge.low, .ic-badge.high { color: #B3261E; background: #F7D4D6; }
+  .rk-nm { display: flex; flex-direction: column; align-items: flex-start; gap: 0; }
+  .rk-join { font-size: 11px; line-height: 1.2; }
+  .rk-share { font-size: 11px; font-weight: 700; color: #1F5BB8; background: #DCE8FB; border-radius: 999px; padding: 1px 6px; }
+  button.rk-gap { width: 100%; background: transparent; border: none; color: var(--sub); font: inherit; font-size: 13px; padding: 6px 0; cursor: pointer; }
+  .rk-consent { display: flex; gap: 10px; align-items: flex-start; background: var(--soft); border-radius: 12px; padding: 12px; cursor: pointer; }
+  .rk-consent input { width: 20px; height: 20px; margin-top: 2px; flex-shrink: 0; accent-color: #3375D6; }
+  .rk-consent span { display: flex; flex-direction: column; gap: 2px; font-size: 14px; }
   .lt-list { display: flex; flex-direction: column; gap: 8px; }
   .lt-row { display: flex; align-items: center; gap: 10px; border: 1px solid var(--line); border-radius: 16px; padding: 12px; }
   .lt-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; color: inherit; text-decoration: none; }
@@ -6012,7 +6019,9 @@ async function pushRank() {
     if (!u) return;
     const log = inv.trades.filter((t) => t.kind === "stock" || t.kind === "rate")
       .map(({ at, kind, side, id, qty, price, amt }) => ({ at, kind, side, id, qty, price, amt }));
-    await fb.F.setDoc(fb.F.doc(fb.db, "invest", inv.season, "trades", u.uid), { nick: String(profile?.nickname || "익명").slice(0, 12), log: JSON.stringify(log), at: Date.now() });
+    const made = u.metadata?.creationTime ? new Date(u.metadata.creationTime) : null;
+    await fb.F.setDoc(fb.F.doc(fb.db, "invest", inv.season, "trades", u.uid), { nick: String(profile?.nickname || "익명").slice(0, 12), log: JSON.stringify(log), at: Date.now(),
+      share: inv.share === true, joined: made && !isNaN(made) ? ymd(made) : null });
   } catch {}
 }
 async function loadRank() {
@@ -6250,13 +6259,16 @@ function rankBlock() {
   if (!R) return `<section class="card inv-rank"><div class="sec-title" style="margin:0"><h2>순위</h2><span>${seasonLabel(inv.season)}</span></div><p class="hint" style="margin:0">불러오는 중…</p></section>`;
   if (R.error) return `<section class="card inv-rank"><div class="sec-title" style="margin:0"><h2>순위</h2><span>${seasonLabel(inv.season)}</span></div><p class="hint" style="margin:0">순위표를 아직 불러오지 못했어요. 잠시 후 다시 열어 주세요.</p></section>`;
   const top = R.list.slice(0, 5), mx = Math.max(...R.list.map((x) => x.total), 1), mn = Math.min(...R.list.map((x) => x.total), INV_START) * 0.98;
-  const row = (x, i) => `<div class="rk ${i === R.me ? "me" : ""}"><b class="num">${i + 1}</b><button class="nm rk-nm" data-act="inv-player" data-i="${i}" aria-label="${esc(x.nick || "익명")}님 투자 비중 보기">${esc(x.nick || "익명")}${i === R.me ? " (나)" : ""} ›</button>
+  const jd = (s) => (s ? `${Number(s.slice(2, 4))}.${Number(s.slice(5, 7))}.${Number(s.slice(8, 10))} 가입` : "");
+  const row = (x, i) => `<div class="rk ${i === R.me ? "me" : ""}"><b class="num">${i + 1}</b><button class="nm rk-nm" data-act="inv-player" data-i="${i}" aria-label="${esc(x.nick || "익명")}님 투자 정보 보기"><span>${esc(x.nick || "익명")}${i === R.me ? " (나)" : ""}${x.share ? ` <span class="rk-share">공유</span>` : ""} ›</span>${x.joined ? `<small class="hint rk-join">${jd(x.joined)}</small>` : ""}</button>
       <span class="bar"><i style="width:${Math.max(6, Math.round(((x.total - mn) / (mx - mn || 1)) * 100))}%"></i></span>${rkRet(x)}</div>`;
   return `<section class="card inv-rank"><div class="sec-title" style="margin:0"><h2>순위</h2><span>${seasonLabel(inv.season)} · ${R.n}명</span></div>
     <p style="margin:0">로그인한 ${R.n}명 중 <b style="color:var(--green)">${R.me + 1}위</b>예요</p>
     <p class="hint" style="margin:0">${R.list[R.me]?.pending ? "내 순위는 서버가 확인하는 중이에요(최대 10분)." : "순위는 서버가 모두의 거래를 공식 종가로 다시 계산한 값이에요."}${R.list[R.me]?.bad ? ` 확인되지 않은 거래 ${R.list[R.me].bad}건은 빼고 계산했어요.` : ""}</p>
-    <div class="rk-list">${top.map(row).join("")}${R.me >= 5 ? `<div class="rk-gap">…</div>${row(R.list[R.me], R.me)}` : ""}</div>
-    <p class="hint" style="margin:0">이름을 누르면 그 사람의 투자 비중을 볼 수 있어요. 어떤 종목을 샀는지는 보이지 않아요.</p></section>`;
+    <div class="rk-list">${ui.rankAll ? R.list.map(row).join("") : top.map(row).join("") + (R.me >= 5 ? `${R.me > 5 ? `<button class="rk-gap" data-act="inv-rank-all" aria-label="가운데 순위 모두 보기">… ${R.me - 5}명 더 보기</button>` : ""}${row(R.list[R.me], R.me)}` : "")}</div>
+    ${R.list.length > 5 ? `<button class="link-btn" data-act="inv-rank-all" style="align-self:center">${ui.rankAll ? "접기" : `전체 순위 보기 (${R.list.length}명)`}</button>` : ""}
+    <label class="rk-consent"><input type="checkbox" data-act="inv-share" ${inv.share ? "checked" : ""}><span><b>내 투자 정보 공유하기</b><small class="hint">켜면 어떤 종목을 얼마나 샀는지 공유한 사람끼리 서로 볼 수 있어요. 끄면 다음 순위 계산 때(최대 10분) 바로 안 보여요.</small></span></label>
+    <p class="hint" style="margin:0">이름을 누르면 투자 비중을, 둘 다 공유했다면 산 종목·수량까지 볼 수 있어요.</p></section>`;
 }
 // 주식 시장 목록: 대표 종목 12개(+ 산 종목). 검색하면 모든 종목에서 찾는다
 function invMarketList() {
@@ -6436,8 +6448,29 @@ function modalInvPlayer(m) {
     <div class="rows">${parts.map(([k, name, c]) => `<div class="row" style="min-height:36px"><span><i class="tx-dot" style="display:inline-block;margin-right:6px;background:${c}"></i>${name}</span><b class="num">${mix[k]}%</b></div>`).join("")}</div>
     <p style="margin:0;font-size:14px">${stockPct >= 70 ? "주식에 많이 담은 공격적인 포트폴리오예요." : stockPct >= 40 ? "주식과 안전한 상품을 섞은 포트폴리오예요." : stockPct > 0 ? "안전한 쪽에 더 많이 담은 포트폴리오예요." : "아직 주식은 담지 않았어요."}</p>`
       : `<p class="hint" style="margin:0">${mix ? "아직 아무것도 사지 않고 현금으로 들고 있어요." : "투자 비중은 다음 순위 계산 때(최대 10분) 보여드려요."}</p>`}
-    <p class="hint" style="margin:0">개인정보라 어떤 종목을 샀는지는 보여주지 않아요. ${me ? "내 비중은 지금 값이에요." : "서버가 공식 종가로 계산한 비중이에요."}</p>
+    ${playerHold(m, x, me)}
+    <p class="hint" style="margin:0">${me ? "내 비중은 지금 값이에요." : "서버가 공식 종가로 계산한 값이에요."}</p>
     <button class="btn ghost" data-act="modal-close">닫기</button>`;
+}
+// 산 종목·수량: 나는 늘, 다른 사람은 나와 그 사람이 둘 다 공유에 동의했을 때만 (서버가 확인)
+function playerHold(m, x, me) {
+  const list = (hold) => hold.length ? `<div class="rows">${hold.map((h) => `<div class="row" style="min-height:36px"><span>${esc(h.name)}${h.qty ? ` <small class="hint">${fmt(h.qty)}주</small>` : ""}</span><b class="num">${won(h.value)}</b></div>`).join("")}</div>` : `<p class="hint" style="margin:0">아직 산 종목이 없어요.</p>`;
+  const head = `<h3 class="mp-h" style="margin:4px 0 0">산 종목</h3>`;
+  if (me) return head + list(Object.values(inv.hold).map((h) => ({ name: h.name, qty: h.kind === "stock" ? h.qty : 0, value: Math.round(holdValue(h)) })).sort((a, b) => b.value - a.value)) + (inv.share ? "" : `<p class="hint" style="margin:0">지금은 나만 볼 수 있어요. 순위 아래 '내 투자 정보 공유하기'를 켜면 공유한 사람들도 볼 수 있어요.</p>`);
+  if (!inv.share) return head + `<p class="hint" style="margin:0">순위 아래 '내 투자 정보 공유하기'를 켜면, 공유한 사람들의 종목을 볼 수 있어요.</p>`;
+  if (!x.share) return head + `<p class="hint" style="margin:0">이 사람은 종목을 공유하지 않았어요.</p>`;
+  if (!m.hold) {
+    m.hold = { loading: true };
+    (async () => {
+      try {
+        const u = await invUser(), tok = await u?.getIdToken();
+        const j = await getJson(`/api/market?game=hold&uid=${encodeURIComponent(x.uid)}`, { headers: { Authorization: `Bearer ${tok}` } });
+        m.hold = j.hold ? { hold: j.hold } : { error: j.error || "불러오지 못했어요" };
+      } catch (e) { m.hold = { error: e.body?.error || "불러오지 못했어요. 내 공유 설정이 서버에 닿기까지 최대 10분 걸릴 수 있어요." }; }
+      if (ui.modal === m) render();
+    })();
+  }
+  return head + (m.hold.loading ? `<p class="hint" style="margin:0">불러오는 중…</p>` : m.hold.error ? `<p class="hint" style="margin:0">${esc(m.hold.error)}</p>` : list(m.hold.hold));
 }
 function modalInvHints(m) {
   if (m?.stock) return stockWhy(m.stock);
@@ -6517,6 +6550,8 @@ document.addEventListener("click", (e) => {
     case "inv-period": ui.invPeriod = el.dataset.v; render(); break;
     case "inv-hints": openModal("inv-hints", el.dataset.k ? { stock: el.dataset.k } : {}); break;
     case "inv-player": openModal("inv-player", { i: Number(el.dataset.i) }); break;
+    case "inv-rank-all": ui.rankAll = !ui.rankAll; render(); break;
+    case "inv-share": inv.share = el.checked; saveInv(); render(); toast(inv.share ? "공유를 켰어요. 순위 계산 때(최대 10분) 반영돼요" : "공유를 껐어요. 다음 순위 계산 때 내 종목이 안 보여요"); pushRank().then(() => getJson("/api/market?game=settle").catch(() => {})); break;
     case "inv-mixsave": {
       const keys = Object.keys(INV_MIX.위험중립형);
       const v = keys.map((g, i) => Number(document.getElementById(`mix-${i}`)?.value));

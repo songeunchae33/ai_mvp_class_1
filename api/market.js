@@ -319,6 +319,30 @@ async function gameHints() {
 // GET  /api/market?push=today     → 알림 문구 { title, body }
 
 const RATES_SV = { cma: 2.2, dep: 2.8, ktb3: 2.7, corp3: 3.3 }; // index.html RATES와 같은 게임 금리
+const RATE_NAMES = { cma: "CMA", dep: "정기예금 1년", ktb3: "국고채 3년", corp3: "회사채 3년" };
+// 로그인한 사람 확인: 휴대폰이 보낸 Firebase 로그인 표(ID token)를 Google에 물어 uid를 받는다
+async function whoIs(req) {
+  const tok = String(req.headers.authorization || "").replace(/^Bearer\s+/i, "");
+  if (!tok || !process.env.FIREBASE_API_KEY) return null;
+  const r = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${process.env.FIREBASE_API_KEY}`, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ idToken: tok }), signal: AbortSignal.timeout(6000) });
+  if (!r.ok) return null;
+  return (await r.json()).users?.[0]?.localId || null;
+}
+// 다른 사람의 보유 종목: 나와 그 사람이 둘 다 공유에 동의했을 때만
+async function holdOf(req, uid) {
+  const me = await whoIs(req);
+  if (!me) return { status: 401, body: { error: "로그인이 필요해요" } };
+  const season = `${kstYmd(0).slice(0, 4)}-${kstYmd(0).slice(4, 6)}`;
+  const mine = await fsReq(`invest/${season}/trades/${me}`);
+  if (fromFs(mine?.fields?.share) !== true) return { status: 403, body: { error: "내 투자 정보 공유에 동의하면 볼 수 있어요", need: "share" } };
+  const doc = await fsReq(`privHold/${season}_${uid}`);
+  if (!doc) return { status: 404, body: { error: "이 사람은 종목을 공유하지 않았어요" } };
+  const f = fromFs({ mapValue: { fields: doc.fields || {} } });
+  let hold = [];
+  try { hold = JSON.parse(f.hold || "[]"); } catch {}
+  return { status: 200, body: { hold, cash: f.cash, at: f.at } };
+}
 let saToken = null;
 async function adminToken() {
   if (saToken && saToken.exp > Date.now() + 60e3) return saToken.v;
@@ -440,7 +464,15 @@ async function settle(force) {
     for (const [id, q] of Object.entries(qty)) if (q > 0) { const r = S[id], v = q * (r?.length ? r[r.length - 1][2] : 0); total += v; part[id.startsWith(US_PREFIX) ? "us" : "kr"] += v; }
     total = Math.round(total);
     const mix = Object.fromEntries(Object.entries(part).map(([k, v]) => [k, total > 0 ? Math.round((v / total) * 100) : 0]));
-    await fsSet(`invest/${season}/players/${p.id}`, { nick: String(p.nick || "익명").slice(0, 12), total, ret: Math.round((total / 1e7 - 1) * 10000) / 100, at: now, verified: true, bad, mix });
+    const share = p.share === true, joined = /^\d{4}-\d{2}-\d{2}$/.test(String(p.joined || "")) ? p.joined : null;
+    await fsSet(`invest/${season}/players/${p.id}`, { nick: String(p.nick || "익명").slice(0, 12), total, ret: Math.round((total / 1e7 - 1) * 10000) / 100, at: now, verified: true, bad, mix, share, joined });
+    // 보유 종목은 공유에 동의한 사람만, 순위표와 다른 곳(privHold)에 둔다. 읽을 때는 /api/market?game=hold 가 '둘 다 동의했는지' 확인한다
+    if (share) {
+      const hold = Object.entries(qty).filter(([, q]) => q > 0).map(([id, q]) => { const r = S[id]; return { id, name: id.startsWith(US_PREFIX) ? usName(id.slice(US_PREFIX.length)) : id, qty: q, value: Math.round(q * (r?.length ? r[r.length - 1][2] : 0)) }; })
+        .concat(Object.values(lots.reduce((o, l) => { const v = l.amt * (1 + (RATES_SV[l.id] / 100) * Math.max(0, now - l.at) / YEAR); (o[l.id] ||= { id: l.id, name: RATE_NAMES[l.id], qty: 0, value: 0 }).value += Math.round(v); return o; }, {})))
+        .sort((a, b) => b.value - a.value);
+      await fsSet(`privHold/${season}_${p.id}`, { hold: JSON.stringify(hold), cash: Math.round(cash), at: now });
+    } else await fsDel(`privHold/${season}_${p.id}`).catch(() => {});
   }
   await fsSet(`invest/${season}`, { settledAt: now, players: players.length });
   return { season, players: players.length };
@@ -497,6 +529,13 @@ export default async function handler(req, res) {
       if (process.env.VAPID_PUBLIC && process.env.VAPID_PRIVATE) { try { out.push = await pushAll(); } catch (e) { out.push = { error: e.message.slice(0, 80) }; } }
     }
     return res.status(200).json(out);
+  }
+  if (req.query.game === "hold") {
+    if (!adminReady()) return res.status(200).json({ error: "아직 준비 중이에요" });
+    const uid = String(req.query.uid || "");
+    if (!/^[A-Za-z0-9]{10,64}$/.test(uid)) return res.status(400).json({ error: "잘못된 요청이에요" });
+    res.setHeader("Cache-Control", "no-store");
+    try { const r = await holdOf(req, uid); return res.status(r.status).json(r.body); } catch (e) { console.error(e); return res.status(200).json({ error: "불러오지 못했어요" }); }
   }
   if (req.query.game === "settle") {
     if (!adminReady()) return res.status(200).json({ available: false });
