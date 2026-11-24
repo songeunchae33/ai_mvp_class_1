@@ -1,5 +1,5 @@
 // 뉴스 API들이 같이 쓰는 도구. 파일명이 _로 시작해서 주소로 노출되지 않는다.
-// 출처를 여러 곳으로 나눈다(한 곳이 막혀도 뉴스가 끊기지 않게): 네이버 뉴스 검색 · 정책브리핑 보도자료(api/_policy.js)
+// 출처를 여러 곳으로 나눈다(한 곳이 막혀도 뉴스가 끊기지 않게): 정책브리핑 보도자료(api/_policy.js)
 // · GDELT(전 세계 뉴스 목록, 무료 공개 데이터, 해외 뉴스) · NewsData.io(NEWSDATA_KEY가 있을 때만, 무료 등급 하루 200번).
 // 모두 제목과 링크만 보여준다(본문 없음, 네이버·NewsData 결과는 AI 요약에 쓰지 않음).
 import { fetchJson } from "./_util.js";
@@ -101,35 +101,8 @@ function source(url) {
   }
 }
 
-// 네이버 뉴스 검색. 새 방식(NAVER API HUB, 네이버 클라우드 플랫폼)을 먼저 쓰고,
-// 예전 개발자센터 키만 있으면 그걸 쓴다. 약관상 결과는 '그대로 보여주기'에만 쓴다 (AI 요약 금지).
-export function newsReady() {
-  return !!((process.env.NAVER_HUB_ID && process.env.NAVER_HUB_SECRET) || (process.env.NAVER_SEARCH_ID && process.env.NAVER_SEARCH_SECRET));
-}
-
-export async function naver(query, opts = {}) {
-  try { return await naverOnce(query, opts); }
-  catch (e) {
-    if (!/^429/.test(e.message)) throw e;
-    await new Promise((r) => setTimeout(r, 1200)); // 너무 자주 불렀다는 뜻(429) → 잠깐 쉬고 한 번 더
-    return naverOnce(query, opts);
-  }
-}
-async function naverOnce(query, { display = 10, sort = "date" } = {}) {
-  const qs = new URLSearchParams({ query, display: String(display), sort });
-  const hub = process.env.NAVER_HUB_ID && process.env.NAVER_HUB_SECRET;
-  const json = hub
-    ? await fetchJson(`https://naverapihub.apigw.ntruss.com/search/v1/news?${qs}`, {
-        headers: { "X-NCP-APIGW-API-KEY-ID": process.env.NAVER_HUB_ID, "X-NCP-APIGW-API-KEY": process.env.NAVER_HUB_SECRET },
-      })
-    : await fetchJson(`https://openapi.naver.com/v1/search/news.json?${qs}`, {
-        headers: { "X-Naver-Client-Id": process.env.NAVER_SEARCH_ID, "X-Naver-Client-Secret": process.env.NAVER_SEARCH_SECRET },
-      });
-  return (json.items || []).map((it) => {
-    const url = it.originallink || it.link;
-    return { title: clean(it.title), url, source: source(url), at: new Date(it.pubDate).toISOString() };
-  });
-}
+// 국내 뉴스 검색은 NewsData(무료 등급, 하루 200번)로 한다. 네이버 뉴스 검색 API는 유료라 쓰지 않는다.
+export function newsReady() { return !!process.env.NEWSDATA_KEY; }
 
 // 출처 등급: 0 공식 기관(정부·한국은행 등) · 1 주요 언론(SOURCES) · 2 그 밖. 같은 등급 안에서는 원래 순서를 지킨다
 const OFFICIAL = /(\.go\.kr|korea\.kr|bok\.or\.kr|fss\.or\.kr|kdi\.re\.kr|krx\.co\.kr)$/;
@@ -197,12 +170,23 @@ export async function gdelt(max = 10) {
   }).filter((a) => { const k = a.title.slice(0, 30); if (seen.has(k)) return false; seen.add(k); return true; }).slice(0, max);
 }
 
-// ── 국내 뉴스 보조: NewsData.io (NEWSDATA_KEY가 있을 때만) ──
-// q를 주면 그 낱말로 찾는다(나를 위한 뉴스: 네이버가 막혔을 때 대신). 없으면 국내 경제 최신 뉴스
+// ── 국내 뉴스: NewsData.io (NEWSDATA_KEY가 있을 때만, 무료 등급 하루 200번) ──
+// q를 주면 그 낱말로 찾고(나를 위한 뉴스·키워드·종목 뉴스), 없으면 국내 경제 최신 뉴스.
+// 하루 횟수를 아끼려고 이 서버가 결과를 기억한다(낱말 검색 3시간, 경제 최신 30분). 실패하면 기억해 둔 것을 쓴다
+const ndCache = new Map();
 export async function newsdata(q) {
   if (!process.env.NEWSDATA_KEY) return [];
-  const j = await fetchJson(`https://newsdata.io/api/1/latest?apikey=${encodeURIComponent(process.env.NEWSDATA_KEY)}&country=kr&language=ko${q ? `&q=${encodeURIComponent(q)}` : "&category=business"}`, {}, 8000);
-  return (j.results || []).filter((a) => a.title && a.link).map((a) => ({ title: clean(a.title), url: a.link, source: source(a.link) || a.source_name || a.source_id || "", at: new Date(a.pubDate ? a.pubDate.replace(" ", "T") + "Z" : Date.now()).toISOString() }));
+  const key = q || "", hit = ndCache.get(key), ttl = q ? 3 * 3600e3 : 1800e3;
+  if (hit && Date.now() - hit.at < ttl) return hit.items;
+  try {
+    const j = await fetchJson(`https://newsdata.io/api/1/latest?apikey=${encodeURIComponent(process.env.NEWSDATA_KEY)}&country=kr&language=ko${q ? `&q=${encodeURIComponent(q)}` : "&category=business"}`, {}, 8000);
+    const items = (j.results || []).filter((a) => a.title && a.link).map((a) => ({ title: clean(a.title), url: a.link, source: source(a.link) || a.source_name || a.source_id || "", at: new Date(a.pubDate ? a.pubDate.replace(" ", "T") + "Z" : Date.now()).toISOString() }));
+    if (items.length) { ndCache.set(key, { at: Date.now(), items }); if (ndCache.size > 300) ndCache.delete(ndCache.keys().next().value); }
+    return items.length ? items : hit?.items || [];
+  } catch (e) {
+    if (hit) return hit.items;
+    throw e;
+  }
 }
 
 // GDELT가 막히면(5초 제한 때문에 자주 429) BBC 경제 RSS로 대신한다 (제목·링크만, 출처 BBC 표시)

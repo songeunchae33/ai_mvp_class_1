@@ -1877,7 +1877,7 @@ function conceptKw(c) {
   if (c.kw) return c.kw;
   return c.term.replace(/\([^)]*\)/g, "").split(/(?:와|과|및|·|,|\/) /)[0].split("·")[0].trim().split(/\s+/).slice(0, 2).join(" ") || c.term;
 }
-// 개념 화면의 '관련 뉴스 보기': 네이버 뉴스 제목·링크 그대로 3개(약관상 요약 안 함) + 더 보기 + 보도자료 쉽게 풀이
+// 개념 화면의 '관련 뉴스 보기': 뉴스 제목·링크 그대로 3개(NewsData, 요약 안 함) + 더 보기(네이버 뉴스 검색 페이지 링크) + 보도자료 쉽게 풀이
 function newsBlock(c) {
   const kw = conceptKw(c);
   if (ui.cnewsOpen !== c.id) return `<button class="btn ghost cnews-btn" data-act="cnews-toggle" data-id="${c.id}">📰 ‘${esc(kw)}’ 관련 뉴스 보기</button>`;
@@ -1887,7 +1887,7 @@ function newsBlock(c) {
       <div class="sec-title" style="margin:0"><h3>‘${esc(kw)}’ 관련 뉴스</h3><button class="link-btn" data-act="cnews-toggle" data-id="${c.id}">접기</button></div>
       <div class="nl">${!got ? `<p class="hint">불러오는 중…</p>` : items.length ? items.slice(0, 3).map(newsLine).join("") : `<p class="hint">지금은 관련 뉴스를 찾지 못했어요.</p>`}</div>
       <div class="cnews-more"><a class="link-btn" href="https://search.naver.com/search.naver?where=news&query=${encodeURIComponent(kw)}" target="_blank" rel="noopener">뉴스 더 보기 ›</a><button class="link-btn" data-act="nav" data-route="news" data-target="">정부 보도자료 쉽게 풀이 ›</button></div>
-      <p class="hint" style="margin:0;font-size:11px">네이버 뉴스 검색 결과의 제목·링크를 그대로 보여줘요.</p>
+      <p class="hint" style="margin:0;font-size:11px">뉴스 제목·링크를 그대로 보여줘요.</p>
     </div>`;
 }
 function loadConceptNews(kw) {
@@ -2490,7 +2490,7 @@ function viewNews() {
     <div class="tabs" role="tablist">${tabs.map(([id, label]) => `<button class="chip ${N.tab === id ? "on" : ""}" role="tab" aria-selected="${N.tab === id}" data-act="news-tab" data-t="${esc(id)}">${esc(label)}</button>`).join("")}</div>
     ${N.tab === "brief" ? viewBrief() : `<section class="card"><div class="news">${items ? newsList(items, N.tab === "issues") || `<p class="hint">뉴스가 없어요</p>` : `<p class="hint">불러오는 중…</p>`}</div></section>`}
     ${letters.length ? `<div class="chips"><span class="hint">구독 중</span>${letters.map((l) => `<a class="chip small" href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.name)} ${ICON.out}</a>`).join("")}</div>` : ""}
-    <p class="foot">제목을 누르면 언론사 원문으로 이동해요. 국내 뉴스는 ${esc((f?.providers || []).filter((x) => x !== "GDELT" && x !== "BBC").join("·") || "네이버 뉴스·정책브리핑")}에서, 해외 뉴스는 ${esc((f?.providers || []).includes("BBC") ? "BBC 경제 뉴스" : "GDELT(전 세계 뉴스 목록)")}에서 제목과 링크만 가져와요. 해외 뉴스는 영어 원문이에요.</p>
+    <p class="foot">제목을 누르면 언론사 원문으로 이동해요. 국내 뉴스는 ${esc((f?.providers || []).filter((x) => x !== "GDELT" && x !== "BBC").join("·") || "NewsData·정책브리핑")}에서, 해외 뉴스는 ${esc((f?.providers || []).includes("BBC") ? "BBC 경제 뉴스" : "GDELT(전 세계 뉴스 목록)")}에서 제목과 링크만 가져와요. 해외 뉴스 제목은 AI가 한국어로 옮긴 거예요.</p>
   </main>`;
 }
 
@@ -6076,7 +6076,7 @@ function hintCard(h) {
         <span class="inv-hs">${h.stocks.map((id) => `<button class="chip small" data-act="inv-open" data-k="stock:${esc(id)}">${esc(company(id)?.name || id)}</button>`).join("")}</span></div>
     </div>`;
 }
-// 한 종목이 왜 올랐·내렸는지: 내 수익 vs 같은 기간 코스피, 그 종목·업종 힌트, 관련 뉴스 제목(네이버 뉴스, 제목·링크만)
+// 한 종목이 왜 올랐·내렸는지: 내 수익 vs 같은 기간 코스피, 그 종목·업종 힌트, 관련 뉴스 제목(NewsData, 제목·링크만)
 function stockWhy(id) {
   const h = inv.hold[holdKey("stock", id)], c = company(id), name = h?.name || c?.name || id, Q = quote(id);
   const ev = h && inv.px[id] != null ? evalLots(name, h.lots, inv.px[id], curIdx()) : null;
@@ -6107,7 +6107,7 @@ function stockWhy(id) {
     ${mine.length || sector.length ? [...mine, ...sector].map(hintCard).join("") : `<p class="hint" style="margin:0">${invData.hints ? `오늘은 ${esc(name)} 힌트가 없어요. 아래 뉴스 제목에서 이유를 찾아봐요.` : "힌트를 만드는 중이에요…"}</p>`}
     <h3 style="margin:4px 0 0;font-size:15px">${esc(name)} 최근 뉴스</h3>
     <div class="nl">${!news ? `<p class="hint">불러오는 중…</p>` : news.length ? news.slice(0, 3).map((it) => newsLine(it, true)).join("") : `<p class="hint">관련 뉴스를 찾지 못했어요.</p>`}</div>
-    <p class="hint" style="margin:0">뉴스는 네이버 뉴스 검색의 제목·링크 그대로예요. 사라·팔라는 뜻이 아니에요.</p>
+    <p class="hint" style="margin:0">뉴스는 제목·링크 그대로예요. 사라·팔라는 뜻이 아니에요.</p>
     <div style="display:flex;gap:8px"><button class="btn ghost" style="flex:1" data-act="inv-open" data-k="stock:${esc(id)}">${esc(name)} 사고팔기</button><button class="btn" style="flex:1" data-act="modal-close">닫기</button></div>`;
 }
 function modalInvHints(m) {
