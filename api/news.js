@@ -19,6 +19,18 @@ function sampleHome(interests) {
   return { sample: true, issues, forYou, keywords: ["FOMC", "환율", "반도체"] };
 }
 
+// 관심사별 검색 결과를 이 서버가 3시간 기억한다. 네이버가 막혀도(429) 기억해 둔 것이 있으면 그걸 쓴다
+const qCache = new Map();
+async function searchInterest(q, display) {
+  const key = `${q}|${display}`, hit = qCache.get(key);
+  if (hit && Date.now() - hit.at < 3 * 3600e3) return hit.items;
+  try {
+    const items = await naver(q, { display, sort: "date" });
+    if (items.length) { qCache.set(key, { at: Date.now(), items }); if (qCache.size > 300) qCache.delete(qCache.keys().next().value); }
+    return items.length ? items : hit?.items || [];
+  } catch (e) { console.error("interest", q, e.message); return hit?.items || []; }
+}
+
 export default async function handler(req, res) {
   const ready = newsReady();
 
@@ -66,7 +78,16 @@ export default async function handler(req, res) {
 
     // 관심 종목·선호마다 최신 뉴스 1개씩, 모자라면 앞쪽 관심사에서 더
     const queries = interests.map((i) => ({ tag: i, q: PREF_QUERY[i] || i }));
-    const perQuery = ready ? await Promise.all(queries.map(({ q }) => naver(q, { display: full ? 15 : 6, sort: "date" }).catch(() => []))) : queries.map(() => []);
+    // 한꺼번에 부르면 네이버가 '너무 많다(429)'고 막아서 하나씩 부른다
+    const perQuery = [];
+    for (const { q } of queries) perQuery.push(ready ? await searchInterest(q, full ? 15 : 6) : []);
+    // 네이버에서 못 찾은 관심사는 이미 받아 둔 다른 출처(네이버 경제·NewsData·정책브리핑) 제목에서 그 낱말이 든 기사로 채운다
+    const others = dedupe([...pool, ...policy]);
+    queries.forEach(({ tag, q }, i) => {
+      if (perQuery[i].length) return;
+      const words = [tag, ...q.split(/\s+/)].filter((w) => w.length >= 2);
+      perQuery[i] = others.filter((n) => words.some((w) => n.title.includes(w)));
+    });
     const taken = new Set(issues.map((i) => i.url));
     const forYou = [];
     const want = full ? 20 : 3;
@@ -82,7 +103,8 @@ export default async function handler(req, res) {
 
     const globalKo = await translateTitles(global.slice(0, full ? 15 : 3)); // 영어 제목은 한국어로(안 되면 영어 그대로)
     // 사용량을 아끼려고(GDELT는 5초에 한 번 제한) 1시간 동안 같은 결과를 재사용. 번역이 실패해 영어가 남았으면 2분만 쓰고 다시 번역
-    if (globalKo.some((a) => a.lang === "en")) res.setHeader("Cache-Control", "s-maxage=120");
+    // 영어가 남았거나 관심사가 있는데 나를 위한 뉴스를 못 찾았으면 2분만 쓰고 다시 찾는다
+    if (globalKo.some((a) => a.lang === "en") || (interests.length && !forYou.length)) res.setHeader("Cache-Control", "s-maxage=120");
     else cache(res, 3600);
     res.status(200).json({ issues: strip(issues), forYou: strip(forYou), global: strip(globalKo), keywords: keywords([...pool, ...policy]), providers, ...(translateState.why ? { tr: translateState.why } : {}) });
   } catch (e) {

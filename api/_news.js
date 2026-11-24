@@ -107,7 +107,15 @@ export function newsReady() {
   return !!((process.env.NAVER_HUB_ID && process.env.NAVER_HUB_SECRET) || (process.env.NAVER_SEARCH_ID && process.env.NAVER_SEARCH_SECRET));
 }
 
-export async function naver(query, { display = 10, sort = "date" } = {}) {
+export async function naver(query, opts = {}) {
+  try { return await naverOnce(query, opts); }
+  catch (e) {
+    if (!/^429/.test(e.message)) throw e;
+    await new Promise((r) => setTimeout(r, 1200)); // 너무 자주 불렀다는 뜻(429) → 잠깐 쉬고 한 번 더
+    return naverOnce(query, opts);
+  }
+}
+async function naverOnce(query, { display = 10, sort = "date" } = {}) {
   const qs = new URLSearchParams({ query, display: String(display), sort });
   const hub = process.env.NAVER_HUB_ID && process.env.NAVER_HUB_SECRET;
   const json = hub

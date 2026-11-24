@@ -1520,6 +1520,19 @@ async function getJson(url, opt) {
   return j;
 }
 
+// 나를 위한 뉴스는 하루 한 번 바뀌면 충분해서, 처음 찾은 목록을 그날 내내 쓴다.
+// 네이버 검색이 막힌 날(429 등)에 비어 보이지 않게, 새로 못 찾으면 마지막으로 찾은 목록을 그대로 둔다(관심사가 같을 때만)
+const FORYOU_KEY = "myeco.foryou.v1";
+function keepForYou(kind, interests, j) {
+  if (!j || j.sample) return j;
+  let all = {};
+  try { all = JSON.parse(localStorage.getItem(FORYOU_KEY) || "{}") || {}; } catch {}
+  const saved = all[kind], day = ymd(today0()), fresh = j.forYou || [];
+  const same = saved && saved.interests === interests && saved.items?.length;
+  if (same && (saved.day === day ? saved.items.length >= fresh.length : !fresh.length)) return { ...j, forYou: saved.items };
+  if (fresh.length) { all[kind] = { day, interests, items: fresh }; try { localStorage.setItem(FORYOU_KEY, JSON.stringify(all)); } catch {} }
+  return j;
+}
 async function loadAll(manual = false) {
   if (!profile) return;
   data.loading = true;
@@ -1528,7 +1541,7 @@ async function loadAll(manual = false) {
   const interests = [...profile.watch.map((w) => w.name).slice(0, 3), ...profile.prefs.slice(0, 3)].join(",");
   const jobs = [
     getJson(`/api/market?stocks=${encodeURIComponent(names)}`).then((j) => (data.market = j)).catch(() => {}),
-    getJson(`/api/news?interests=${encodeURIComponent(interests)}`).then((j) => (data.news = j)).catch(() => {}),
+    getJson(`/api/news?interests=${encodeURIComponent(interests)}`).then((j) => (data.news = keepForYou("home", interests, j))).catch(() => {}),
     Promise.resolve(ensureTrending()),
     getJson(`/api/news?full=1&q=${encodeURIComponent("환율")}`).then((j) => (data.fxNews = j.sample ? [] : j.items || [])).catch(() => {}),
   ];
@@ -2519,7 +2532,7 @@ async function openNews(tab) {
   if (tab === "brief" && !data.brief) loadBrief(); // AI 풀이는 볼 때만 만든다 (비용 절약)
   if (!data.newsFull) {
     const interests = [...profile.watch.map((w) => w.name).slice(0, 4), ...profile.prefs.slice(0, 3)].join(",");
-    jobs.push(getJson(`/api/news?full=1&interests=${encodeURIComponent(interests)}`).then((j) => (data.newsFull = j)).catch(() => (data.newsFull = { issues: [], forYou: [] })));
+    jobs.push(getJson(`/api/news?full=1&interests=${encodeURIComponent(interests)}`).then((j) => (data.newsFull = keepForYou("full", interests, j))).catch(() => (data.newsFull = keepForYou("full", interests, { issues: [], forYou: [] }))));
   }
   if (tab.startsWith("kw:") && !ui.news.kwItems[tab.slice(3)]) {
     const k = tab.slice(3);
@@ -3692,6 +3705,133 @@ function moneyCardData(per) {
 function mcLoad(src) { return new Promise((ok, no) => { const im = new Image(); im.onload = () => ok(im); im.onerror = no; im.src = src; }); }
 const mcSvgSrc = (k) => "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svgIcon(MC_SVG[k] || MC_SVG.bag));
 function mcRound(c, x, y, w, h, r, fill) { c.beginPath(); c.roundRect(x, y, w, h, r); c.fillStyle = fill; c.fill(); }
+// 유형별 루미: 자세(그림 4장 × 좌우 뒤집기·기울기) · 몸 색 · 선 색 · 표정 · 든 물건이 16가지 모두 다르다
+// 자세마다 눈·입·손 자리(그림 크기에 대한 비율). 표정은 원래 얼굴을 몸 색으로 덮고 새로 그린다
+const LUMI_POSES = {
+  main: { src: "main", eL: [0.35, 0.47], eR: [0.61, 0.49], mouth: 0.07, hand: [0.8, 0.7] },
+  wave: { src: "wave", eL: [0.42, 0.43], eR: [0.64, 0.41], mouth: 0.07, hand: [0.84, 0.42] },
+  lookup: { src: "lookup", eL: [0.44, 0.43], eR: [0.58, 0.43], mouth: 0.05, hand: [0.2, 0.62] },
+  sit: { src: "sit", eL: [0.35, 0.47], eR: [0.61, 0.47], mouth: 0.06, hand: [0.82, 0.72] },
+};
+const LUMI_LOOKS = {
+  SHPF: { pose: "main", tilt: -4, body: "#CDEBBE", line: "#2E7D32", bg: "#F1F8EC", face: "proud", prop: "pan" },
+  SHPV: { pose: "sit", tilt: 0, body: "#BDEBDF", line: "#0F7A69", bg: "#EBF8F5", face: "focused", prop: "calc" },
+  SHIF: { pose: "lookup", tilt: 3, body: "#D3CCF7", line: "#3C2F9A", bg: "#EDEAFB", face: "sleepy", prop: "noodle" },
+  SHIV: { pose: "wave", tilt: -3, body: "#FFE9A3", line: "#A86F00", bg: "#FFF8E1", face: "sparkle", prop: "coupon" },
+  SOPF: { pose: "main", flip: 1, tilt: 4, body: "#FFD2B3", line: "#C2410C", bg: "#FFF1E6", face: "wink", prop: "magnifier" },
+  SOPV: { pose: "wave", flip: 1, tilt: 3, body: "#C6E2FB", line: "#1565C0", bg: "#EAF4FD", face: "excited", prop: "map" },
+  SOIF: { pose: "sit", flip: 1, tilt: -3, body: "#FFCBC2", line: "#C2413A", bg: "#FFEFEC", face: "smug", prop: "stamp" },
+  SOIV: { pose: "lookup", flip: 1, tilt: -4, body: "#DDE5B5", line: "#5F6B1E", bg: "#F3F5E6", face: "surprised", prop: "scope" },
+  YHPF: { pose: "sit", tilt: 4, body: "#E2CCF8", line: "#7B3FC4", bg: "#F5EEFD", face: "hearts", prop: "remote" },
+  YHPV: { pose: "main", tilt: 2, body: "#EBD3B5", line: "#8A5A2B", bg: "#F8F0E6", face: "content", prop: "mug" },
+  YHIF: { pose: "lookup", tilt: -2, body: "#C3CDEE", line: "#1E2A6E", bg: "#E4E8F6", face: "dizzy", prop: "phone" },
+  YHIV: { pose: "wave", tilt: 5, body: "#FBC6DD", line: "#C2185B", bg: "#FDEBF3", face: "money", prop: "cart" },
+  YOPF: { pose: "main", flip: 1, tilt: -3, body: "#FAC4BE", line: "#B3261E", bg: "#FDEDEB", face: "drool", prop: "pin" },
+  YOPV: { pose: "wave", flip: 1, tilt: -5, body: "#FFE29A", line: "#9A5B00", bg: "#FFF6DB", face: "cool", prop: "bags" },
+  YOIF: { pose: "sit", flip: 1, tilt: 5, body: "#FFC2D8", line: "#D6336C", bg: "#FFEAF2", face: "laugh", prop: "fav" },
+  YOIV: { pose: "lookup", flip: 1, tilt: 4, body: "#EBC4F4", line: "#9C27B0", bg: "#F8EAFB", face: "stars", prop: "popper" },
+};
+// 유형마다 든 물건
+Object.assign(MC_SVG, {
+  pan: `<circle cx="16" cy="22" r="12" fill="#3A3F4B" stroke="${NV}" stroke-width="2.4"/><circle cx="16" cy="22" r="7" fill="#FFD36B"/><circle cx="16" cy="22" r="3" fill="#fff"/><path d="M27 18L38 10" stroke="#8A4B2A" stroke-width="4.5"/>`,
+  calc: `<rect x="8" y="3" width="24" height="34" rx="4" fill="#fff" stroke="${NV}" stroke-width="2.4"/><rect x="12" y="7" width="16" height="8" rx="1.5" fill="#BFE8DD"/><g fill="${NV}"><circle cx="14" cy="21" r="2"/><circle cx="20" cy="21" r="2"/><circle cx="26" cy="21" r="2"/><circle cx="14" cy="27" r="2"/><circle cx="20" cy="27" r="2"/><circle cx="14" cy="33" r="2"/><circle cx="20" cy="33" r="2"/></g><rect x="24" y="25" width="4" height="10" rx="2" fill="#E5533D"/>`,
+  noodle: `<path d="M6 14H34L30 37H10Z" fill="#fff" stroke="${NV}" stroke-width="2.4"/><path d="M7 20H33L32 27H8Z" fill="#E5533D"/><path d="M14 14Q16 6 20 10Q24 4 26 14" stroke="#FFD36B" stroke-width="2.4" fill="none"/><path d="M23 1L30 13" stroke="#C98E5A" stroke-width="2"/>`,
+  coupon: `<path d="M3 11H37V17Q33 20 37 23V29H3V23Q7 20 3 17Z" fill="#FFD36B" stroke="${NV}" stroke-width="2.4"/><path d="M13 11V29" stroke="${NV}" stroke-width="1.8" stroke-dasharray="2 2"/><text x="25" y="24" text-anchor="middle" font-size="10" font-weight="700" fill="#C2185B" font-family="sans-serif">%</text>`,
+  magnifier: `<circle cx="16" cy="16" r="11" fill="#E1F0FD" stroke="${NV}" stroke-width="3"/><path d="M11 12Q13 9 17 9" stroke="#fff" stroke-width="2.4" fill="none"/><path d="M24 24L36 36" stroke="#8A4B2A" stroke-width="5"/>`,
+  map: `<path d="M3 8L14 4L26 8L37 4V32L26 36L14 32L3 36Z" fill="#FFF3C4" stroke="${NV}" stroke-width="2.4"/><path d="M14 4V32M26 8V36" stroke="${NV}" stroke-width="1.6"/><path d="M8 26Q14 14 20 22T33 12" stroke="#E5533D" stroke-width="2" fill="none" stroke-dasharray="3 2"/><circle cx="33" cy="12" r="2.6" fill="#E5533D"/>`,
+  stamp: `<rect x="3" y="8" width="34" height="24" rx="3" fill="#fff" stroke="${NV}" stroke-width="2.4"/><g fill="#E5533D"><circle cx="11" cy="16" r="3.2"/><circle cx="20" cy="16" r="3.2"/><circle cx="29" cy="16" r="3.2"/><circle cx="11" cy="25" r="3.2"/></g><g fill="none" stroke="#B5BCC8" stroke-width="1.6"><circle cx="20" cy="25" r="3.2"/><circle cx="29" cy="25" r="3.2"/></g>`,
+  scope: `<path d="M5 24L30 9L34 17L9 32Z" fill="#C98E5A" stroke="${NV}" stroke-width="2.4"/><rect x="29" y="5" width="8" height="15" rx="2" fill="#5F6B1E" stroke="${NV}" stroke-width="2.4" transform="rotate(-30 33 12)"/><path d="M14 28L10 38M18 26L22 38" stroke="${NV}" stroke-width="2.4"/>`,
+  remote: `<rect x="12" y="3" width="16" height="34" rx="6" fill="#3A3F4B" stroke="${NV}" stroke-width="2.4"/><circle cx="20" cy="11" r="3.4" fill="#E5533D"/><path d="M17 19L24 23L17 27Z" fill="#fff"/><circle cx="17" cy="32" r="1.6" fill="#fff"/><circle cx="23" cy="32" r="1.6" fill="#fff"/>`,
+  mug: `<path d="M8 12H28V31Q28 36 23 36H13Q8 36 8 31Z" fill="#fff" stroke="${NV}" stroke-width="2.4"/><path d="M28 16H32Q36 16 36 21Q36 26 31 26H28" fill="none" stroke="${NV}" stroke-width="2.4"/><ellipse cx="18" cy="14" rx="8" ry="2.4" fill="#C98E5A"/><path d="M15 14Q18 11 21 14Q18 16 15 14Z" fill="#fff"/><path d="M14 8Q12 5 14 2M21 8Q19 5 21 2" stroke="#B5BCC8" stroke-width="1.6" fill="none"/>`,
+  phone: `<rect x="10" y="2" width="20" height="36" rx="5" fill="#1D2433" stroke="${NV}" stroke-width="2.4"/><rect x="13" y="7" width="14" height="24" rx="2" fill="#7FD3C7"/><path d="M16 19H24V27H16Z" fill="#fff"/><path d="M18 19V16H22V19" stroke="#fff" stroke-width="1.6" fill="none"/>`,
+  cart: `<path d="M2 6H8L13 27H32L36 12H10" fill="none" stroke="${NV}" stroke-width="2.6"/><path d="M11 12H35L32 23H13Z" fill="#F28AA6"/><rect x="14" y="4" width="7" height="9" rx="1" fill="#7FA6E6" stroke="${NV}" stroke-width="1.6"/><rect x="22" y="2" width="8" height="11" rx="1" fill="#FFD36B" stroke="${NV}" stroke-width="1.6"/><circle cx="15" cy="33" r="3" fill="${NV}"/><circle cx="30" cy="33" r="3" fill="${NV}"/>`,
+  pin: `<path d="M20 38Q6 22 6 15Q6 3 20 3Q34 3 34 15Q34 22 20 38Z" fill="#E5533D" stroke="${NV}" stroke-width="2.4"/><circle cx="20" cy="15" r="6" fill="#fff"/><path d="M17 13V18M23 13V18M17 13Q20 11 23 13" stroke="#E5533D" stroke-width="1.6" fill="none"/>`,
+  popper: `<path d="M4 37L14 13L27 26Z" fill="#FFD36B" stroke="${NV}" stroke-width="2.4"/><path d="M9 25L17 31M12 18L22 26" stroke="#E5533D" stroke-width="2"/><circle cx="25" cy="8" r="2.4" fill="#F28AA6"/><circle cx="33" cy="14" r="2.4" fill="#7FA6E6"/><path d="M30 4L32 8M36 20L38 22M20 4L21 1" stroke="#7CC47F" stroke-width="2.4"/>`,
+});
+const lumiPoseCache = {};
+// 루미 그림은 몸 안쪽만 불투명하고 바깥은 투명하다. 한 번 불러 canvas로 둔다
+async function lumiPose(name) {
+  if (lumiPoseCache[name]) return lumiPoseCache[name];
+  const img = await mcLoad(`/img/lumi/${LUMI_POSES[name].src}.png`), cv = document.createElement("canvas");
+  cv.width = img.naturalWidth; cv.height = img.naturalHeight;
+  cv.getContext("2d").drawImage(img, 0, 0);
+  return (lumiPoseCache[name] = cv);
+}
+const hexRgb = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+// 밝은 칸은 몸 색, 어두운 칸은 선 색으로 (그 사이는 섞음)
+function lumiTint(src, body, line) {
+  const w = src.width, h = src.height, cv = document.createElement("canvas");
+  cv.width = w; cv.height = h;
+  const c = cv.getContext("2d"); c.drawImage(src, 0, 0);
+  const d = c.getImageData(0, 0, w, h), p = d.data, B = hexRgb(body), L = hexRgb(line);
+  for (let i = 0; i < p.length; i += 4) {
+    if (!p[i + 3]) continue;
+    const mx = Math.max(p[i], p[i + 1], p[i + 2]), mn = Math.min(p[i], p[i + 1], p[i + 2]);
+    const t = Math.min(Math.max(((mx + mn) / 510 - 0.3) / 0.55, 0), 1);
+    for (let k = 0; k < 3; k++) p[i + k] = Math.round(L[k] + (B[k] - L[k]) * t);
+  }
+  c.putImageData(d, 0, 0);
+  return cv;
+}
+// 표정: 눈 사이 가운데를 0으로 두고 그린다. u = 두 눈 사이 거리
+function lumiFace(c, face, u, line, flip) {
+  const lw = u * 0.1, eye = u / 2, my = u * 0.32;
+  c.lineWidth = lw; c.lineCap = "round"; c.lineJoin = "round"; c.strokeStyle = line; c.fillStyle = line;
+  const arc = (x, y, r, a0, a1, fill) => { c.beginPath(); c.arc(x, y, r, a0, a1); fill ? c.fill() : c.stroke(); };
+  const line2 = (pts) => { c.beginPath(); pts.forEach(([x, y], i) => (i ? c.lineTo(x, y) : c.moveTo(x, y))); c.stroke(); };
+  const dot = (x, y, r = u * 0.075) => arc(x, y, r, 0, Math.PI * 2, true);
+  const happyEye = (x) => arc(x, u * 0.06, u * 0.12, Math.PI * 1.1, Math.PI * 1.9);
+  const relaxEye = (x) => arc(x, -u * 0.05, u * 0.12, Math.PI * 0.15, Math.PI * 0.85);
+  const smile = (r = 0.12) => arc(0, my - u * r, u * r, Math.PI * 0.2, Math.PI * 0.8);
+  const openMouth = (r = 0.13, tongue) => { c.beginPath(); c.moveTo(-u * r, my - u * 0.04); c.quadraticCurveTo(0, my + u * r * 1.6, u * r, my - u * 0.04); c.closePath(); c.fill(); if (tongue) { c.fillStyle = "#F28AA6"; arc(0, my + u * r * 0.55, u * r * 0.5, 0, Math.PI, true); c.fillStyle = line; } };
+  const cheeks = (col = "rgba(242,138,166,.55)", r = 0.11) => { c.fillStyle = col; [-1, 1].forEach((s) => { c.beginPath(); c.ellipse(s * u * 0.72, u * 0.2, u * r * 1.4, u * r, 0, 0, Math.PI * 2); c.fill(); }); c.fillStyle = line; };
+  const star = (x, y, r, col) => { c.beginPath(); for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + (i * Math.PI) / 5, rr = i % 2 ? r * 0.45 : r; c.lineTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr); } c.closePath(); c.fillStyle = col; c.fill(); c.lineWidth = lw * 0.6; c.stroke(); c.lineWidth = lw; c.fillStyle = line; };
+  const heart = (x, y, r, col) => { c.beginPath(); c.moveTo(x, y + r * 0.9); c.bezierCurveTo(x - r * 1.6, y - r * 0.2, x - r * 0.7, y - r * 1.3, x, y - r * 0.4); c.bezierCurveTo(x + r * 0.7, y - r * 1.3, x + r * 1.6, y - r * 0.2, x, y + r * 0.9); c.fillStyle = col; c.fill(); c.fillStyle = line; };
+  const txt = (s, x, y, size, col) => { c.save(); c.translate(x, y); if (flip) c.scale(-1, 1); c.font = `700 ${size}px 'Pretendard Variable', Pretendard, sans-serif`; c.textAlign = "center"; c.textBaseline = "middle"; c.fillStyle = col; c.fillText(s, 0, 0); c.restore(); };
+  switch (face) {
+    case "proud": cheeks(); happyEye(-eye); happyEye(eye); smile(0.14); break;
+    case "focused": cheeks(); dot(-eye, 0); dot(eye, 0); [-eye, eye].forEach((x) => arc(x, 0, u * 0.22, 0, Math.PI * 2)); line2([[-eye + u * 0.22, 0], [eye - u * 0.22, 0]]); line2([[-u * 0.1, my], [u * 0.1, my]]); break;
+    case "sleepy": cheeks("rgba(160,150,230,.45)"); line2([[-eye - u * 0.12, 0], [-eye + u * 0.12, 0]]); line2([[eye - u * 0.12, 0], [eye + u * 0.12, 0]]); arc(0, my, u * 0.06, 0, Math.PI * 2); txt("z", eye + u * 0.55, -u * 0.45, u * 0.32, line); txt("z", eye + u * 0.85, -u * 0.75, u * 0.24, line); break;
+    case "sparkle": cheeks(); [-eye, eye].forEach((x) => { dot(x, 0, u * 0.13); c.fillStyle = "#fff"; arc(x + u * 0.04, -u * 0.05, u * 0.045, 0, Math.PI * 2, true); c.fillStyle = line; }); openMouth(0.1); break;
+    case "wink": cheeks(); dot(-eye, 0, u * 0.09); happyEye(eye); openMouth(0.11, true); break;
+    case "excited": cheeks(); line2([[-eye - u * 0.11, -u * 0.09], [-eye + u * 0.08, 0], [-eye - u * 0.11, u * 0.09]]); line2([[eye + u * 0.11, -u * 0.09], [eye - u * 0.08, 0], [eye + u * 0.11, u * 0.09]]); openMouth(0.15, true); break;
+    case "smug": cheeks(); [-eye, eye].forEach((x) => { line2([[x - u * 0.13, -u * 0.02], [x + u * 0.13, -u * 0.02]]); arc(x, -u * 0.02, u * 0.09, 0, Math.PI, true); }); c.beginPath(); c.moveTo(-u * 0.12, my); c.quadraticCurveTo(u * 0.05, my + u * 0.1, u * 0.16, my - u * 0.06); c.stroke(); break;
+    case "surprised": cheeks(); [-eye, eye].forEach((x) => { c.fillStyle = "#fff"; arc(x, 0, u * 0.15, 0, Math.PI * 2, true); c.fillStyle = line; arc(x, 0, u * 0.15, 0, Math.PI * 2); dot(x, u * 0.02, u * 0.065); }); arc(0, my + u * 0.04, u * 0.07, 0, Math.PI * 2); break;
+    case "hearts": cheeks(); heart(-eye, 0, u * 0.16, "#E5533D"); heart(eye, 0, u * 0.16, "#E5533D"); smile(0.13); break;
+    case "content": cheeks("rgba(242,138,166,.75)", 0.13); relaxEye(-eye); relaxEye(eye); smile(0.1); break;
+    case "dizzy": cheeks("rgba(160,170,230,.45)"); [-eye, eye].forEach((x) => { c.beginPath(); for (let a = 0; a < Math.PI * 4; a += 0.2) c.lineTo(x + Math.cos(a) * u * 0.035 * a / 2, Math.sin(a) * u * 0.035 * a / 2); c.lineWidth = lw * 0.7; c.stroke(); c.lineWidth = lw; }); c.beginPath(); c.moveTo(-u * 0.16, my); for (let i = 1; i <= 4; i++) c.lineTo(-u * 0.16 + i * u * 0.08, my + (i % 2 ? -1 : 1) * u * 0.05); c.stroke(); break;
+    case "money": cheeks(); [-eye, eye].forEach((x) => { c.fillStyle = "#FFD36B"; arc(x, 0, u * 0.17, 0, Math.PI * 2, true); c.fillStyle = line; arc(x, 0, u * 0.17, 0, Math.PI * 2); txt("₩", x, u * 0.01, u * 0.22, line); }); openMouth(0.13); break;
+    case "drool": cheeks(); happyEye(-eye); happyEye(eye); openMouth(0.12); c.fillStyle = "#8EC9F5"; c.beginPath(); c.ellipse(u * 0.12, my + u * 0.22, u * 0.045, u * 0.08, 0, 0, Math.PI * 2); c.fill(); c.fillStyle = line; break;
+    case "cool": c.fillStyle = "#1D2433"; [-eye, eye].forEach((x) => { c.beginPath(); c.roundRect(x - u * 0.24, -u * 0.13, u * 0.48, u * 0.28, u * 0.1); c.fill(); }); c.strokeStyle = "#1D2433"; line2([[-eye + u * 0.24, -u * 0.06], [eye - u * 0.24, -u * 0.06]]); c.strokeStyle = line; c.fillStyle = "#fff"; c.beginPath(); c.roundRect(-eye - u * 0.16, -u * 0.08, u * 0.1, u * 0.05, 2); c.fill(); c.fillStyle = line; c.beginPath(); c.moveTo(-u * 0.12, my); c.quadraticCurveTo(u * 0.05, my + u * 0.1, u * 0.16, my - u * 0.06); c.stroke(); break;
+    case "laugh": cheeks("rgba(242,138,166,.7)"); line2([[-eye - u * 0.11, -u * 0.08], [-eye + u * 0.08, 0], [-eye - u * 0.11, u * 0.08]]); line2([[eye + u * 0.11, -u * 0.08], [eye - u * 0.08, 0], [eye + u * 0.11, u * 0.08]]); openMouth(0.17, true); c.fillStyle = "#8EC9F5"; [-1, 1].forEach((s) => { c.beginPath(); c.ellipse(s * (eye + u * 0.24), u * 0.08, u * 0.04, u * 0.07, 0, 0, Math.PI * 2); c.fill(); }); c.fillStyle = line; break;
+    case "stars": cheeks(); star(-eye, 0, u * 0.19, "#FFD36B"); star(eye, 0, u * 0.19, "#FFD36B"); openMouth(0.12, true); break;
+  }
+}
+// 유형 code의 루미를 size 크기 정사각 canvas로. favKey: '최애 메뉴' 유형이 들 물건(가장 많이 산 것)
+async function drawLumiLook(code, size, favKey) {
+  const L = LUMI_LOOKS[code], P = LUMI_POSES[L.pose];
+  const base = await lumiPose(L.pose), tinted = lumiTint(base, L.body, L.line);
+  const props = L.prop === "bags" ? ["bag", "bag"] : L.prop === "fav" ? [favKey && MC_SVG[favKey] ? favKey : "heart", "heart"] : [L.prop];
+  const pimgs = await Promise.all(props.map((k) => mcLoad(mcSvgSrc(k))));
+  const cv = document.createElement("canvas"); cv.width = cv.height = size;
+  const c = cv.getContext("2d"), m = size * 0.1, s = size - m * 2;   // 물건이 삐져나올 자리
+  c.translate(size / 2, size / 2); c.rotate((L.tilt * Math.PI) / 180); c.translate(-size / 2, -size / 2);
+  const fx = (x) => (L.flip ? 1 - x : x);
+  c.save();
+  if (L.flip) { c.translate(size, 0); c.scale(-1, 1); }
+  c.drawImage(tinted, m, m, s, s);
+  // 원래 얼굴을 몸 색으로 덮고 새 표정
+  const [x1, y1] = P.eL, [x2, y2] = P.eR, cx = m + ((x1 + x2) / 2) * s, cy = m + ((y1 + y2) / 2) * s;
+  const ang = Math.atan2((y2 - y1) * s, (x2 - x1) * s), u = Math.hypot((x2 - x1) * s, (y2 - y1) * s);
+  c.save(); c.translate(cx, cy); c.rotate(ang);
+  c.fillStyle = L.body; c.beginPath(); c.ellipse(0, u * 0.12, u * 0.9, u * (0.3 + P.mouth * 2.2), 0, 0, Math.PI * 2); c.fill();
+  lumiFace(c, L.face, u, L.line, L.flip);
+  c.restore(); c.restore();
+  // 든 물건 (뒤집지 않고 손 자리에)
+  const [hx, hy] = P.hand, ps = s * 0.34;
+  pimgs.forEach((im, i) => c.drawImage(im, m + fx(hx) * s - ps / 2 + (i ? (L.flip ? -1 : 1) * ps * 0.45 : 0), m + hy * s - ps / 2 + (i ? ps * 0.3 : 0), i ? ps * 0.8 : ps, i ? ps * 0.8 : ps));
+  return cv;
+}
 // 360×640 크기로 그리고 3배로 키워 1080×1920 그림을 만든다
 async function drawMoneyCard(D) {
   const W = 360, H = 640, K = 3, cv = document.createElement("canvas");
@@ -3700,8 +3840,9 @@ async function drawMoneyCard(D) {
   // 웹 글꼴은 글자 묶음별로 나뉘어 있어서, 카드에 쓸 한글을 넘겨야 그 글자 묶음까지 받아진다
   const glyphs = [D.name, D.desc, D.code, "월의 나는 나만의 경제 이번 달 지난달 같은 기간보다 더 덜 똑같아요 남긴 돈 번 돈보다 썼어요 어디에 그 밖 기록이 필요해요 진심이었네 알뜰하게 지냈어 신나게 썼네 다음 엔 한 번만 참아볼까 조금만 아껴볼까 이대로만 가자 0123456789%×!?·", PEER_SPEND.label, ...D.items.slice(0, 2).map((i) => i.label), ...D.cats.slice(0, 4).map((x) => x.cat)].join("");
   try { await Promise.all([document.fonts.load("700 20px 'Pretendard Variable'", glyphs), document.fonts.load("14px 'Pretendard Variable'", glyphs)]); } catch {}
-  const keys = [...new Set([...D.items.slice(0, 6).map((i) => i.key), "coin", "bag", "house", "shades", "note", "bolt", "heart", "dots"])];
-  const [lumi, ...imgs] = await Promise.all([mcLoad("/img/lumi/main.png"), ...keys.map((k) => mcLoad(mcSvgSrc(k)))]);
+  const keys = [...new Set(D.items.slice(0, 6).map((i) => i.key))];
+  const [lumi, ...imgs] = await Promise.all([drawLumiLook(D.code, 630, D.items[0]?.key), ...keys.map((k) => mcLoad(mcSvgSrc(k)))]);
+  const LOOK = LUMI_LOOKS[D.code];
   const I = Object.fromEntries(keys.map((k, i) => [k, imgs[i]]));
   const BLUE = "#2F6FDA", RED = "#D6453D", INK = "#2B2F36", SUB = "#5C6270", MUTE = "#8F95A1", GRAY = "#F3F4F6";
   const S = D.code[0] === "S", bold = (px) => `700 ${px}px 'Pretendard Variable', Pretendard, sans-serif`, pre = (px, w = 400) => `${w} ${px}px 'Pretendard Variable', Pretendard, sans-serif`;
@@ -3709,25 +3850,19 @@ async function drawMoneyCard(D) {
   c.fillStyle = "#fff"; c.fillRect(0, 0, W, H);
   text(`${D.month}월의 나는`, 24, 44, pre(14), SUB);
   text("나만의 경제", W - 24, 44, bold(13), MUTE, "right");
-  text(D.code, 24, 74, bold(16), S ? BLUE : RED);
+  text(D.code, 24, 74, bold(16), LOOK.line);
   c.font = bold(16); const cw = c.measureText(D.code).width;
   text(D.desc, 24 + cw + 8, 74, pre(13), MUTE);
   text(D.name, 24, 112, bold(34), INK);
   // 그림 상자: 산 것들 + 루미
   const bx = 24, by = 128, bw = 312, bh = 276;
-  mcRound(c, bx, by, bw, bh, 20, S ? "#EEF4FD" : "#FDF1EF");
+  mcRound(c, bx, by, bw, bh, 20, LOOK.bg);
   c.save(); c.beginPath(); c.roundRect(bx, by, bw, bh, 20); c.clip();
   const slots = [[14, 12, 44], [62, 6, 34], [200, 8, 40], [250, 30, 34], [8, 70, 38], [262, 80, 36], [10, 126, 32], [268, 128, 30], [16, 172, 44], [62, 214, 30], [222, 196, 34], [150, 4, 30], [104, 220, 28], [272, 168, 28]];
   const total = D.items.reduce((a, i) => a + i.n, 0), drawList = [];
   D.items.slice(0, 6).forEach((it) => { const k = Math.max(1, Math.round((it.n / total) * slots.length)); for (let j = 0; j < k; j++) drawList.push(it.key); });
   slots.forEach(([x, y, s], i) => { const k = drawList[i]; if (k) c.drawImage(I[k], bx + x, by + y, s, s); });
-  const lx = bx + 71, ly = by + 46, ls = 170;
-  c.drawImage(lumi, lx, ly, ls, ls);
-  const A = (k, x, y, s) => c.drawImage(I[k], lx + x * ls, ly + y * ls, s * ls, s * ls);
-  if (S) A("coin", -0.08, 0.62, 0.24); else { A("bag", 0.72, 0.62, 0.26); A("bag", 0.86, 0.72, 0.22); }
-  if (D.code[1] === "H") A("house", -0.1, 0.02, 0.22); else A("shades", 0.22, 0.32, 0.44);
-  if (D.code[2] === "P") A("note", 0.76, 0.02, 0.2); else A("bolt", 0.76, -0.02, 0.22);
-  if (D.code[3] === "F") A("heart", -0.12, 0.34, 0.18); else A("dots", -0.14, 0.32, 0.2);
+  c.drawImage(lumi, bx + (bw - 220) / 2, by + 22, 220, 220);   // 유형별 루미 (자세·색·표정·물건)
   c.restore();
   // 많이 산 것 두 가지: 횟수만
   c.font = bold(13); let tx0 = bx + 12;
@@ -3740,7 +3875,7 @@ async function drawMoneyCard(D) {
   const top = D.items[0];
   const l1 = top && top.n >= 3 ? `이번 달 ${top.label}에 진심이었네!` : S ? "이번 달 알뜰하게 지냈어!" : "이번 달 신나게 썼네!";
   const l2 = S ? "이대로만 가자!" : top && top.n >= 3 ? `다음 달엔 ${top.label} 한 번만 참아볼까?` : "다음 달엔 조금만 아껴볼까?";
-  c.drawImage(lumi, 22, 420, 40, 40);
+  c.drawImage(lumi, 16, 412, 52, 52);
   text(l1, 70, 437, bold(17), INK); text(l2, 70, 458, bold(14), MUTE);
   // 지난달 · 1인 가구 평균과 비교 (%만)
   const tile = (x, label, v) => {
