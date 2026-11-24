@@ -61,7 +61,7 @@ export default async function handler(req, res) {
       return res.status(200).json({ available: true, ...out });
     } catch (e) {
       console.error(e);
-      return res.status(502).json({ error: "풀이를 만들지 못했어요. 잠시 후 다시 시도해 주세요" });
+      return res.status(502).json({ error: "풀이를 만들지 못했어요. 잠시 후 다시 시도해 주세요", why: String(e.message).slice(0, 300) });
     }
   }
 
@@ -88,6 +88,7 @@ export default async function handler(req, res) {
     res.status(200).json({ available: true, mood: out.mood, points, count: pool.length, at: new Date().toISOString(), ai: out.ai });
   } catch (e) {
     console.error(e);
-    res.status(200).json({ available: true, mood: "", points: [], error: "풀이를 만들지 못했어요" });
+    // why: 화면에는 안 보임, 원인 확인용(키는 들어가지 않음)
+    res.status(200).json({ available: true, mood: "", points: [], error: "풀이를 만들지 못했어요", why: String(e.message).slice(0, 300) });
   }
 }

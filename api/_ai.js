@@ -70,11 +70,20 @@ export function aiReady() { return !!(process.env.GEMINI_API_KEY || process.env.
 export async function generate({ system, text, images = [], schema, schemaName, maxTokens = 800, geminiOnly = false }) {
   const req = { system, text, images, schema, schemaName, maxTokens };
   if (process.env.GEMINI_API_KEY) {
-    try { return { text: await gemini(req), ai: "gemini" }; }
-    catch (e) { console.error("gemini 실패 → openai:", e.message); var why = String(e.message).slice(0, 300); }
+    // 무료 등급은 사람이 몰리면 503(바빠요)·429를 자주 낸다 → 잠깐 쉬었다가 두 번까지 다시
+    for (let n = 0; n < 3; n++) {
+      try { return { text: await gemini(req), ai: "gemini" }; }
+      catch (e) {
+        var why = String(e.message).slice(0, 300);
+        console.error(`gemini 실패(${n + 1}번째):`, e.message);
+        if (!/gemini (503|429|500)|UNAVAILABLE|high demand|overloaded/i.test(e.message)) break;
+        if (n < 2) await new Promise((r) => setTimeout(r, 1500 * (n + 1)));
+      }
+    }
   }
   if (geminiOnly) throw new Error(why ? `gemini only: ${why}` : "GEMINI_API_KEY가 없어요");
   if (!process.env.OPENAI_API_KEY) throw new Error("AI 키가 없어요");
   // ai: 화면에는 안 보임. Gemini가 실패했으면 이유(오류 코드·메시지, 키는 없음)를 붙여 확인할 수 있게
-  return { text: await openai(req), ai: why ? `openai (${why})` : "openai" };
+  try { return { text: await openai(req), ai: why ? `openai (${why})` : "openai" }; }
+  catch (e) { throw new Error(`gemini: ${why || "없음"} / openai: ${String(e.message).slice(0, 200)}`); } // 둘 다 왜 실패했는지 함께
 }
