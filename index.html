@@ -3749,12 +3749,30 @@ Object.assign(MC_SVG, {
   popper: `<path d="M4 37L14 13L27 26Z" fill="#FFD36B" stroke="${NV}" stroke-width="2.4"/><path d="M9 25L17 31M12 18L22 26" stroke="#E5533D" stroke-width="2"/><circle cx="25" cy="8" r="2.4" fill="#F28AA6"/><circle cx="33" cy="14" r="2.4" fill="#7FA6E6"/><path d="M30 4L32 8M36 20L38 22M20 4L21 1" stroke="#7CC47F" stroke-width="2.4"/>`,
 });
 const lumiPoseCache = {};
-// 루미 그림은 몸 안쪽만 불투명하고 바깥은 투명하다. 한 번 불러 canvas로 둔다
+// 루미 그림을 한 번 불러 canvas로 둔다. 원본에는 선 바깥에 흰 네모 자국이 있어서,
+// 흰 칸마다 8방향을 보고 6방향 이상이 선에 막혀 있을 때만 몸 안쪽으로 남긴다 (나머지 흰 칸은 지움)
 async function lumiPose(name) {
   if (lumiPoseCache[name]) return lumiPoseCache[name];
   const img = await mcLoad(`/img/lumi/${LUMI_POSES[name].src}.png`), cv = document.createElement("canvas");
-  cv.width = img.naturalWidth; cv.height = img.naturalHeight;
-  cv.getContext("2d").drawImage(img, 0, 0);
+  const w = img.naturalWidth, h = img.naturalHeight;
+  cv.width = w; cv.height = h;
+  const c = cv.getContext("2d"); c.drawImage(img, 0, 0);
+  const d = c.getImageData(0, 0, w, h), p = d.data, n = w * h;
+  const kind = new Int8Array(n);   // 0 투명 · 1 선(색 있는 칸) · 2 흰 칸
+  for (let i = 0; i < n; i++) kind[i] = p[i * 4 + 3] < 128 ? 0 : Math.min(p[i * 4], p[i * 4 + 1], p[i * 4 + 2]) > 205 ? 2 : 1;
+  const hits = new Uint8Array(n), st = new Int8Array(n);
+  for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, -1], [1, -1], [-1, 1]]) {
+    const ys = dy >= 0 ? [0, h, 1] : [h - 1, -1, -1], xs = dx >= 0 ? [0, w, 1] : [w - 1, -1, -1];
+    for (let y = ys[0]; y !== ys[1]; y += ys[2]) for (let x = xs[0]; x !== xs[1]; x += xs[2]) {
+      const px = x - dx, py = y - dy, i = y * w + x;
+      if (px < 0 || py < 0 || px >= w || py >= h) { st[i] = 0; continue; }
+      const j = py * w + px;
+      st[i] = kind[j] === 1 ? 1 : kind[j] === 0 ? 0 : st[j];   // 이 방향으로 가장 가까운 것이 선이면 1
+      if (kind[i] === 2 && st[i]) hits[i]++;
+    }
+  }
+  for (let i = 0; i < n; i++) if (kind[i] === 2 && hits[i] < 6) p[i * 4 + 3] = 0;
+  c.putImageData(d, 0, 0);
   return (lumiPoseCache[name] = cv);
 }
 const hexRgb = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
@@ -3767,6 +3785,7 @@ function lumiTint(src, body, line) {
   for (let i = 0; i < p.length; i += 4) {
     if (!p[i + 3]) continue;
     const mx = Math.max(p[i], p[i + 1], p[i + 2]), mn = Math.min(p[i], p[i + 1], p[i + 2]);
+    if (mn > 205 && p[i + 3] < 224) { p[i + 3] = 0; continue; }   // 원본 그림의 반투명 흰 네모 자국은 지운다
     const t = Math.min(Math.max(((mx + mn) / 510 - 0.3) / 0.55, 0), 1);
     for (let k = 0; k < 3; k++) p[i + k] = Math.round(L[k] + (B[k] - L[k]) * t);
   }
