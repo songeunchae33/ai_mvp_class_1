@@ -24,11 +24,12 @@ const qCache = new Map();
 async function searchInterest(q, display) {
   const key = `${q}|${display}`, hit = qCache.get(key);
   if (hit && Date.now() - hit.at < 3 * 3600e3) return hit.items;
-  try {
-    const items = await naver(q, { display, sort: "date" });
-    if (items.length) { qCache.set(key, { at: Date.now(), items }); if (qCache.size > 300) qCache.delete(qCache.keys().next().value); }
-    return items.length ? items : hit?.items || [];
-  } catch (e) { console.error("interest", q, e.message); return hit?.items || []; }
+  let items = [];
+  try { items = await naver(q, { display, sort: "date" }); } catch (e) { console.error("interest naver", q, e.message); }
+  // 네이버가 막혔거나(하루 한도·429) 못 찾으면 NewsData에서 같은 낱말로 (기억해 둔 게 있으면 그걸 먼저)
+  if (!items.length && !hit) items = await newsdata(q).catch((e) => { console.error("interest newsdata", q, e.message); return []; });
+  if (items.length) { qCache.set(key, { at: Date.now(), items }); if (qCache.size > 300) qCache.delete(qCache.keys().next().value); }
+  return items.length ? items : hit?.items || [];
 }
 
 export default async function handler(req, res) {

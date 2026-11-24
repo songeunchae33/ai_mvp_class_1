@@ -198,9 +198,10 @@ export async function gdelt(max = 10) {
 }
 
 // ── 국내 뉴스 보조: NewsData.io (NEWSDATA_KEY가 있을 때만) ──
-export async function newsdata() {
+// q를 주면 그 낱말로 찾는다(나를 위한 뉴스: 네이버가 막혔을 때 대신). 없으면 국내 경제 최신 뉴스
+export async function newsdata(q) {
   if (!process.env.NEWSDATA_KEY) return [];
-  const j = await fetchJson(`https://newsdata.io/api/1/latest?apikey=${encodeURIComponent(process.env.NEWSDATA_KEY)}&country=kr&language=ko&category=business`, {}, 8000);
+  const j = await fetchJson(`https://newsdata.io/api/1/latest?apikey=${encodeURIComponent(process.env.NEWSDATA_KEY)}&country=kr&language=ko${q ? `&q=${encodeURIComponent(q)}` : "&category=business"}`, {}, 8000);
   return (j.results || []).filter((a) => a.title && a.link).map((a) => ({ title: clean(a.title), url: a.link, source: source(a.link) || a.source_name || a.source_id || "", at: new Date(a.pubDate ? a.pubDate.replace(" ", "T") + "Z" : Date.now()).toISOString() }));
 }
 
