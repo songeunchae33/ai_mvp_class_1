@@ -3,12 +3,14 @@
 // GET /api/market?stocks=삼성전자,카카오   → 홈 화면 데이터
 // GET /api/market?search=삼성              → 종목 이름 검색 (관심 종목 추가용)
 // GET /api/market?game=1&extra=종목,종목   → 모의투자 '실제 시장' (대표 종목 12개 + 산 종목의 이번 시즌 시가·종가, 실제 코스피)
+// 미국 주식(MASSIVE_KEY + Firestore가 있을 때): 종목 id는 "US:티커", 값은 원화(그날 종가 × 유럽중앙은행 기준 환율). api/_us.js
 // GET /api/market?game=hints              → 모의투자 힌트 (시장 소식 + 보도자료, 제미나이 검수)
 // 키가 없거나 호출이 실패하면 예시 데이터를 sample:true 로 돌려준다.
 import { kstYmd, fetchJson, num, dataGoItems, dataGoKey, cache } from "./_util.js";
 import { pressReleases, isEcon } from "./_policy.js";
 import { generate } from "./_ai.js";
 import crypto from "node:crypto";
+import { US_PREFIX, US_CORE, US_INDEX, usReady, usName, usFill, usSeries, usSearch } from "./_us.js";
 
 const BASE = "https://apis.data.go.kr/1160100"; // 금융위원회 시세 API (V2 주소)
 
@@ -171,10 +173,12 @@ function sampleDaily(seed, from, base) {
   return out;
 }
 
-async function realMarket(extra) {
+async function realMarket(extraAll) {
   const today = kstYmd(0), season = `${today.slice(0, 4)}-${today.slice(4, 6)}`;
   const start = `${today.slice(0, 6)}01`, from = ymdAdd(start, -10); // 전날 대비를 알 수 있게 시즌 전 며칠도 받는다
   const sample = !process.env.DATA_GO_KR_KEY;
+  const extra = extraAll.filter((n) => !n.startsWith(US_PREFIX)), usExtra = extraAll.filter((n) => n.startsWith(US_PREFIX)).map((n) => n.slice(US_PREFIX.length));
+  const usP = usMarket(usExtra, from, start).catch((e) => { console.error("us", e.message); return null; });
   const names = [...UNIVERSE.map(([n]) => n), ...extra.filter((n) => !UNIVERSE.some(([u]) => u === n))];
   const series = {}, meta = {};
   let K = [];
@@ -190,10 +194,27 @@ async function realMarket(extra) {
   let index = K.filter((x) => x[0] >= start);
   if (!index.length) index = K.slice(-1);
   const sectorOf = Object.fromEntries(UNIVERSE.map(([n, s]) => [n, SECTORS[s].name]));
+  const companies = names.filter((n) => series[n]).map((n) => ({ id: n, name: n, sector: sectorOf[n] || meta[n]?.market || "", code: meta[n]?.code || "", core: !!sectorOf[n] }));
+  const U = await usP;
+  if (U) { Object.assign(series, U.series); companies.push(...U.companies); }
   return {
-    season, today, sample, index, series, indexName: "코스피", indexDate: K[K.length - 1]?.[0] || null,
-    companies: names.filter((n) => series[n]).map((n) => ({ id: n, name: n, sector: sectorOf[n] || meta[n]?.market || "", code: meta[n]?.code || "", core: !!sectorOf[n] })),
+    season, today, sample, index, series, indexName: "코스피", indexDate: K[K.length - 1]?.[0] || null, companies,
+    us: U ? { ready: true, usd: U.usd, fx: U.fx, index: U.index, indexName: "S&P 500(SPY)", indexDate: U.indexDate } : { ready: false },
   };
+}
+// 미국: 빠진 날을 조금 채우고(1분에 5번 한도), 대표 12종목 + 산 종목 + SPY의 원화 시리즈
+async function usMarket(usExtra, from, start) {
+  if (!usReady() || !adminReady()) return null;
+  await usFill(usFs, from, 2).catch((e) => console.error("us fill", e.message));
+  const tickers = [...US_CORE.map(([t]) => t), US_INDEX, ...usExtra];
+  const R = await usSeries(usFs, tickers, from);
+  const core = new Set(US_CORE.map(([t]) => t)), sector = Object.fromEntries(US_CORE.map(([t, , s]) => [t, s]));
+  const idx = R.series[US_PREFIX + US_INDEX] || [];
+  delete R.series[US_PREFIX + US_INDEX];
+  const companies = Object.keys(R.series).map((id) => { const t = id.slice(US_PREFIX.length); return { id, name: usName(t), ticker: t, us: true, sector: `미국 · ${sector[t] || t}`, code: "", core: core.has(t) }; });
+  let index = idx.filter((r) => r[0] >= start).map((r) => [r[0], r[2]]);
+  if (!index.length && idx.length) index = [[idx[idx.length - 1][0], idx[idx.length - 1][2]]];
+  return { series: R.series, usd: R.usd, fx: R.fx, companies, index, indexDate: idx[idx.length - 1]?.[0] || null };
 }
 
 // ── 모의투자 힌트 (/api/market?game=hints, 모두에게 같은 묶음을 1시간 재사용) ──
@@ -355,6 +376,20 @@ async function fsList(coll) {
   return out.map((d) => ({ id: d.name.split("/").pop(), ...fromFs({ mapValue: { fields: d.fields || {} } }) }));
 }
 const fsSet = (path, data) => fsReq(path, { method: "PATCH", body: JSON.stringify({ fields: toFs(data).mapValue.fields }) });
+// 여러 문서를 한 번에, 정한 칸만 읽는다 → { 경로: 칸들 | null }
+async function fsGetMany(paths, fields) {
+  if (!paths.length) return {};
+  const t = await adminToken(), root = `projects/${process.env.FIREBASE_PROJECT_ID}/databases/(default)/documents`;
+  const r = await fetch(`https://firestore.googleapis.com/v1/${root}:batchGet`, {
+    method: "POST", headers: { Authorization: `Bearer ${t}`, "Content-Type": "application/json" }, signal: AbortSignal.timeout(10000),
+    body: JSON.stringify({ documents: paths.map((p) => `${root}/${p}`), mask: { fieldPaths: fields } }),
+  });
+  if (!r.ok) throw new Error(`firestore batchGet ${r.status}`);
+  const out = Object.fromEntries(paths.map((p) => [p, null]));
+  for (const x of await r.json()) if (x.found) out[x.found.name.slice(root.length + 1)] = fromFs({ mapValue: { fields: x.found.fields || {} } });
+  return out;
+}
+const usFs = { get: fsGetMany, set: fsSet };
 const fsDel = (path) => fsReq(path, { method: "DELETE" });
 const kstDay = (at) => new Date(at + 9 * 3600e3).toISOString().slice(0, 10).replace(/-/g, "");
 
@@ -370,8 +405,12 @@ async function settle(force) {
     try { logs[p.id] = JSON.parse(p.log || "[]"); } catch { logs[p.id] = []; }
     for (const t of logs[p.id]) if (t?.kind === "stock") names.add(String(t.id));
   }
-  const S = {};
-  await Promise.all([...names].slice(0, 80).map((n) => stockDaily(n, ymdAdd(`${today.slice(0, 6)}01`, -10)).then((v) => (S[n] = v.rows)).catch(() => {})));
+  const S = {}, from = ymdAdd(`${today.slice(0, 6)}01`, -10);
+  const kr = [...names].filter((n) => !n.startsWith(US_PREFIX)), us = [...names].filter((n) => n.startsWith(US_PREFIX)).map((n) => n.slice(US_PREFIX.length));
+  await Promise.all([
+    ...kr.slice(0, 80).map((n) => stockDaily(n, from).then((v) => (S[n] = v.rows)).catch(() => {})),
+    us.length && usReady() ? usSeries(usFs, us.slice(0, 80), from).then((R) => Object.assign(S, R.series)).catch((e) => console.error("settle us", e.message)) : null,
+  ]);
   const now = Date.now(), YEAR = 365 * 86400e3;
   for (const p of players) {
     let cash = 10000000, bad = 0;
@@ -379,7 +418,8 @@ async function settle(force) {
     for (const t of (logs[p.id] || []).filter((x) => x && x.at <= now + 60e3).sort((a, b) => a.at - b.at)) {
       if (t.kind === "stock") {
         const rows = S[t.id], d = kstDay(t.at);
-        const fair = rows && Number.isInteger(t.qty) && t.qty > 0 && rows.filter((r) => r[0] <= d).slice(-2).some((r) => r[2] === t.price);
+        // 미국 종목은 날짜가 뉴욕 기준이고 종가가 하루 늦게 모일 수 있어서 마지막 3일 안에서 찾는다
+        const fair = rows && Number.isInteger(t.qty) && t.qty > 0 && rows.filter((r) => r[0] <= d).slice(String(t.id).startsWith(US_PREFIX) ? -3 : -2).some((r) => r[2] === t.price);
         if (!fair) { bad++; continue; }
         if (t.side === "buy") { if (t.qty * t.price > cash + 1) { bad++; continue; } cash -= t.qty * t.price; qty[t.id] = (qty[t.id] || 0) + t.qty; }
         else { if ((qty[t.id] || 0) < t.qty) { bad++; continue; } cash += t.qty * t.price; qty[t.id] -= t.qty; }
@@ -448,6 +488,7 @@ export default async function handler(req, res) {
     if (process.env.CRON_SECRET && req.headers.authorization !== `Bearer ${process.env.CRON_SECRET}`) return res.status(401).json({ error: "no" });
     const out = {};
     if (adminReady()) {
+      if (usReady()) { try { out.us = await usFill(usFs, ymdAdd(`${kstYmd(0).slice(0, 6)}01`, -10), 4); } catch (e) { out.us = { error: e.message.slice(0, 80) }; } }
       try { out.settle = await settle(true); } catch (e) { out.settle = { error: e.message.slice(0, 80) }; }
       if (process.env.VAPID_PUBLIC && process.env.VAPID_PRIVATE) { try { out.push = await pushAll(); } catch (e) { out.push = { error: e.message.slice(0, 80) }; } }
     }
@@ -480,7 +521,7 @@ export default async function handler(req, res) {
   }
   if (req.query.game !== undefined) {
     try {
-      const extra = String(req.query.extra || "").split(",").map((x) => x.trim()).filter(Boolean).slice(0, 10);
+      const extra = String(req.query.extra || "").split(",").map((x) => x.trim()).filter(Boolean).slice(0, 14);
       const out = await realMarket(extra);
       cache(res, out.sample ? 120 : 600); // 새 종가가 올라오면 10분 안에 보이게
       return res.status(200).json(out);
@@ -493,10 +534,11 @@ export default async function handler(req, res) {
   if (req.query.search !== undefined) {
     const q = String(req.query.search).trim().slice(0, 20);
     if (!q) return res.status(200).json({ results: [] });
-    if (!hasData) return res.status(200).json({ results: [], sample: true });
+    if (!hasData && !usReady()) return res.status(200).json({ results: [], sample: true });
     try {
       cache(res, 3600);
-      return res.status(200).json({ results: await search(q) });
+      const [kr, us] = await Promise.all([hasData ? search(q).catch(() => []) : [], req.query.kr ? [] : usSearch(q).catch(() => [])]);
+      return res.status(200).json({ results: [...kr, ...us] });
     } catch (e) {
       console.error(e);
       return res.status(200).json({ results: [], error: "검색에 실패했어요" });
