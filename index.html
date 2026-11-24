@@ -228,6 +228,9 @@
   .nl .t1.swipe { text-overflow: clip; overflow-x: auto; scrollbar-width: none; touch-action: pan-x pan-y; padding-right: 14px;
     -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 18px), transparent); mask-image: linear-gradient(90deg, #000 calc(100% - 18px), transparent); }
   .nl .t1.swipe::-webkit-scrollbar { display: none; }
+  .nl-head { display: flex; align-items: center; gap: 6px; margin-top: 10px; min-height: 32px; font-size: 14px; }
+  .nl-head .hint { flex: 1; min-width: 0; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .nl-head .link-btn { margin-left: auto; flex-shrink: 0; font-size: 13px; }
   .plus { min-width: 44px; min-height: 36px; border-radius: 12px; border: 1px solid var(--line); background: var(--soft); font-size: 13px; font-weight: 700; cursor: pointer; padding: 0 10px; }
   .tabs { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; padding: 2px 0 6px; }
   .tabs::-webkit-scrollbar { display: none; }
@@ -1737,17 +1740,20 @@ function sameTopic(a, b) {
   const A = topicWords(a.title), B = topicWords(b.title);
   return A.some((x) => B.some((y) => x === y || (x.length >= 2 && y.length >= 2 && (x.startsWith(y) || y.startsWith(x)))));
 }
+// 홈 뉴스: 위 칸 '나를 위한 뉴스' 2줄(관심사가 다르게), 아래 칸 '오늘의 이슈' 2줄(이슈 1 + 해외 1). 네 줄 모두 화제가 겹치지 않게
 function homeNewsPick(n) {
-  const lanes = [(n.issues || []).map((it) => ({ ...it, tag: "이슈" })), n.forYou || [], (n.global || []).map((it) => ({ ...it, tag: "해외" }))];
   const picked = [];
   const ok = (it) => !picked.some((p) => p.url === it.url || sameTopic(p, it));
-  // 이슈·나를 위한·해외에서 한 줄씩, 그 칸에 다른 화제가 없으면 다른 칸에서 다른 화제로, 그래도 없으면 남은 것으로
-  for (const lane of lanes) {
-    const it = lane.find(ok) || lanes.flat().find(ok);
-    if (it) picked.push(it);
-  }
-  for (const it of lanes.flat()) if (picked.length < 3 && !picked.some((p) => p.url === it.url)) picked.push(it);
-  return picked.slice(0, 3);
+  const take = (it) => { if (it) picked.push(it); return it; };
+  const fy = n.forYou || [];
+  const mine = [];
+  for (const it of fy) if (mine.length < 2 && !mine.some((m) => m.tag === it.tag) && ok(it)) mine.push(take(it)); // 관심사마다 하나씩
+  for (const it of fy) if (mine.length < 2 && !mine.includes(it) && ok(it)) mine.push(take(it)); // 관심사가 하나뿐이면 같은 관심사에서 하나 더
+  const issues = (n.issues || []).map((it) => ({ ...it, tag: "이슈" })), global = (n.global || []).map((it) => ({ ...it, tag: "해외" }));
+  const rest = [];
+  for (const lane of [issues, global]) { const it = lane.find(ok) || [...issues, ...global].find(ok); if (it) rest.push(take(it)); }
+  for (const it of [...issues, ...global]) if (rest.length < 2 && !picked.some((p) => p.url === it.url)) rest.push(take(it));
+  return { mine, rest };
 }
 // swipe: 홈 뉴스는 제목을 자르지 않고 한 줄에 다 넣어, 옆으로 밀면 끝까지 보인다
 function newsLine(it, swipe) {
@@ -2301,12 +2307,17 @@ function homeBlocks() {
   // 뉴스: 진짜 중요한 것 두 줄 (오늘의 이슈 1 + 나를 위한 1) + 키워드·뉴스레터 한 줄
   const n = data.news;
   const letters = [...LETTERS.filter((l) => profile.letters.includes(l.id)), ...profile.customLetters];
-  const top = n ? homeNewsPick(n) : [];
+  const pick = n ? homeNewsPick(n) : { mine: [], rest: [] };
+  const myTags = [...new Set([...profile.watch.map((w) => w.name).slice(0, 3), ...profile.prefs.slice(0, 3)])];
   const kws = n?.keywords || [];
   const newsBlock = `<section class="card" id="h-news">
       <div class="sec-title"><h2>뉴스</h2><div style="display:flex;gap:6px;align-items:center">${n?.sample ? `<span class="badge b-sample">예시</span>` : ""}<button class="plus" data-act="news-more">+ 더보기</button></div></div>
       <button class="brief-line" data-act="news-brief">${mascot(22)}<span class="bl-t"><b>쉽게 풀이</b> ${briefReady() ? esc(data.brief.mood) : "오늘 경제 정책을 쉬운 말로 풀어드려요"}</span><span aria-hidden="true">›</span></button>
-      <div class="nl">${n ? top.map((it) => newsLine(it, true)).join("") : `<p class="hint">불러오는 중…</p>`}</div>
+      <div class="nl-head"><b>나를 위한 뉴스</b>${myTags.length ? `<span class="hint">${esc(myTags.join(" · "))}</span><button class="link-btn" data-act="news-foryou">더보기 ›</button>` : ""}</div>
+      <div class="nl">${!myTags.length ? `<button class="link-btn" data-act="go-my" data-focus="watch" style="padding-left:0">관심 종목이나 관심사를 고르면 맞춤 뉴스를 보여드려요 ›</button>`
+        : n ? pick.mine.map((it) => newsLine(it, true)).join("") || `<p class="hint">지금은 관심사 뉴스를 찾지 못했어요.</p>` : `<p class="hint">불러오는 중…</p>`}</div>
+      <div class="nl-head"><b>오늘의 이슈</b></div>
+      <div class="nl">${n ? pick.rest.map((it) => newsLine(it, true)).join("") : `<p class="hint">불러오는 중…</p>`}</div>
       ${kws.length || letters.length ? `<div class="strip" style="gap:6px;margin-top:8px;align-items:center">
         ${kws.map((k) => `<button class="chip small" style="flex-shrink:0" data-act="kw" data-k="${esc(k)}">#${esc(k)}</button>`).join("")}
         ${letters.length ? `<span aria-hidden="true" style="flex-shrink:0;width:1px;height:20px;background:var(--line)"></span>` : ""}
@@ -2456,7 +2467,7 @@ function viewNews() {
   const tags = [...new Set((f?.forYou || []).map((x) => x.tag))];
   const kws = data.news?.keywords || [];
   const kwTabs = [...new Set([...kws, ...(N.tab.startsWith("kw:") ? [N.tab.slice(3)] : [])])];
-  const tabs = [["brief", "쉽게 풀이"], ["issues", "오늘의 이슈"], ["foryou", "나를 위한 뉴스"], ["global", "해외 뉴스"], ...tags.map((t) => ["tag:" + t, t]), ...kwTabs.map((k) => ["kw:" + k, "#" + k])];
+  const tabs = [["brief", "쉽게 풀이"], ["foryou", "나를 위한 뉴스"], ["issues", "오늘의 이슈"], ["global", "해외 뉴스"], ...tags.map((t) => ["tag:" + t, t]), ...kwTabs.map((k) => ["kw:" + k, "#" + k])];
   let items = null;
   if (N.tab.startsWith("kw:")) items = N.kwItems[N.tab.slice(3)];
   else if (f) items = N.tab === "issues" ? f.issues : N.tab === "foryou" ? f.forYou : N.tab === "global" ? f.global || [] : (f.forYou || []).filter((x) => "tag:" + x.tag === N.tab);
@@ -6153,6 +6164,7 @@ document.addEventListener("click", async (e) => {
     case "ask": askAi(el.dataset.q); break;
     case "news-more": openNews("brief"); break; // 더보기를 누르면 쉽게 풀이부터
     case "news-brief": openNews("brief"); break;
+    case "news-foryou": openNews("foryou"); break;
     case "letter-brief": {
       const text = (document.getElementById("letter-text")?.value || "").trim();
       if (text.length < 50) { ui.letter = { text, loading: false, result: null, error: "내용을 조금 더 붙여넣어 주세요 (50자 이상)" }; render(); break; }
