@@ -2855,7 +2855,7 @@ function openModal(kind, extra = {}) { ui.modal = { kind, route: routeKey(), ...
 function viewModal() {
   const m = ui.modal;
   if (!m) return "";
-  const body = { "tx-edit": modalTxEdit, "tx-add": modalTxAdd, fixed: modalFixed, consent: modalConsent, catDetail: modalCatDetail, quick: modalQuick, concept: modalConcept, badges: modalBadges, notes: modalNotes, budget: modalBudget, assets: modalAssets, goal: modalGoal, quiz: modalQuiz, ad: modalAd, "inv-hints": modalInvHints, "inv-trade": modalInvTrade, "inv-eval": modalInvEval }[m.kind]?.(m);
+  const body = { "tx-edit": modalTxEdit, "tx-add": modalTxAdd, fixed: modalFixed, consent: modalConsent, catDetail: modalCatDetail, quick: modalQuick, concept: modalConcept, badges: modalBadges, notes: modalNotes, budget: modalBudget, assets: modalAssets, goal: modalGoal, quiz: modalQuiz, ad: modalAd, "inv-hints": modalInvHints, "inv-trade": modalInvTrade, "inv-eval": modalInvEval, mcard: modalMoneyCard }[m.kind]?.(m);
   if (!body) { ui.modal = null; return ""; }
   return `<div class="modal-back"><div class="modal form" role="dialog" aria-modal="true">${body}</div></div>`;
 }
@@ -3506,11 +3506,7 @@ function intelHtml() {
       ${unusual}
     </section>
     ${insight}
-    <section class="card">
-      <div class="sec-title"><h2>가계부 내보내기</h2><span>CSV</span></div>
-      <p class="hint" style="margin:0 0 10px">거래 기록을 이 기기에 CSV 파일로 저장해요. 엑셀이나 분석 도구에서 열 수 있어요.</p>
-      <button class="btn ghost" data-act="ledger-export" style="width:100%">가계부 CSV로 내보내기</button>
-    </section>`;
+    ${moneyCardSection()}`;
 }
 // AI에 보낼 숫자 묶음 (집계값만. 가게 이름·개별 거래 없음). 서버(api/receipts.js cleanFacts)가 한 번 더 거른다
 function insightFacts({ M, F, P, CF, R, U, asOf }) {
@@ -3576,6 +3572,232 @@ function exportLedgerCsv() {
   toast("가계부를 CSV로 저장했어요");
 }
 
+// ───────── 한 달 돈 정리 카드 (인스타 스토리 9:16 그림) ─────────
+// 금액은 넣지 않고 %와 횟수만 담는다. 그림은 이 기기에서 canvas로 그리고 어디에도 보내지 않는다.
+// 1인 가구 평균 소비지출: 국가데이터처 「2025 통계로 보는 1인가구」(2024년, 월평균 168만 9천 원). 해마다 새 발표로 바꾼다
+const PEER_SPEND = { amount: 1689000, label: "1인 가구 평균", src: "1인 가구 평균: 국가데이터처 2025 통계로 보는 1인가구" };
+// 소비 유형 16가지: S 모으기/Y 쓰기 · H 집/O 밖 · P 계획/I 즉흥 · F 한우물/V 골고루
+const MC_TYPES = {
+  SHPF: ["집밥 장인", "장보기 한 우물"], SHPV: ["알뜰 살림꾼", "골고루 계획 소비"], SHIF: ["야식 참새", "가끔 배달 한 메뉴"], SHIV: ["쿠폰 사냥꾼", "할인 보면 못 참아"],
+  SOPF: ["가성비 미식가", "맛집도 가성비로"], SOPV: ["짠내 투어러", "계획 짠 외출"], SOIF: ["단골집 지킴이", "번개는 늘 그 집"], SOIV: ["할인 탐험가", "세일 따라 어디든"],
+  YHPF: ["구독 마니아", "좋아하는 건 정기로"], YHPV: ["홈카페 사장님", "집 꾸미기 진심"], YHIF: ["새벽 배달왕", "최애 메뉴 직진"], YHIV: ["장바구니 폭주러", "새벽 쇼핑 결제"],
+  YOPF: ["맛집 순례자", "저장한 맛집 정복"], YOPV: ["주말 플렉서", "주말은 다 쓴다"], YOIF: ["최애 메뉴 직진러", "오늘도 그 메뉴"], YOIV: ["소비팍팍 인싸", "약속이 곧 지출"],
+};
+// 그림 품목: 가게 이름에 낱말이 들어가면 그 그림. 없으면 분류 기본 그림
+const MC_ITEMS = [
+  ["mara", "마라탕", /마라|탕화|라화/], ["coffee", "커피", /커피|카페|스타벅스|메가|컴포즈|이디야|투썸|빽다방|폴바셋|할리스|coffee|cafe/i],
+  ["boba", "버블티", /공차|버블티|팔공티|흑당/], ["chicken", "치킨", /치킨|교촌|bhc|bbq|굽네|처갓집|푸라닭/i], ["tteok", "떡볶이", /떡볶이|엽떡|신전|청년다방|죠스/],
+  ["burger", "버거", /버거|맥도날드|롯데리아|맘스터치|kfc|쉐이크쉑/i], ["pizza", "피자", /피자|도미노|파파존스/], ["sushi", "초밥", /초밥|스시|오마카세/],
+  ["bread", "빵", /베이커리|빵|파리바게뜨|뚜레쥬르|성심당|도넛|던킨|노티드/], ["store", "편의점", /편의점|gs25|cu |씨유|세븐일레븐|이마트24/i],
+  ["delivery", "배달", /배달의민족|배민|요기요|쿠팡이츠|땡겨요/], ["beer", "술", /호프|포차|이자카야|맥주|술집|와인|bar/i],
+  ["taxi", "택시", /택시|카카오t|우티|타다/i], ["clothes", "옷", /무신사|지그재그|에이블리|29cm|유니클로|자라|zara|spao|탑텐|옷/i],
+  ["cosme", "화장품", /올리브영|화장품|이니스프리|아리따움|시코르/], ["book", "책", /교보|yes24|알라딘|서점|문고|밀리/i],
+  ["movie", "영화", /cgv|메가박스|롯데시네마|영화/i], ["game", "게임", /게임|steam|스팀|닌텐도|pc방|피시방/i],
+];
+const MC_CAT_ITEM = { "식비": ["rice", "밥"], "카페·간식": ["coffee", "카페"], "쇼핑": ["bag", "쇼핑"], "교통": ["bus", "교통"], "문화·여가": ["movie", "문화"], "여행": ["plane", "여행"], "구독": ["play", "구독"], "의료·건강": ["pill", "건강"], "교육": ["book", "공부"], "경조사·선물": ["gift", "선물"], "주거·통신": ["house", "집"] };
+const NV = "#0B308D";
+const svgIcon = (body, vb = "0 0 40 40") => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${vb}" stroke-linejoin="round" stroke-linecap="round">${body}</svg>`;
+const MC_SVG = {
+  mara: `<path d="M16 8q-2-3 0-6M22 8q-2-3 0-6" stroke="#B5BCC8" stroke-width="1.6" fill="none"/><path d="M25 3L30 17M29 2L33 16" stroke="#C98E5A" stroke-width="2"/><path d="M4 18H36Q34 35 20 35Q6 35 4 18Z" fill="#fff" stroke="${NV}" stroke-width="2.4"/><ellipse cx="20" cy="18" rx="16" ry="4.5" fill="#E5533D" stroke="${NV}" stroke-width="2.4"/><ellipse cx="14" cy="17.5" rx="2.4" ry="1.2" fill="#FFD36B"/><ellipse cx="24" cy="18.5" rx="2" ry="1" fill="#7CC47F"/>`,
+  coffee: `<path d="M22 9L26 1" stroke="${NV}" stroke-width="2"/><path d="M12 12H28L26 37H14Z" fill="#fff" stroke="${NV}" stroke-width="2.4"/><path d="M13 20H27L26.3 29H13.7Z" fill="#C98E5A"/><rect x="10" y="8" width="20" height="5" rx="2" fill="${NV}"/>`,
+  boba: `<path d="M21 10L24 1" stroke="${NV}" stroke-width="2.4"/><path d="M11 10H29L27 37H13Z" fill="#F3E3D0" stroke="${NV}" stroke-width="2.4"/><circle cx="16" cy="32" r="2" fill="${NV}"/><circle cx="21" cy="33" r="2" fill="${NV}"/><circle cx="25" cy="31" r="2" fill="${NV}"/><path d="M10 10H30" stroke="${NV}" stroke-width="2.4"/>`,
+  chicken: `<path d="M10 30Q4 20 12 12Q22 4 30 14Q34 22 24 28Z" fill="#E8A54B" stroke="${NV}" stroke-width="2.4"/><path d="M22 27L30 35" stroke="${NV}" stroke-width="2.4"/><circle cx="31" cy="36" r="2.6" fill="#fff" stroke="${NV}" stroke-width="2"/>`,
+  tteok: `<path d="M4 20H36Q34 35 20 35Q6 35 4 20Z" fill="#fff" stroke="${NV}" stroke-width="2.4"/><ellipse cx="20" cy="20" rx="16" ry="5" fill="#E5533D" stroke="${NV}" stroke-width="2.4"/><rect x="11" y="13" width="9" height="4" rx="2" fill="#fff" stroke="${NV}" stroke-width="1.6"/><rect x="20" y="15" width="9" height="4" rx="2" fill="#fff" stroke="${NV}" stroke-width="1.6"/>`,
+  burger: `<path d="M7 18Q7 7 20 7Q33 7 33 18Z" fill="#E8A54B" stroke="${NV}" stroke-width="2.4"/><rect x="6" y="20" width="28" height="4" rx="2" fill="#7CC47F"/><rect x="6" y="24" width="28" height="5" rx="2" fill="#8A4B2A"/><path d="M7 30H33Q33 35 28 35H12Q7 35 7 30Z" fill="#E8A54B" stroke="${NV}" stroke-width="2.4"/>`,
+  pizza: `<path d="M6 8Q20 2 34 8L20 37Z" fill="#FFD36B" stroke="${NV}" stroke-width="2.4"/><path d="M6 8Q20 2 34 8" stroke="#E8A54B" stroke-width="4" fill="none"/><circle cx="18" cy="15" r="2.6" fill="#E5533D"/><circle cx="23" cy="22" r="2.4" fill="#E5533D"/>`,
+  sushi: `<rect x="6" y="20" width="28" height="12" rx="6" fill="#fff" stroke="${NV}" stroke-width="2.4"/><path d="M8 20Q20 10 32 20Z" fill="#F28A5B" stroke="${NV}" stroke-width="2.4"/><path d="M14 16L16 20M20 14L21 19M26 16L25 20" stroke="#fff" stroke-width="1.6"/>`,
+  bread: `<path d="M6 22Q6 10 20 10Q34 10 34 22V32H6Z" fill="#E8A54B" stroke="${NV}" stroke-width="2.4"/><path d="M13 16L15 20M20 15V19M27 16L25 20" stroke="${NV}" stroke-width="2"/>`,
+  store: `<path d="M8 34L20 6L32 34Z" fill="#fff" stroke="${NV}" stroke-width="2.4"/><path d="M12 25H28L32 34H8Z" fill="#1D2433"/>`,
+  delivery: `<rect x="6" y="12" width="28" height="22" rx="3" fill="#7FD3C7" stroke="${NV}" stroke-width="2.4"/><path d="M6 19H34" stroke="${NV}" stroke-width="2.4"/><path d="M16 6H24V12H16Z" fill="#fff" stroke="${NV}" stroke-width="2"/>`,
+  beer: `<path d="M9 10H27V35H9Z" fill="#FFD36B" stroke="${NV}" stroke-width="2.4"/><path d="M27 15H32V28H27" fill="none" stroke="${NV}" stroke-width="2.4"/><path d="M8 10Q8 4 14 5Q18 2 22 5Q28 4 28 10Z" fill="#fff" stroke="${NV}" stroke-width="2.4"/>`,
+  taxi: `<path d="M5 24L9 14H31L35 24V31H5Z" fill="#FFD36B" stroke="${NV}" stroke-width="2.4"/><rect x="16" y="8" width="8" height="5" rx="1" fill="${NV}"/><circle cx="12" cy="31" r="3.4" fill="#1D2433"/><circle cx="28" cy="31" r="3.4" fill="#1D2433"/>`,
+  clothes: `<path d="M14 5L6 10L9 17L12 15V35H28V15L31 17L34 10L26 5Q20 10 14 5Z" fill="#F28AA6" stroke="${NV}" stroke-width="2.4"/>`,
+  cosme: `<rect x="13" y="18" width="14" height="18" rx="2" fill="#1D2433" stroke="${NV}" stroke-width="2.4"/><path d="M15 18V9L25 5V18Z" fill="#E5533D" stroke="${NV}" stroke-width="2.4"/>`,
+  book: `<path d="M5 9Q12 6 20 10Q28 6 35 9V33Q28 30 20 34Q12 30 5 33Z" fill="#fff" stroke="${NV}" stroke-width="2.4"/><path d="M20 10V34" stroke="${NV}" stroke-width="2.4"/><path d="M9 15H16M9 20H16M24 15H31" stroke="#2F6FDA" stroke-width="1.8"/>`,
+  movie: `<path d="M9 14H31L28 36H12Z" fill="#fff" stroke="${NV}" stroke-width="2.4"/><path d="M14 14L15 36M20 14V36M26 14L25 36" stroke="#E5533D" stroke-width="2.4"/><circle cx="13" cy="11" r="4" fill="#FFF3C4" stroke="${NV}" stroke-width="2"/><circle cx="20" cy="9" r="4.5" fill="#FFF3C4" stroke="${NV}" stroke-width="2"/><circle cx="27" cy="11" r="4" fill="#FFF3C4" stroke="${NV}" stroke-width="2"/>`,
+  game: `<path d="M8 14H32Q37 14 37 24Q37 32 32 32Q28 32 26 27H14Q12 32 8 32Q3 32 3 24Q3 14 8 14Z" fill="#7FA6E6" stroke="${NV}" stroke-width="2.4"/><path d="M10 20V26M7 23H13" stroke="${NV}" stroke-width="2.4"/><circle cx="28" cy="21" r="2" fill="${NV}"/><circle cx="31" cy="25" r="2" fill="${NV}"/>`,
+  rice: `<path d="M4 19H36Q34 35 20 35Q6 35 4 19Z" fill="#7FA6E6" stroke="${NV}" stroke-width="2.4"/><path d="M7 19Q8 9 20 9Q32 9 33 19Z" fill="#fff" stroke="${NV}" stroke-width="2.4"/>`,
+  bag: `<path d="M14 15Q14 5 20 5Q26 5 26 15" stroke="${NV}" stroke-width="2.4" fill="none"/><path d="M8 14H32L30 37H10Z" fill="#2F6FDA" stroke="${NV}" stroke-width="2.4"/><circle cx="20" cy="24" r="3" fill="#fff"/>`,
+  bus: `<rect x="7" y="5" width="26" height="27" rx="5" fill="#7CC47F" stroke="${NV}" stroke-width="2.4"/><rect x="11" y="9" width="18" height="10" rx="2" fill="#fff" stroke="${NV}" stroke-width="2"/><circle cx="13" cy="26" r="2" fill="#fff"/><circle cx="27" cy="26" r="2" fill="#fff"/><path d="M11 32V36M29 32V36" stroke="${NV}" stroke-width="2.4"/>`,
+  plane: `<path d="M4 22L36 8L30 32L20 25L14 32V22Z" fill="#fff" stroke="${NV}" stroke-width="2.4"/><path d="M14 22L36 8" stroke="#2F6FDA" stroke-width="2"/>`,
+  play: `<rect x="4" y="8" width="32" height="24" rx="6" fill="#E5533D" stroke="${NV}" stroke-width="2.4"/><path d="M17 14L26 20L17 26Z" fill="#fff"/>`,
+  pill: `<rect x="5" y="14" width="30" height="13" rx="6.5" fill="#fff" stroke="${NV}" stroke-width="2.4" transform="rotate(-30 20 20)"/><path d="M20 12V28" stroke="${NV}" stroke-width="2.4" transform="rotate(-30 20 20)"/>`,
+  gift: `<rect x="6" y="15" width="28" height="20" rx="2" fill="#F28AA6" stroke="${NV}" stroke-width="2.4"/><path d="M20 15V35M6 22H34" stroke="#fff" stroke-width="3"/><path d="M20 15Q12 4 10 12Q10 15 20 15Q30 15 30 12Q28 4 20 15Z" fill="#FFD36B" stroke="${NV}" stroke-width="2"/>`,
+  house: `<path d="M5 19L20 6L35 19V35H5Z" fill="#fff" stroke="${NV}" stroke-width="2.4"/><rect x="16" y="23" width="8" height="12" fill="#7FA6E6"/>`,
+  // 루미 소품
+  coin: `<circle cx="20" cy="20" r="15" fill="#FFD36B" stroke="${NV}" stroke-width="3"/><path d="M13 14L16 27L20 18L24 27L27 14M12 20H28" stroke="${NV}" stroke-width="2.4" fill="none"/>`,
+  shades: `<rect x="2" y="13" width="15" height="11" rx="5" fill="#1D2433"/><rect x="23" y="13" width="15" height="11" rx="5" fill="#1D2433"/><path d="M17 17Q20 14 23 17" stroke="#1D2433" stroke-width="2.4" fill="none"/>`,
+  note: `<rect x="8" y="4" width="25" height="32" rx="4" fill="#fff" stroke="${NV}" stroke-width="3"/><path d="M13 13H28M13 20H28M13 27H22" stroke="#2F6FDA" stroke-width="2.6"/>`,
+  bolt: `<path d="M23 2L8 22H19L16 38L33 15H22Z" fill="#FFD36B" stroke="${NV}" stroke-width="2.8"/>`,
+  heart: `<path d="M20 35C6 25 4 17 8 11C12 6 18 8 20 13C22 8 28 6 32 11C36 17 34 25 20 35Z" fill="#F28AA6" stroke="${NV}" stroke-width="3"/>`,
+  dots: `<circle cx="11" cy="27" r="7" fill="#7CC47F" stroke="${NV}" stroke-width="2.6"/><circle cx="26" cy="13" r="7" fill="#7FA6E6" stroke="${NV}" stroke-width="2.6"/><circle cx="29" cy="30" r="5.5" fill="#F28AA6" stroke="${NV}" stroke-width="2.6"/>`,
+};
+function mcItemOf(t) {
+  const name = String(t.merchant || "");
+  const hit = MC_ITEMS.find(([, , re]) => re.test(name));
+  if (hit) return { key: hit[0], label: hit[1] };
+  const c = MC_CAT_ITEM[t.cat];
+  return c ? { key: c[0], label: c[1] } : { key: "bag", label: t.cat || "기타" };
+}
+const HOME_KEYS = new Set(["delivery", "store", "book", "game"]);
+const HOME_CATS = new Set(["주거·통신", "구독"]);
+const OUT_CATS = new Set(["카페·간식", "문화·여가", "여행", "교통"]);
+// per: "last" 지난달 전체 / "cur" 이번 달 1일~오늘. 숫자가 모자라면 null
+function moneyCardData(per) {
+  const tx = ledger.tx, t0 = today0();
+  const asOf = per === "last" ? ymd(new Date(t0.getFullYear(), t0.getMonth(), 0)) : ymd(t0);
+  const M = monthToDate(tx, asOf);
+  const inPer = (t) => t.date >= M.curStart && t.date <= asOf;
+  const spends = tx.filter((t) => inPer(t) && MX.kind(t) === "spend");
+  if (spends.length < 3 || !M.cur) return null;
+  const income = tx.filter((t) => inPer(t) && MX.kind(t) === "income").reduce((a, t) => a + t.amount, 0);
+  const [y, m, d] = asOf.split("-").map(Number), days = new Date(y, m, 0).getDate();
+  const peer = PEER_SPEND.amount * (per === "last" ? 1 : d / days);   // 이번 달은 오늘까지 날 수만큼만
+  const saveRate = income > 0 ? Math.round(((income - M.cur) / income) * 100) : null;
+  // 그림 품목 (횟수): 월세·통신 같은 고정 지출은 빼고 내가 고른 소비만
+  const variable = spends.filter((t) => !MX.fixed(t));
+  const items = {};
+  for (const t of variable) { const it = mcItemOf(t); (items[it.key] = items[it.key] || { ...it, n: 0 }).n++; }
+  const itemList = Object.values(items).sort((a, b) => b.n - a.n);
+  // 네 가지 기준
+  const varSum = variable.reduce((a, t) => a + t.amount, 0);
+  let home = 0, out = 0;
+  for (const t of variable) {
+    const k = mcItemOf(t).key;
+    if (HOME_KEYS.has(k) || HOME_CATS.has(t.cat) || t.cat === "쇼핑") home += t.amount;
+    else if (OUT_CATS.has(t.cat) || t.cat === "식비") out += t.amount;
+  }
+  const biggest = variable.reduce((mx, t) => Math.max(mx, t.amount), 0);
+  const unusual = unusualSpends(tx, M.curStart).filter((u) => u.date <= asOf).length;
+  const byCat = {};
+  for (const t of variable) byCat[t.cat] = (byCat[t.cat] || 0) + t.amount;
+  const topShare = varSum ? Math.max(...Object.values(byCat)) / varSum : 0;
+  const S = saveRate !== null ? saveRate >= 20 : M.cur <= peer;
+  const code = (S ? "S" : "Y") + (home > out ? "H" : "O") + (unusual > 0 || (biggest >= 50000 && biggest >= varSum * 0.25) ? "I" : "P") + (topShare >= 0.35 ? "F" : "V");
+  const pct = (a, b) => (b > 0 ? Math.round(((a - b) / b) * 100) : null);
+  const cats = Object.entries(byCat).sort((a, b) => b[1] - a[1]).map(([cat, v]) => ({ cat, share: Math.round((v / varSum) * 100) }));
+  return { per, month: m, code, name: MC_TYPES[code][0], desc: MC_TYPES[code][1], vsPrev: M.prev ? pct(M.cur, M.prev) : null, vsPeer: pct(M.cur, peer), saveRate, items: itemList, cats };
+}
+function mcLoad(src) { return new Promise((ok, no) => { const im = new Image(); im.onload = () => ok(im); im.onerror = no; im.src = src; }); }
+const mcSvgSrc = (k) => "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svgIcon(MC_SVG[k] || MC_SVG.bag));
+function mcRound(c, x, y, w, h, r, fill) { c.beginPath(); c.roundRect(x, y, w, h, r); c.fillStyle = fill; c.fill(); }
+// 360×640 크기로 그리고 3배로 키워 1080×1920 그림을 만든다
+async function drawMoneyCard(D) {
+  const W = 360, H = 640, K = 3, cv = document.createElement("canvas");
+  cv.width = W * K; cv.height = H * K;
+  const c = cv.getContext("2d"); c.scale(K, K);
+  // 웹 글꼴은 글자 묶음별로 나뉘어 있어서, 카드에 쓸 한글을 넘겨야 그 글자 묶음까지 받아진다
+  const glyphs = [D.name, D.desc, D.code, "월의 나는 나만의 경제 이번 달 지난달 같은 기간보다 더 덜 똑같아요 남긴 돈 번 돈보다 썼어요 어디에 그 밖 기록이 필요해요 진심이었네 알뜰하게 지냈어 신나게 썼네 다음 엔 한 번만 참아볼까 조금만 아껴볼까 이대로만 가자 0123456789%×!?·", PEER_SPEND.label, ...D.items.slice(0, 2).map((i) => i.label), ...D.cats.slice(0, 4).map((x) => x.cat)].join("");
+  try { await Promise.all([document.fonts.load("700 20px 'Pretendard Variable'", glyphs), document.fonts.load("14px 'Pretendard Variable'", glyphs)]); } catch {}
+  const keys = [...new Set([...D.items.slice(0, 6).map((i) => i.key), "coin", "bag", "house", "shades", "note", "bolt", "heart", "dots"])];
+  const [lumi, ...imgs] = await Promise.all([mcLoad("/img/lumi/main.png"), ...keys.map((k) => mcLoad(mcSvgSrc(k)))]);
+  const I = Object.fromEntries(keys.map((k, i) => [k, imgs[i]]));
+  const BLUE = "#2F6FDA", RED = "#D6453D", INK = "#2B2F36", SUB = "#5C6270", MUTE = "#8F95A1", GRAY = "#F3F4F6";
+  const S = D.code[0] === "S", bold = (px) => `700 ${px}px 'Pretendard Variable', Pretendard, sans-serif`, pre = (px, w = 400) => `${w} ${px}px 'Pretendard Variable', Pretendard, sans-serif`;
+  const text = (s, x, y, font, color, align = "left") => { c.font = font; c.fillStyle = color; c.textAlign = align; c.fillText(s, x, y); };
+  c.fillStyle = "#fff"; c.fillRect(0, 0, W, H);
+  text(`${D.month}월의 나는`, 24, 44, pre(14), SUB);
+  text("나만의 경제", W - 24, 44, bold(13), MUTE, "right");
+  text(D.code, 24, 74, bold(16), S ? BLUE : RED);
+  c.font = bold(16); const cw = c.measureText(D.code).width;
+  text(D.desc, 24 + cw + 8, 74, pre(13), MUTE);
+  text(D.name, 24, 112, bold(34), INK);
+  // 그림 상자: 산 것들 + 루미
+  const bx = 24, by = 128, bw = 312, bh = 276;
+  mcRound(c, bx, by, bw, bh, 20, S ? "#EEF4FD" : "#FDF1EF");
+  c.save(); c.beginPath(); c.roundRect(bx, by, bw, bh, 20); c.clip();
+  const slots = [[14, 12, 44], [62, 6, 34], [200, 8, 40], [250, 30, 34], [8, 70, 38], [262, 80, 36], [10, 126, 32], [268, 128, 30], [16, 172, 44], [62, 214, 30], [222, 196, 34], [150, 4, 30], [104, 220, 28], [272, 168, 28]];
+  const total = D.items.reduce((a, i) => a + i.n, 0), drawList = [];
+  D.items.slice(0, 6).forEach((it) => { const k = Math.max(1, Math.round((it.n / total) * slots.length)); for (let j = 0; j < k; j++) drawList.push(it.key); });
+  slots.forEach(([x, y, s], i) => { const k = drawList[i]; if (k) c.drawImage(I[k], bx + x, by + y, s, s); });
+  const lx = bx + 71, ly = by + 46, ls = 170;
+  c.drawImage(lumi, lx, ly, ls, ls);
+  const A = (k, x, y, s) => c.drawImage(I[k], lx + x * ls, ly + y * ls, s * ls, s * ls);
+  if (S) A("coin", -0.08, 0.62, 0.24); else { A("bag", 0.72, 0.62, 0.26); A("bag", 0.86, 0.72, 0.22); }
+  if (D.code[1] === "H") A("house", -0.1, 0.02, 0.22); else A("shades", 0.22, 0.32, 0.44);
+  if (D.code[2] === "P") A("note", 0.76, 0.02, 0.2); else A("bolt", 0.76, -0.02, 0.22);
+  if (D.code[3] === "F") A("heart", -0.12, 0.34, 0.18); else A("dots", -0.14, 0.32, 0.2);
+  c.restore();
+  // 많이 산 것 두 가지: 횟수만
+  c.font = bold(13); let tx0 = bx + 12;
+  for (const it of D.items.slice(0, 2)) {
+    const s = `${it.label} ×${it.n}`, w = c.measureText(s).width + 20;
+    mcRound(c, tx0, by + bh - 36, w, 26, 13, "#fff");
+    text(s, tx0 + 10, by + bh - 18, bold(13), INK); tx0 += w + 6;
+  }
+  // 루미의 한마디
+  const top = D.items[0];
+  const l1 = top && top.n >= 3 ? `이번 달 ${top.label}에 진심이었네!` : S ? "이번 달 알뜰하게 지냈어!" : "이번 달 신나게 썼네!";
+  const l2 = S ? "이대로만 가자!" : top && top.n >= 3 ? `다음 달엔 ${top.label} 한 번만 참아볼까?` : "다음 달엔 조금만 아껴볼까?";
+  c.drawImage(lumi, 22, 420, 40, 40);
+  text(l1, 70, 437, bold(17), INK); text(l2, 70, 458, bold(14), MUTE);
+  // 지난달 · 1인 가구 평균과 비교 (%만)
+  const tile = (x, label, v) => {
+    mcRound(c, x, 476, 152, 70, 16, GRAY);
+    text(label, x + 14, 498, pre(12), SUB);
+    if (v === null) text("기록이 더 필요해요", x + 14, 530, bold(15), MUTE);
+    else text(v === 0 ? "똑같아요" : `${Math.abs(v)}% ${v > 0 ? "더" : "덜"}`, x + 14, 532, bold(24), v > 0 ? RED : BLUE);
+  };
+  tile(24, D.per === "last" ? "지난달보다" : "지난달 같은 기간보다", D.vsPrev);
+  tile(184, `${PEER_SPEND.label}보다`, D.vsPeer);
+  // 어디에 썼을까 (비율 막대)
+  mcRound(c, 24, 556, 312, 62, 16, GRAY);
+  text("어디에 썼을까 (고정비 빼고)", 38, 576, pre(12), SUB);
+  if (D.saveRate !== null) text(D.saveRate >= 0 ? `남긴 돈 ${D.saveRate}%` : "번 돈보다 더 썼어요", 322, 576, bold(13), D.saveRate >= 0 ? BLUE : RED, "right");
+  const COL = ["#E5533D", "#2F6FDA", "#C98E5A", "#7CC47F", "#D5D9E0"];
+  const top4 = D.cats.slice(0, 4), rest = 100 - top4.reduce((a, x) => a + x.share, 0);
+  const parts = rest > 0 ? [...top4, { cat: "그 밖", share: rest }] : top4;
+  c.save(); c.beginPath(); c.roundRect(38, 584, 284, 10, 5); c.clip();
+  let px = 38; parts.forEach((p, i) => { const w = (284 * p.share) / 100; c.fillStyle = COL[i] || COL[4]; c.fillRect(px, 584, Math.max(w - 1.5, 0), 10); px += w; });
+  c.restore();
+  let lx2 = 38;
+  top4.slice(0, 3).forEach((p, i) => { const s = `${p.cat} ${p.share}%`; c.fillStyle = COL[i]; c.beginPath(); c.arc(lx2 + 3, 606, 3, 0, Math.PI * 2); c.fill(); text(s, lx2 + 10, 610, pre(11), SUB); c.font = pre(11); lx2 += c.measureText(s).width + 22; });
+  text(`${PEER_SPEND.src} · 금액 없이 %와 횟수만`, W / 2, 632, pre(9), "#B5BCC8", "center");
+  return cv;
+}
+function moneyCardSection() {
+  return `<section class="card" id="sec-moneycard">
+      <div class="sec-title"><h2>한 달 돈 정리 카드</h2><span>인스타 공유용</span></div>
+      <p class="hint" style="margin:0 0 10px">이번 달 나의 소비 유형과 많이 산 것을 루미가 그림 한 장으로 정리해요. 금액은 넣지 않아요.</p>
+      <button class="btn" data-act="mcard-open" style="width:100%">카드 만들기</button>
+      <button class="link-btn hint" data-act="ledger-export" style="display:block;margin:10px auto 0;background:none;border:none;text-decoration:underline;cursor:pointer">분석용 CSV로 내보내기</button>
+    </section>`;
+}
+function modalMoneyCard(m) {
+  const tabs = [["last", "지난달"], ["cur", "이번 달"]].map(([k, l]) => `<button class="chip ${m.per === k ? "on" : ""}" data-act="mcard-per" data-p="${k}">${l}</button>`).join("");
+  const D = moneyCardData(m.per);
+  let body;
+  if (!D) body = `<p class="hint" style="margin:12px 0">${m.per === "last" ? "지난달" : "이번 달"} 가계부 기록이 3건 이상 있어야 카드를 만들 수 있어요.</p>`;
+  else {
+    if (!m.url && !m.busy) {
+      m.busy = true;
+      drawMoneyCard(D).then((cv) => { m.canvas = cv; m.url = cv.toDataURL("image/png"); }).catch(() => { m.err = true; }).then(() => { m.busy = false; if (ui.modal === m) render(); });
+    }
+    body = m.url ? `<img src="${m.url}" alt="${esc(`${D.month}월 돈 정리 카드: ${D.code} ${D.name}`)}" style="display:block;width:100%;max-width:300px;margin:0 auto;border-radius:16px;border:1px solid var(--line)">`
+      : m.err ? `<p class="hint" style="margin:12px 0">카드를 그리지 못했어요. 잠시 뒤에 다시 열어 주세요.</p>`
+      : `<p class="hint" style="margin:40px 0;text-align:center">루미가 카드를 그리고 있어요…</p>`;
+  }
+  return `<div class="sec-title" style="margin:0"><h2>한 달 돈 정리 카드</h2><span>금액 없이 %만</span></div>
+    <div class="tabs">${tabs}</div>
+    <div class="modal-scroll">${body}</div>
+    <div class="inline"><button class="btn ghost" data-act="modal-close" style="flex:1">닫기</button>${D && m.url ? `<button class="btn ghost" data-act="mcard-save" style="flex:1">저장</button><button class="btn" data-act="mcard-share" style="flex:1">공유</button>` : ""}</div>`;
+}
+async function moneyCardOut(share) {
+  const m = ui.modal;
+  if (!m?.canvas) return;
+  const name = `나만의경제_${m.per === "last" ? "지난달" : "이번달"}_돈정리.png`;
+  const blob = await new Promise((ok) => m.canvas.toBlob(ok, "image/png"));
+  const file = new File([blob], name, { type: "image/png" });
+  if (share && navigator.canShare?.({ files: [file] })) {
+    try { await navigator.share({ files: [file] }); } catch {}
+    return;
+  }
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob); a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  toast(share ? "이 기기에서는 바로 공유가 안 돼서 그림으로 저장했어요" : "카드를 그림으로 저장했어요");
+}
 function analysisHtml() {
   const p = profile, a = p.assets;
   const t = today0();
@@ -5974,6 +6196,10 @@ document.addEventListener("click", async (e) => {
     case "net-sel": ui.netSel = Number(el.dataset.i); render(); break;
     case "budget-edit": openModal("budget"); break;
     case "ledger-export": exportLedgerCsv(); break;
+    case "mcard-open": openModal("mcard", { per: "last" }); break;
+    case "mcard-per": if (ui.modal?.kind === "mcard") { ui.modal = { kind: "mcard", route: ui.modal.route, per: el.dataset.p }; render(); } break;
+    case "mcard-save": moneyCardOut(false); break;
+    case "mcard-share": moneyCardOut(true); break;
     case "insight-ask": askInsight(); break;
     case "budget-save": {
       const B = {};
