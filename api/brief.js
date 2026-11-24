@@ -35,6 +35,8 @@ const RULES = `너는 경제를 처음 공부하는 20대에게 설명하는 친
 - 어려운 용어는 괄호로 한 번 풀어줘. 각 문장은 짧게.
 - '조심해야 할 부분이 남아 있어요', '불확실성이 있어요'처럼 흐릿하게 끝내지 마. 조심할 점을 말할 때는 기사에 나온 것으로 '무엇이(지표·일정·정책·사건) 어떻게 되면 → 무엇이 어떻게 될 수 있는지'를 한 문장으로 콕 집어 말해. 기사에 근거가 없으면 조심하라는 말 자체를 빼.`;
 
+const EN_RULE = "\n- 모든 답을 자연스럽고 쉬운 영어로 써. 한국어를 섞지 마. 돈은 ₩ 기호로(예: ₩1,000)."; // 기타 → 언어 English
+
 // Gemini 무료 등급 먼저, 안 되면 OpenAI (api/_ai.js). 어느 AI가 답했는지 ai로 돌려준다
 async function ask(system, text) {
   const out = await generate({ system, text, schema: SCHEMA, schemaName: "brief", maxTokens: 900 });
@@ -58,7 +60,7 @@ export default async function handler(req, res) {
     if (text.length < 50) return res.status(400).json({ error: "내용을 조금 더 붙여넣어 주세요" }); // 짧은 글은 횟수를 깎지 않는다
     letterHits.set(ip, { day, n: used + 1 });
     try {
-      const out = await ask(RULES + levelRule(req.body?.lv) + "\n- 사용자가 구독하는 뉴스레터 내용을 붙여넣었어. 핵심 2~3개만 골라 points로 정리하고, sources는 빈 배열로 둬.", text.slice(0, 6000));
+      const out = await ask(RULES + levelRule(req.body?.lv) + (req.body?.lang === "en" ? EN_RULE : "") + "\n- 사용자가 구독하는 뉴스레터 내용을 붙여넣었어. 핵심 2~3개만 골라 points로 정리하고, sources는 빈 배열로 둬.", text.slice(0, 6000));
       return res.status(200).json({ available: true, ...out });
     } catch (e) {
       console.error(e);
@@ -79,7 +81,7 @@ export default async function handler(req, res) {
     if (pool.length < 3) return res.status(200).json({ available: true, mood: "", points: [] });
 
     const listText = pool.map((n, i) => `[${i}] (${n.org}) ${n.title} — ${n.sub} ${n.body.slice(0, 200)}`).join("\n");
-    const out = await ask(RULES + levelRule(req.query.lv) + (who ? `\n- 이 사람의 상황·목표: ${who}. forMe는 이 상황과 목표에 이어서 말해줘.` : "") + `
+    const out = await ask(RULES + levelRule(req.query.lv) + (req.query.lang === "en" ? EN_RULE : "") + (who ? `\n- 이 사람의 상황·목표: ${who}. forMe는 이 상황과 목표에 이어서 말해줘.` : "") + `
 - 아래는 최근 7일 정부 보도자료야(관심사와 관련된 것이 앞쪽에 있어). 생활과 돈에 영향이 큰 흐름 3개를 골라 points로 정리해. 관심사(${interests.join(", ") || "없음"})와 관련된 게 있으면 하나 이상 꼭 포함하고, 그 point의 forMe에서 관심사와 이어서 설명해.
 - sources에는 근거 보도자료 번호를 1~3개 넣어.`, listText);
     const points = (out.points || []).slice(0, 3).map((p) => ({

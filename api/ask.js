@@ -81,10 +81,45 @@ async function makeTopic(topic, lv) {
   return { ok: true, name: topic, concepts, ai: out.ai }; // 이름은 AI가 바꾸지 않게 적은 그대로
 }
 
+// 영어 버전 번역: IP마다 하루 400번(한 번에 최대 40줄)
+const TR_DAILY = 400;
+const trHits = new Map(), trCache = new Map();
+function allowTr(ip) {
+  const day = new Date().toISOString().slice(0, 10), h = trHits.get(ip), n = h && h.day === day ? h.n : 0;
+  if (n >= TR_DAILY) return false;
+  trHits.set(ip, { day, n: n + 1 });
+  return true;
+}
+const TR_SCHEMA = { type: "object", additionalProperties: false, required: ["en"], properties: { en: { type: "array", items: { type: "string" } } } };
+const TR_RULES = `You translate the screen text of a Korean personal-finance app for people in their 20s-30s into natural, short, friendly English.
+- The input is a JSON array of Korean strings. Return {"en": [...]} with exactly the same number of items, in the same order.
+- The app is "나만의 경제" = "My Economy". The mascot 루미/이루미 = "Lumi". 모의투자 = "Mock Investing". 가계부 = "Budget book". 경제 공부 = "Learn". 내 돈 = "My Money".
+- Keep markers like [[1]]...[[/1]] and [[br]] exactly as they are, wrapped around the matching translated words. Never drop or renumber them.
+- Keep numbers, %, emoji and symbols (›, ▲, ▼, ·, +, -) as they are. Won amounts: "1,000원" → "₩1,000", "300만원"/"300만 원" → "₩3M", "1억" → "₩100M".
+- Use common English names for Korean companies and institutions (삼성전자 → Samsung Electronics, 한국은행 → Bank of Korea, 코스피 → KOSPI).
+- Short UI labels stay short. Do not add explanations or quotes. If a string has no Korean meaning to translate, return it unchanged.`;
+
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "POST만 지원해요" });
   const ip = String(req.headers["x-forwarded-for"] || "").split(",")[0] || "local";
   if (!aiReady()) return res.status(503).json({ error: "AI 질문 기능이 아직 설정되지 않았어요" });
+
+  // 영어 버전: 화면 글자 번역 (제미나이만, 서버가 같은 글자를 기억해 다시 쓴다)
+  if (Array.isArray(req.body?.translate)) {
+    const list = [...new Set(req.body.translate.filter((s) => typeof s === "string" && s.trim() && s.length <= 1500))].slice(0, 40);
+    if (!allowTr(ip)) return res.status(429).json({ error: "too many" });
+    const tr = {}, need = [];
+    for (const s of list) if (trCache.has(s)) tr[s] = trCache.get(s); else need.push(s);
+    if (need.length) {
+      try {
+        const out = await generate({ system: TR_RULES, text: JSON.stringify(need), schema: TR_SCHEMA, schemaName: "tr", maxTokens: 6000, geminiOnly: true });
+        const en = JSON.parse(out.text).en || [];
+        if (en.length === need.length) need.forEach((s, i) => { if (typeof en[i] === "string" && en[i].trim()) { tr[s] = en[i]; trCache.set(s, en[i]); } });
+        if (trCache.size > 20000) trCache.clear();
+      } catch (e) { console.error("translate", e.message); return res.status(502).json({ error: "번역하지 못했어요", tr }); }
+    }
+    return res.status(200).json({ tr });
+  }
 
   if (req.body?.topic !== undefined) {
     const topic = String(req.body.topic || "").replace(/\s+/g, " ").trim();
@@ -99,7 +134,7 @@ export default async function handler(req, res) {
     }
   }
 
-  const { question, profile, market } = req.body || {};
+  const { question, profile, market, lang } = req.body || {};
   if (typeof question !== "string" || !question.trim() || question.length > 300) {
     return res.status(400).json({ error: "질문은 300자 이내로 적어주세요" });
   }
@@ -107,7 +142,7 @@ export default async function handler(req, res) {
   const context = JSON.stringify({ profile: profile || {}, market: market || {} }).slice(0, 2000);
 
   try {
-    const out = await generate({ system: SYSTEM, text: `[내 상황]\n${context}\n\n[질문]\n${question.trim()}`, maxTokens: 700 });
+    const out = await generate({ system: SYSTEM + (lang === "en" ? "\n- 모든 답을 자연스럽고 쉬운 영어로 써. 한국어를 섞지 마. 돈은 ₩ 기호로." : ""), text: `[내 상황]\n${context}\n\n[질문]\n${question.trim()}`, maxTokens: 700 });
     res.status(200).json({ answer: out.text, ai: out.ai });
   } catch (e) {
     console.error(e);

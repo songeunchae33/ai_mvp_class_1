@@ -31,7 +31,7 @@
   }
   * { box-sizing: border-box; }
   html, body { margin: 0; }
-  body { background: var(--outer); color: var(--ink); font-family: 'Pretendard Variable', Pretendard, -apple-system, system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+  body { background: var(--outer); color: var(--ink); font-family: 'Pretendard Variable', Pretendard, -apple-system, system-ui, sans-serif; -webkit-font-smoothing: antialiased; font-size: calc(16px * var(--fs, 1)); }
   button, input, select { font-family: inherit; color: inherit; }
   a { color: inherit; text-decoration: none; }
   .num { font-variant-numeric: tabular-nums; }
@@ -46,25 +46,25 @@
   .top { display: flex; align-items: center; justify-content: space-between; padding: 14px 10px 4px 12px; position: sticky; top: 0; z-index: 5; background: var(--bg); }
   .avatar { display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 8px 0 4px; border: none; background: transparent; cursor: pointer; border-radius: 14px; }
   .avatar:hover { background: rgba(255,255,255,0.6); }
-  .brand { font-size: 18px; font-weight: 700; }
+  .brand { font-size: calc(18px * var(--fs, 1)); font-weight: 700; }
   .icon-btn { width: 44px; height: 44px; border: none; background: transparent; display: flex; align-items: center; justify-content: center; cursor: pointer; border-radius: 14px; }
   .icon-btn:hover { background: rgba(255,255,255,0.6); }
-  .asof { font-size: 12px; color: var(--sub); }
+  .asof { font-size: calc(12px * var(--fs, 1)); color: var(--sub); }
 
   .hero { display: flex; align-items: flex-end; gap: 10px; padding-top: 4px; }
   .bubble { flex: 1; background: var(--card); border-radius: 20px 20px 20px 6px; padding: 14px 12px 6px 16px; display: flex; flex-direction: column; gap: 4px; }
-  .bubble p { margin: 0; font-size: 16px; line-height: 1.6; min-height: 51px; }
+  .bubble p { margin: 0; font-size: calc(16px * var(--fs, 1)); line-height: 1.6; min-height: 51px; }
   .bubble-foot { display: flex; justify-content: space-between; align-items: center; }
   .dots { display: flex; gap: 4px; }
   .dot { width: 6px; height: 6px; border-radius: 3px; background: var(--line); }
   .dot.on { background: var(--green); width: 14px; }
-  .link-btn { min-height: 40px; padding: 0 6px 0 10px; border: none; background: transparent; color: var(--green); font-size: 13px; font-weight: 700; cursor: pointer; }
+  .link-btn { min-height: 40px; padding: 0 6px 0 10px; border: none; background: transparent; color: var(--green); font-size: calc(13px * var(--fs, 1)); font-weight: 700; cursor: pointer; }
 
   .card { background: var(--card); border-radius: var(--radius); padding: 14px 16px; }
   .sec-title { display: flex; justify-content: space-between; align-items: baseline; margin: 0 0 8px; }
-  .sec-title h2 { margin: 0; font-size: 16px; font-weight: 700; }
-  .sec-title span, .hint { font-size: 12px; color: var(--sub); }
-  .badge { display: inline-block; font-size: 11px; font-weight: 700; border-radius: 6px; padding: 3px 7px; }
+  .sec-title h2 { margin: 0; font-size: calc(16px * var(--fs, 1)); font-weight: 700; }
+  .sec-title span, .hint { font-size: calc(12px * var(--fs, 1)); color: var(--sub); }
+  .badge { display: inline-block; font-size: calc(11px * var(--fs, 1)); font-weight: 700; border-radius: 6px; padding: 3px 7px; }
   .b-up { color: var(--up); background: var(--up-bg); }
   .b-down { color: var(--down); background: var(--down-bg); }
   .b-flat { color: var(--sub); background: var(--flat-bg); }
@@ -74,97 +74,97 @@
 
   .mkt { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
   .mkt div { background: var(--card); border-radius: 16px; padding: 12px 8px; display: flex; flex-direction: column; align-items: center; gap: 2px; }
-  .mkt .k { font-size: 12px; color: var(--sub); }
-  .mkt .v { font-size: 17px; font-weight: 700; letter-spacing: -0.3px; }
-  .mkt .c { font-size: 12px; font-weight: 700; }
+  .mkt .k { font-size: calc(12px * var(--fs, 1)); color: var(--sub); }
+  .mkt .v { font-size: calc(17px * var(--fs, 1)); font-weight: 700; letter-spacing: -0.3px; }
+  .mkt .c { font-size: calc(12px * var(--fs, 1)); font-weight: 700; }
   .rows { display: flex; flex-direction: column; }
   .row { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 48px; border-top: 1px solid #EEF1F8; }
   .row:first-child { border-top: none; }
-  .row .name { font-size: 15px; font-weight: 700; }
-  .row .sub { font-size: 12px; color: var(--sub); }
+  .row .name { font-size: calc(15px * var(--fs, 1)); font-weight: 700; }
+  .row .sub { font-size: calc(12px * var(--fs, 1)); color: var(--sub); }
 
   .impact { flex-shrink: 0; width: 232px; background: var(--card); border-radius: 18px; padding: 14px; display: flex; flex-direction: column; gap: 8px; text-align: left; border: none; font-size: inherit; }
-  .impact p { margin: 0; font-size: 14px; line-height: 1.55; }
+  .impact p { margin: 0; font-size: calc(14px * var(--fs, 1)); line-height: 1.55; }
   .bleed { margin: 0 -16px; padding: 0 16px; }
 
   .chips { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-  .chip { min-height: 36px; padding: 0 14px; border-radius: 999px; border: 1px solid #D8E1ED; background: var(--card); font-size: 13px; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; }
+  .chip { min-height: 36px; padding: 0 14px; border-radius: 999px; border: 1px solid #D8E1ED; background: var(--card); font-size: calc(13px * var(--fs, 1)); font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; }
   .chip.on { background: var(--ink); color: #fff; border-color: var(--ink); }
-  .chip.small { min-height: 32px; font-size: 12px; font-weight: 500; padding: 0 12px; }
+  .chip.small { min-height: 32px; font-size: calc(12px * var(--fs, 1)); font-weight: 500; padding: 0 12px; }
 
   .news a { display: flex; gap: 10px; align-items: flex-start; padding: 12px 0; border-top: 1px solid #EEF1F8; }
   .news a:first-child { border-top: none; padding-top: 4px; }
-  .news .no { font-family: 'Jua', sans-serif; font-size: 18px; font-weight: 700; color: var(--green); width: 16px; flex-shrink: 0; line-height: 1.4; }
-  .news .t { font-size: 15px; font-weight: 500; line-height: 1.45; }
-  .news .m { font-size: 12px; color: var(--sub); margin-top: 3px; display: flex; gap: 6px; align-items: center; }
+  .news .no { font-family: 'Jua', sans-serif; font-size: calc(18px * var(--fs, 1)); font-weight: 700; color: var(--green); width: 16px; flex-shrink: 0; line-height: 1.4; }
+  .news .t { font-size: calc(15px * var(--fs, 1)); font-weight: 500; line-height: 1.45; }
+  .news .m { font-size: calc(12px * var(--fs, 1)); color: var(--sub); margin-top: 3px; display: flex; gap: 6px; align-items: center; }
   .news a:hover .t { color: var(--green); }
 
   .cal { display: flex; align-items: center; gap: 12px; min-height: 52px; border-top: 1px solid #EEF1F8; }
   .cal:first-child { border-top: none; }
-  .dday { width: 52px; flex-shrink: 0; text-align: center; font-size: 12px; font-weight: 700; border-radius: 10px; padding: 6px 0; background: var(--soft); color: var(--sub); }
+  .dday { width: 52px; flex-shrink: 0; text-align: center; font-size: calc(12px * var(--fs, 1)); font-weight: 700; border-radius: 10px; padding: 6px 0; background: var(--soft); color: var(--sub); }
   .dday.soon { background: var(--green); color: #fff; }
-  .cal .t { font-size: 14px; font-weight: 700; }
-  .cal .d { font-size: 12px; color: var(--sub); }
+  .cal .t { font-size: calc(14px * var(--fs, 1)); font-weight: 700; }
+  .cal .d { font-size: calc(12px * var(--fs, 1)); color: var(--sub); }
   .cal.mine .t { color: var(--green); }
 
   .benefit { display: flex; justify-content: space-between; align-items: center; gap: 10px; min-height: 56px; border-top: 1px solid #EEF1F8; padding: 8px 0; }
   .benefit:first-child { border-top: none; }
-  .benefit .t { font-size: 14px; font-weight: 700; }
-  .benefit .d { font-size: 12px; color: var(--sub); margin-top: 2px; line-height: 1.45; }
+  .benefit .t { font-size: calc(14px * var(--fs, 1)); font-weight: 700; }
+  .benefit .d { font-size: calc(12px * var(--fs, 1)); color: var(--sub); margin-top: 2px; line-height: 1.45; }
 
   .quiz { background: var(--green); color: var(--green-ink); border-radius: var(--radius); padding: 16px; display: flex; flex-direction: column; gap: 10px; }
-  .quiz .q { font-size: 15px; font-weight: 500; line-height: 1.55; margin: 0; }
+  .quiz .q { font-size: calc(15px * var(--fs, 1)); font-weight: 500; line-height: 1.55; margin: 0; }
   .ox { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
-  .ox button { min-height: 50px; border-radius: 14px; border: none; font-size: 20px; font-weight: 700; cursor: pointer; background: rgba(255,255,255,0.16); color: #fff; }
+  .ox button { min-height: 50px; border-radius: 14px; border: none; font-size: calc(20px * var(--fs, 1)); font-weight: 700; cursor: pointer; background: rgba(255,255,255,0.16); color: #fff; }
   .ox button.right { background: #fff; color: var(--green); }
   .ox button.dim { background: rgba(255,255,255,0.08); color: #B9C6F5; }
   .ox button.wrong { background: rgba(255,255,255,0.08); color: #FFC9C9; text-decoration: line-through; }
-  .quiz .ex { margin: 0; font-size: 13px; line-height: 1.65; color: #F0F3FF; }
+  .quiz .ex { margin: 0; font-size: calc(13px * var(--fs, 1)); line-height: 1.65; color: #F0F3FF; }
 
   .more { background: var(--card); border: 2px dashed #D8E1ED; border-radius: var(--radius); padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
-  .more .q { font-size: 15px; font-weight: 700; margin: 0; }
+  .more .q { font-size: calc(15px * var(--fs, 1)); font-weight: 700; margin: 0; }
   .inline { display: flex; gap: 8px; }
-  .field { min-height: 44px; border: 1px solid var(--line); border-radius: 12px; padding: 0 12px; font-size: 15px; background: var(--card); width: 100%; min-width: 0; }
+  .field { min-height: 44px; border: 1px solid var(--line); border-radius: 12px; padding: 0 12px; font-size: calc(15px * var(--fs, 1)); background: var(--card); width: 100%; min-width: 0; }
   .field:focus { outline: 2px solid var(--green); outline-offset: -1px; }
-  .btn { min-height: 44px; padding: 0 16px; border-radius: 12px; border: none; background: var(--green); color: #fff; font-size: 14px; font-weight: 700; cursor: pointer; white-space: nowrap; }
+  .btn { min-height: 44px; padding: 0 16px; border-radius: 12px; border: none; background: var(--green); color: #fff; font-size: calc(14px * var(--fs, 1)); font-weight: 700; cursor: pointer; white-space: nowrap; }
   .btn.ghost { background: var(--soft); color: var(--ink); border: 1px solid var(--line); }
-  .btn.block { width: 100%; min-height: 52px; font-size: 16px; border-radius: 16px; }
+  .btn.block { width: 100%; min-height: 52px; font-size: calc(16px * var(--fs, 1)); border-radius: 16px; }
   .btn.danger { background: #FFEAF0; color: #C2335A; }
   .btn:disabled { opacity: 0.45; cursor: default; }
 
-  .foot { font-size: 11px; color: var(--sub); line-height: 1.6; text-align: center; padding: 4px 8px 8px; }
+  .foot { font-size: calc(11px * var(--fs, 1)); color: var(--sub); line-height: 1.6; text-align: center; padding: 4px 8px 8px; }
 
   .askbar { position: sticky; bottom: 0; z-index: 6; padding: 8px 16px calc(14px + env(safe-area-inset-bottom)); background: var(--bg); border-top: 1px solid var(--line); display: flex; flex-direction: column; gap: 8px; }
   .askform { display: flex; align-items: center; gap: 8px; background: var(--card); border-radius: 18px; padding: 6px 6px 6px 16px; }
-  .askform input { flex: 1; min-width: 0; border: none; outline: none; font-size: 15px; background: transparent; }
+  .askform input { flex: 1; min-width: 0; border: none; outline: none; font-size: calc(15px * var(--fs, 1)); background: transparent; }
   .askform input::placeholder { color: #8C97AB; }
   .send { width: 44px; height: 44px; border-radius: 13px; border: none; background: var(--green); color: #fff; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; }
 
   .sheet-back { position: fixed; inset: 0; background: rgba(38, 50, 74, 0.35); z-index: 20; display: flex; align-items: flex-end; justify-content: center; }
   .sheet { width: 100%; max-width: 440px; max-height: 80vh; overflow-y: auto; background: var(--bg); border-radius: 24px 24px 0 0; padding: 18px 16px calc(20px + env(safe-area-inset-bottom)); display: flex; flex-direction: column; gap: 12px; }
-  .sheet .qline { align-self: flex-end; background: var(--ink); color: #fff; border-radius: 18px 18px 6px 18px; padding: 10px 14px; font-size: 14px; max-width: 85%; }
+  .sheet .qline { align-self: flex-end; background: var(--ink); color: #fff; border-radius: 18px 18px 6px 18px; padding: 10px 14px; font-size: calc(14px * var(--fs, 1)); max-width: 85%; }
   .sheet .ans { display: flex; gap: 10px; align-items: flex-start; }
-  .sheet .ans p { margin: 0; background: var(--card); border-radius: 6px 18px 18px 18px; padding: 12px 14px; font-size: 15px; line-height: 1.7; white-space: pre-wrap; flex: 1; }
+  .sheet .ans p { margin: 0; background: var(--card); border-radius: 6px 18px 18px 18px; padding: 12px 14px; font-size: calc(15px * var(--fs, 1)); line-height: 1.7; white-space: pre-wrap; flex: 1; }
 
-  .toast { position: fixed; left: 50%; bottom: 120px; transform: translateX(-50%); background: var(--ink); color: #fff; font-size: 13px; padding: 10px 16px; border-radius: 999px; z-index: 30; max-width: 90vw; }
+  .toast { position: fixed; left: 50%; bottom: 120px; transform: translateX(-50%); background: var(--ink); color: #fff; font-size: calc(13px * var(--fs, 1)); padding: 10px 16px; border-radius: 999px; z-index: 30; max-width: 90vw; }
 
   /* 마이페이지 / 첫 설문 */
   .page-head { display: flex; align-items: center; gap: 4px; padding: 14px 12px 6px 4px; position: sticky; top: 0; z-index: 5; background: var(--bg); }
-  .page-head h1 { margin: 0; font-size: 18px; font-weight: 700; }
+  .page-head h1 { margin: 0; font-size: calc(18px * var(--fs, 1)); font-weight: 700; }
   .form { display: flex; flex-direction: column; gap: 12px; }
-  .form label.lb { font-size: 13px; font-weight: 700; color: var(--sub); display: block; margin-bottom: 6px; }
+  .form label.lb { font-size: calc(13px * var(--fs, 1)); font-weight: 700; color: var(--sub); display: block; margin-bottom: 6px; }
   .grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
   .range { width: 100%; accent-color: var(--green); height: 32px; }
-  .range-ends { display: flex; justify-content: space-between; font-size: 12px; color: var(--sub); }
-  .type-pill { font-size: 13px; font-weight: 700; color: var(--green); }
+  .range-ends { display: flex; justify-content: space-between; font-size: calc(12px * var(--fs, 1)); color: var(--sub); }
+  .type-pill { font-size: calc(13px * var(--fs, 1)); font-weight: 700; color: var(--green); }
   .money { position: relative; }
   .money .field { padding-right: 44px; text-align: right; }
-  .money .unit { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); font-size: 13px; color: var(--sub); pointer-events: none; }
+  .money .unit { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); font-size: calc(13px * var(--fs, 1)); color: var(--sub); pointer-events: none; }
   .debt { background: var(--soft); border-radius: 14px; padding: 10px; display: flex; flex-direction: column; gap: 8px; }
   .bar { height: 10px; border-radius: 5px; background: var(--flat-bg); display: flex; overflow: hidden; }
   .diag { display: flex; flex-direction: column; gap: 10px; }
   .fc-bars { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
-  .fc-row { display: grid; grid-template-columns: 64px 1fr 64px; align-items: center; gap: 8px; font-size: 13px; }
+  .fc-row { display: grid; grid-template-columns: 64px 1fr 64px; align-items: center; gap: 8px; font-size: calc(13px * var(--fs, 1)); }
   .fc-name { color: var(--sub); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .fc-val { text-align: right; font-weight: 700; }
   .fc-track { position: relative; height: 12px; background: var(--soft); border-radius: 6px; display: flex; overflow: visible; }
@@ -175,44 +175,44 @@
   .fc-key.pred { background: var(--mint); margin-left: 8px; }
   .wk-chart { width: 100%; height: auto; display: block; }
   .wk-bar { fill: var(--mint); } .wk-now { fill: var(--green); }
-  .wk-t { font-size: 10px; fill: var(--sub); }
-  .mp-list { margin: 0; padding-left: 20px; font-size: 14px; line-height: 1.75; }
+  .wk-t { font-size: calc(10px * var(--fs, 1)); fill: var(--sub); }
+  .mp-list { margin: 0; padding-left: 20px; font-size: calc(14px * var(--fs, 1)); line-height: 1.75; }
   .mp-list ul { padding-left: 18px; list-style: circle; }
-  .mp-h { margin: 16px 0 6px; font-size: 16px; }
-  .mp-story { margin: 0; font-size: 14px; line-height: 1.75; }
+  .mp-h { margin: 16px 0 6px; font-size: calc(16px * var(--fs, 1)); }
+  .mp-story { margin: 0; font-size: calc(14px * var(--fs, 1)); line-height: 1.75; }
   .mp-story .worry { background: #FBE3E5; color: inherit; padding: 1px 2px; border-radius: 3px; }
-  .mp-acts { margin: 0; padding-left: 20px; font-size: 14px; line-height: 1.7; display: flex; flex-direction: column; gap: 6px; }
-  .mp-acts .hint { font-size: 12px; }
+  .mp-acts { margin: 0; padding-left: 20px; font-size: calc(14px * var(--fs, 1)); line-height: 1.7; display: flex; flex-direction: column; gap: 6px; }
+  .mp-acts .hint { font-size: calc(12px * var(--fs, 1)); }
   .ic-range { position: relative; height: 14px; border-radius: 999px; background: #E6EAF2; margin-top: 10px; }
   .ic-band { position: absolute; top: 0; bottom: 0; background: #BFD3F5; border-radius: 999px; }
   .ic-me { position: absolute; top: 50%; width: 18px; height: 18px; margin: -9px 0 0 -9px; border-radius: 50%; border: 3px solid #fff; background: #3375D6; }
   .ic-me.low, .ic-me.high { background: #D6453D; }
-  .ic-badge { display: inline-block; font-size: 12px; font-weight: 700; border-radius: 999px; padding: 3px 8px; }
+  .ic-badge { display: inline-block; font-size: calc(12px * var(--fs, 1)); font-weight: 700; border-radius: 999px; padding: 3px 8px; }
   .ic-badge.ok { color: #1F5BB8; background: #DCE8FB; }
   .ic-badge.low, .ic-badge.high { color: #B3261E; background: #F7D4D6; }
   .rk-nm { display: flex; flex-direction: column; align-items: flex-start; gap: 0; }
-  .rk-join { font-size: 11px; line-height: 1.2; }
-  .rk-share { font-size: 11px; font-weight: 700; color: #1F5BB8; background: #DCE8FB; border-radius: 999px; padding: 1px 6px; }
-  button.rk-gap { width: 100%; background: transparent; border: none; color: var(--sub); font: inherit; font-size: 13px; padding: 6px 0; cursor: pointer; }
+  .rk-join { font-size: calc(11px * var(--fs, 1)); line-height: 1.2; }
+  .rk-share { font-size: calc(11px * var(--fs, 1)); font-weight: 700; color: #1F5BB8; background: #DCE8FB; border-radius: 999px; padding: 1px 6px; }
+  button.rk-gap { width: 100%; background: transparent; border: none; color: var(--sub); font: inherit; font-size: calc(13px * var(--fs, 1)); padding: 6px 0; cursor: pointer; }
   .rk-consent { display: flex; gap: 10px; align-items: flex-start; background: var(--soft); border-radius: 12px; padding: 12px; cursor: pointer; }
   .rk-consent input { width: 20px; height: 20px; margin-top: 2px; flex-shrink: 0; accent-color: #3375D6; }
-  .rk-consent span { display: flex; flex-direction: column; gap: 2px; font-size: 14px; }
+  .rk-consent span { display: flex; flex-direction: column; gap: 2px; font-size: calc(14px * var(--fs, 1)); }
   .lt-list { display: flex; flex-direction: column; gap: 8px; }
   .lt-row { display: flex; align-items: center; gap: 10px; border: 1px solid var(--line); border-radius: 16px; padding: 12px; }
   .lt-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; color: inherit; text-decoration: none; }
-  .lt-main b { font-size: 15px; }
-  .lt-main .hint { font-size: 12px; }
-  .lt-subs { font-size: 12px; font-weight: 700; color: #3375D6; }
+  .lt-main b { font-size: calc(15px * var(--fs, 1)); }
+  .lt-main .hint { font-size: calc(12px * var(--fs, 1)); }
+  .lt-subs { font-size: calc(12px * var(--fs, 1)); font-weight: 700; color: #3375D6; }
   .lt-row .chip { flex-shrink: 0; }
   /* 머니 프로필 그림 카드: 연회색 면과 파랑 하나로 */
   .mp-head { display: flex; gap: 12px; align-items: center; background: var(--soft); border-radius: 16px; padding: 12px 14px; }
-  .mp-head b { font-size: 16px; }
+  .mp-head b { font-size: calc(16px * var(--fs, 1)); }
   .mp-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
-  .mp-tags span { font-size: 12px; background: #fff; border: 1px solid var(--line); border-radius: 999px; padding: 2px 8px; color: var(--sub); }
+  .mp-tags span { font-size: calc(12px * var(--fs, 1)); background: #fff; border: 1px solid var(--line); border-radius: 999px; padding: 2px 8px; color: var(--sub); }
   .mp-flow { margin-top: 10px; background: var(--soft); border-radius: 16px; padding: 12px 14px; }
-  .mp-row { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-size: 14px; flex-wrap: wrap; }
-  .mp-row b { font-size: 18px; }
-  .mp-row.hint { font-size: 12px; margin-top: 6px; }
+  .mp-row { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-size: calc(14px * var(--fs, 1)); flex-wrap: wrap; }
+  .mp-row b { font-size: calc(18px * var(--fs, 1)); }
+  .mp-row.hint { font-size: calc(12px * var(--fs, 1)); margin-top: 6px; }
   .mp-bar { display: flex; height: 12px; border-radius: 999px; overflow: hidden; background: #E6EAF2; margin-top: 8px; gap: 2px; }
   .mp-bar.sm { height: 8px; }
   .mp-bar i { display: block; height: 100%; }
@@ -220,33 +220,33 @@
   .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 4px; vertical-align: 0; }
   .mp-tiles { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; margin-top: 8px; }
   .mp-tile { display: flex; flex-direction: column; gap: 4px; background: var(--soft); border-radius: 16px; padding: 12px 14px; min-width: 0; }
-  .mp-tile b { font-size: 18px; }
-  .mp-tile .hint { font-size: 12px; }
-  .mp-leg { display: flex; flex-wrap: wrap; gap: 8px; font-size: 11px; color: var(--sub); }
+  .mp-tile b { font-size: calc(18px * var(--fs, 1)); }
+  .mp-tile .hint { font-size: calc(12px * var(--fs, 1)); }
+  .mp-leg { display: flex; flex-wrap: wrap; gap: 8px; font-size: calc(11px * var(--fs, 1)); color: var(--sub); }
   .mp-chips { display: flex; flex-wrap: wrap; gap: 8px; }
   .mp-chip { display: flex; align-items: center; gap: 8px; background: #fff; border: 1px solid var(--line); border-radius: 16px; padding: 6px 12px 6px 8px; }
-  .mp-chip b { display: block; font-size: 13px; }
-  .mp-chip small { font-size: 12px; color: var(--sub); }
-  .mp-worry { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; font-size: 14px; line-height: 1.6; }
+  .mp-chip b { display: block; font-size: calc(13px * var(--fs, 1)); }
+  .mp-chip small { font-size: calc(12px * var(--fs, 1)); color: var(--sub); }
+  .mp-worry { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; font-size: calc(14px * var(--fs, 1)); line-height: 1.6; }
   .mp-worry li { padding: 10px 12px; border-radius: 12px; background: var(--soft); }
   .mp-worry li.mp-big { background: #FBE9EA; }
   .mp-worry li.ok { background: #EEF4FD; }
-  .mp-worry .pill-red { display: inline-block; font-size: 12px; font-weight: 700; color: #B3261E; background: #F7D4D6; border-radius: 999px; padding: 2px 6px; margin-right: 6px; }
-  .mp-rx { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; font-size: 14px; line-height: 1.6; }
+  .mp-worry .pill-red { display: inline-block; font-size: calc(12px * var(--fs, 1)); font-weight: 700; color: #B3261E; background: #F7D4D6; border-radius: 999px; padding: 2px 6px; margin-right: 6px; }
+  .mp-rx { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; font-size: calc(14px * var(--fs, 1)); line-height: 1.6; }
   .mp-rx li { display: flex; gap: 10px; align-items: flex-start; border: 1px solid var(--line); border-radius: 16px; padding: 12px 14px; }
-  .mp-no { flex-shrink: 0; width: 22px; height: 22px; border-radius: 6px; background: #3375D6; color: #fff; font-size: 13px; font-weight: 700; display: flex; align-items: center; justify-content: center; margin-top: 1px; }
-  .diag-line { display: flex; gap: 10px; align-items: flex-start; font-size: 14px; line-height: 1.55; }
+  .mp-no { flex-shrink: 0; width: 22px; height: 22px; border-radius: 6px; background: #3375D6; color: #fff; font-size: calc(13px * var(--fs, 1)); font-weight: 700; display: flex; align-items: center; justify-content: center; margin-top: 1px; }
+  .diag-line { display: flex; gap: 10px; align-items: flex-start; font-size: calc(14px * var(--fs, 1)); line-height: 1.55; }
   .diag-line .badge { flex-shrink: 0; margin-top: 2px; }
-  .legend { display: flex; gap: 12px; flex-wrap: wrap; font-size: 12px; color: var(--sub); }
+  .legend { display: flex; gap: 12px; flex-wrap: wrap; font-size: calc(12px * var(--fs, 1)); color: var(--sub); }
   .legend i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 4px; }
 
   .onb { padding: 24px 20px 28px; display: flex; flex-direction: column; gap: 18px; flex: 1; }
-  .onb h1 { margin: 0; font-size: 24px; line-height: 1.4; font-weight: 700; }
+  .onb h1 { margin: 0; font-size: calc(24px * var(--fs, 1)); line-height: 1.4; font-weight: 700; }
   .steps { display: flex; gap: 6px; }
   .steps i { flex: 1; height: 4px; border-radius: 2px; background: var(--line); }
   .steps i.on { background: var(--green); }
   .results { display: flex; flex-direction: column; background: var(--card); border-radius: 12px; overflow: hidden; }
-  .results button { min-height: 44px; border: none; border-top: 1px solid #EEF1F8; background: transparent; text-align: left; padding: 0 14px; font-size: 14px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; }
+  .results button { min-height: 44px; border: none; border-top: 1px solid #EEF1F8; background: transparent; text-align: left; padding: 0 14px; font-size: calc(14px * var(--fs, 1)); cursor: pointer; display: flex; justify-content: space-between; align-items: center; }
   .results button:first-child { border-top: none; }
   .results button:hover { background: var(--soft); }
 
@@ -254,60 +254,60 @@
   .searchwrap { padding: 0 16px 8px; position: sticky; top: 62px; z-index: 6; background: var(--bg); }
   .searchbox { display: flex; align-items: center; gap: 8px; background: var(--card); border-radius: 16px; padding: 0 6px 0 14px; min-height: 48px; border: 1.5px solid transparent; }
   .searchbox:focus-within { border-color: var(--green); }
-  .searchbox input { flex: 1; min-width: 0; border: none; outline: none; font-size: 15px; background: transparent; min-height: 44px; }
+  .searchbox input { flex: 1; min-width: 0; border: none; outline: none; font-size: calc(15px * var(--fs, 1)); background: transparent; min-height: 44px; }
   .searchbox input::placeholder { color: #8C97AB; }
   .sresults { display: none; position: absolute; left: 16px; right: 16px; top: 56px; background: var(--card); border-radius: 16px; box-shadow: 0 12px 32px rgba(38,50,74,0.18); max-height: 62vh; overflow-y: auto; padding: 6px 0; }
   .searchwrap.open .sresults:not(:empty) { display: block; }
-  .sg { font-size: 11px; font-weight: 700; color: var(--sub); padding: 8px 14px 2px; }
-  .si { display: flex; justify-content: space-between; align-items: center; gap: 10px; width: 100%; min-height: 44px; padding: 6px 14px; border: none; background: transparent; text-align: left; font-size: 14px; cursor: pointer; }
+  .sg { font-size: calc(11px * var(--fs, 1)); font-weight: 700; color: var(--sub); padding: 8px 14px 2px; }
+  .si { display: flex; justify-content: space-between; align-items: center; gap: 10px; width: 100%; min-height: 44px; padding: 6px 14px; border: none; background: transparent; text-align: left; font-size: calc(14px * var(--fs, 1)); cursor: pointer; }
   .si:hover, .si:focus-visible { background: var(--soft); }
-  .si .s2 { font-size: 12px; color: var(--sub); }
+  .si .s2 { font-size: calc(12px * var(--fs, 1)); color: var(--sub); }
   .si.ask { color: var(--green); font-weight: 700; border-top: 1px solid #EEF1F8; margin-top: 4px; }
-  .def { padding: 6px 14px 10px; font-size: 13px; line-height: 1.6; }
+  .def { padding: 6px 14px 10px; font-size: calc(13px * var(--fs, 1)); line-height: 1.6; }
 
   /* 시세 타일 (지수·환율·내 종목 같은 모양) */
   .mkt { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .mkt .k { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .mkt .add { border: 1.5px dashed #D8E1ED; background: transparent; justify-content: center; cursor: pointer; color: var(--sub); font-size: 13px; font-weight: 700; min-height: 74px; border-radius: 16px; }
+  .mkt .add { border: 1.5px dashed #D8E1ED; background: transparent; justify-content: center; cursor: pointer; color: var(--sub); font-size: calc(13px * var(--fs, 1)); font-weight: 700; min-height: 74px; border-radius: 16px; }
 
   /* 뉴스 한 줄 */
-  .nl a { display: flex; align-items: center; gap: 8px; min-height: 40px; border-top: 1px solid #EEF1F8; font-size: 14px; }
+  .nl a { display: flex; align-items: center; gap: 8px; min-height: 40px; border-top: 1px solid #EEF1F8; font-size: calc(14px * var(--fs, 1)); }
   .nl a:first-child { border-top: none; }
   .nl .t1 { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 500; }
-  .nl .src { font-size: 11px; color: var(--sub); flex-shrink: 0; }
+  .nl .src { font-size: calc(11px * var(--fs, 1)); color: var(--sub); flex-shrink: 0; }
   .nl a:hover .t1 { color: var(--green); }
   /* 홈 뉴스: 긴 제목은 옆으로 밀어서 끝까지 본다(오른쪽 끝은 살짝 흐리게 해서 더 있다는 표시) */
   .nl .t1.swipe { text-overflow: clip; overflow-x: auto; scrollbar-width: none; touch-action: pan-x pan-y; padding-right: 14px;
     -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 18px), transparent); mask-image: linear-gradient(90deg, #000 calc(100% - 18px), transparent); }
   .nl .t1.swipe::-webkit-scrollbar { display: none; }
-  .score-card .sc-row { display: flex; align-items: center; gap: 14px; font-size: 14px; line-height: 1.5; }
-  .score-card .sc-big { font-size: 40px; line-height: 1; color: var(--green); }
-  .score-card .sc-big small { font-size: 16px; margin-left: 2px; color: var(--ink); }
+  .score-card .sc-row { display: flex; align-items: center; gap: 14px; font-size: calc(14px * var(--fs, 1)); line-height: 1.5; }
+  .score-card .sc-big { font-size: calc(40px * var(--fs, 1)); line-height: 1; color: var(--green); }
+  .score-card .sc-big small { font-size: calc(16px * var(--fs, 1)); margin-left: 2px; color: var(--ink); }
   .score-card .sc-week { display: flex; align-items: flex-end; gap: 6px; height: 92px; margin-bottom: 4px; }
   .score-card .sc-week > div { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 3px; height: 100%; }
   .score-card .sc-week i { display: block; width: 100%; max-width: 26px; border-radius: 6px 6px 2px 2px; background: var(--green); opacity: .45; }
   .score-card .sc-week .on i { opacity: 1; }
-  .score-card .sc-week small { font-size: 11px; color: var(--sub); min-height: 14px; }
-  .score-card .sc-week span { font-size: 11px; color: var(--sub); }
+  .score-card .sc-week small { font-size: calc(11px * var(--fs, 1)); color: var(--sub); min-height: 14px; }
+  .score-card .sc-week span { font-size: calc(11px * var(--fs, 1)); color: var(--sub); }
   .score-card .sc-week .on span { color: var(--ink); font-weight: 700; }
   .rk-nm { background: none; border: 0; padding: 0; font: inherit; color: inherit; text-align: left; cursor: pointer; min-height: 32px; }
   .mix-bar { display: flex; height: 14px; border-radius: 7px; overflow: hidden; background: var(--line); }
   .mix-bar i { display: block; height: 100%; }
-  .nl-head { display: flex; align-items: center; gap: 6px; margin-top: 10px; min-height: 32px; font-size: 14px; }
-  .nl-head .hint { flex: 1; min-width: 0; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .nl-head .link-btn { margin-left: auto; flex-shrink: 0; font-size: 13px; }
-  .plus { min-width: 44px; min-height: 36px; border-radius: 12px; border: 1px solid var(--line); background: var(--soft); font-size: 13px; font-weight: 700; cursor: pointer; padding: 0 10px; }
+  .nl-head { display: flex; align-items: center; gap: 6px; margin-top: 10px; min-height: 32px; font-size: calc(14px * var(--fs, 1)); }
+  .nl-head .hint { flex: 1; min-width: 0; font-size: calc(12px * var(--fs, 1)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .nl-head .link-btn { margin-left: auto; flex-shrink: 0; font-size: calc(13px * var(--fs, 1)); }
+  .plus { min-width: 44px; min-height: 36px; border-radius: 12px; border: 1px solid var(--line); background: var(--soft); font-size: calc(13px * var(--fs, 1)); font-weight: 700; cursor: pointer; padding: 0 10px; }
   .tabs { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; padding: 2px 0 6px; }
   .tabs::-webkit-scrollbar { display: none; }
   .tabs .chip { flex-shrink: 0; }
-  .cal .tagc { font-size: 10px; font-weight: 700; color: var(--green); background: #EAF0FF; border-radius: 5px; padding: 2px 5px; margin-right: 4px; }
+  .cal .tagc { font-size: calc(10px * var(--fs, 1)); font-weight: 700; color: var(--green); background: #EAF0FF; border-radius: 5px; padding: 2px 5px; margin-right: 4px; }
   .dday.approx { background: #FFF1C9; color: #7A5200; }
 
   /* 한 줄 카드 */
-  .card.line { display: flex; justify-content: space-between; align-items: center; gap: 10px; width: 100%; border: none; text-align: left; font-size: 15px; cursor: pointer; min-height: 52px; }
+  .card.line { display: flex; justify-content: space-between; align-items: center; gap: 10px; width: 100%; border: none; text-align: left; font-size: calc(15px * var(--fs, 1)); cursor: pointer; min-height: 52px; }
   .card.line:hover { background: #FAFBFF; }
   /* 퀴즈 */
-  .quiz-head { display: flex; justify-content: space-between; align-items: center; width: 100%; border: none; background: transparent; color: #E7ECFF; font-size: 13px; padding: 0; min-height: 32px; cursor: pointer; }
+  .quiz-head { display: flex; justify-content: space-between; align-items: center; width: 100%; border: none; background: transparent; color: #E7ECFF; font-size: calc(13px * var(--fs, 1)); padding: 0; min-height: 32px; cursor: pointer; }
   .quiz-head span:last-child { font-weight: 700; color: #fff; }
   .quiz .ex b { color: #fff; }
   .ox.light button { background: var(--soft); color: var(--ink); border: 1px solid var(--line); }
@@ -315,31 +315,31 @@
   .ox.light button.dim { background: var(--soft); color: #AEB8CC; }
   .ox.light button.wrong { background: #FFEAF0; color: var(--up); border-color: #FFC9D6; }
   .c-quiz { display: flex; flex-direction: column; gap: 8px; background: var(--soft); border-radius: 14px; padding: 12px; }
-  .c-quiz .q { margin: 0; font-size: 14px; font-weight: 700; line-height: 1.5; }
-  .c-quiz .ex { margin: 0; font-size: 13px; line-height: 1.6; color: var(--ink); }
+  .c-quiz .q { margin: 0; font-size: calc(14px * var(--fs, 1)); font-weight: 700; line-height: 1.5; }
+  .c-quiz .ex { margin: 0; font-size: calc(13px * var(--fs, 1)); line-height: 1.6; color: var(--ink); }
   .c-quiz .ex b { color: var(--green); }
   /* 경제 공부 */
   .stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; padding: 12px; }
   .stats > * { display: flex; flex-direction: column; align-items: center; gap: 2px; border: none; background: transparent; font-size: inherit; padding: 4px 0; }
   .stats button { cursor: pointer; border-radius: 12px; }
   .stats button:hover { background: var(--soft); }
-  .stats b { font-size: 22px; } .stats small { font-size: 13px; color: var(--sub); font-weight: 500; }
-  .stats span { font-size: 12px; color: var(--sub); }
+  .stats b { font-size: calc(22px * var(--fs, 1)); } .stats small { font-size: calc(13px * var(--fs, 1)); color: var(--sub); font-weight: 500; }
+  .stats span { font-size: calc(12px * var(--fs, 1)); color: var(--sub); }
   .concept { border-top: 1px solid #EEF1F8; }
   .concept:first-child { border-top: none; }
   .c-head { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 56px; padding: 10px 0; border: none; background: transparent; text-align: left; cursor: pointer; font-size: inherit; }
-  .c-head .t { font-size: 15px; font-weight: 700; }
-  .c-head .d { font-size: 12px; color: var(--sub); margin-top: 2px; }
+  .c-head .t { font-size: calc(15px * var(--fs, 1)); font-weight: 700; }
+  .c-head .d { font-size: calc(12px * var(--fs, 1)); color: var(--sub); margin-top: 2px; }
   .c-body { padding: 0 0 14px; display: flex; flex-direction: column; gap: 10px; }
-  .c-body p { margin: 0; font-size: 14px; line-height: 1.7; }
-  .c-body .me { background: #EAF0FF; border-radius: 12px; padding: 10px 12px; font-size: 13px; }
+  .c-body p { margin: 0; font-size: calc(14px * var(--fs, 1)); line-height: 1.7; }
+  .c-body .me { background: #EAF0FF; border-radius: 12px; padding: 10px 12px; font-size: calc(13px * var(--fs, 1)); }
   .c-body .me b { color: var(--green); margin-right: 4px; }
   /* 혜택 */
   .benefit2 { display: flex; flex-direction: column; gap: 4px; padding: 12px 0; border-top: 1px solid #EEF1F8; }
   .benefit2:first-child { border-top: none; }
-  .benefit2 .t { font-size: 15px; font-weight: 700; line-height: 1.4; }
-  .benefit2 .d { font-size: 13px; color: var(--sub); line-height: 1.5; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-  .benefit2 .m { font-size: 12px; color: var(--sub); display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+  .benefit2 .t { font-size: calc(15px * var(--fs, 1)); font-weight: 700; line-height: 1.4; }
+  .benefit2 .d { font-size: calc(13px * var(--fs, 1)); color: var(--sub); line-height: 1.5; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .benefit2 .m { font-size: calc(12px * var(--fs, 1)); color: var(--sub); display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
   .benefit2:hover .t { color: var(--green); }
 
   /* ── 홈 한 화면에 들어오게 (홈에서만 적용) ── */
@@ -347,57 +347,57 @@
   .home-top .avatar { padding: 0 4px; flex-shrink: 0; }
   .home-top .searchwrap { position: relative; top: auto; padding: 0; flex: 1; min-width: 0; background: transparent; }
   .home-top .searchbox { min-height: 44px; padding-left: 12px; }
-  .home-top .searchbox input { font-size: 14px; }
+  .home-top .searchbox input { font-size: calc(14px * var(--fs, 1)); }
   .home-top .sresults { top: 50px; left: -46px; right: -48px; }
   .scroll.home { padding-top: 0; } /* 칸 사이 간격은 다른 화면과 같은 16px */
   .home .hero { gap: 10px; padding-top: 2px; align-items: flex-start; }
   .home .bubble { padding: 12px 10px 4px 14px; border-radius: 6px 20px 20px 20px; }
-  .home .bubble p { font-size: 15.5px; line-height: 1.55; min-height: 0; }
+  .home .bubble p { font-size: calc(15.5px * var(--fs, 1)); line-height: 1.55; min-height: 0; }
   .home .bubble .link-btn { min-height: 36px; }
   .home .sec-title { margin-bottom: 8px; }
   .home .plus { min-height: 34px; }
-  .home .sec-title h2 { font-size: 16px; }
+  .home .sec-title h2 { font-size: calc(16px * var(--fs, 1)); }
   .home .card { padding: 14px 16px; }
   .mkt.line { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; }
   .mkt.line::-webkit-scrollbar { display: none; }
   .mkt.line > * { flex: 0 0 112px; padding: 12px 8px; border-radius: 16px; }
-  .mkt.line .v { font-size: 17px; }
-  .mkt.line .k, .mkt.line .c { font-size: 12px; }
+  .mkt.line .v { font-size: calc(17px * var(--fs, 1)); }
+  .mkt.line .k, .mkt.line .c { font-size: calc(12px * var(--fs, 1)); }
   .mkt.line .add { min-height: 0; }
   .home .impact { width: 236px; padding: 14px; gap: 8px; border-radius: 18px; }
-  .home .impact p { font-size: 14px; line-height: 1.55; }
-  .home .nl a { min-height: 44px; font-size: 15px; }
-  .home .chip.small { min-height: 34px; font-size: 13px; }
+  .home .impact p { font-size: calc(14px * var(--fs, 1)); line-height: 1.55; }
+  .home .nl a { min-height: 44px; font-size: calc(15px * var(--fs, 1)); }
+  .home .chip.small { min-height: 34px; font-size: calc(13px * var(--fs, 1)); }
   .links { padding: 4px 16px !important; }
-  .lrow { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 52px; border: none; background: transparent; text-align: left; font-size: 15px; cursor: pointer; border-top: 1px solid #EEF1F8; padding: 0; }
+  .lrow { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 52px; border: none; background: transparent; text-align: left; font-size: calc(15px * var(--fs, 1)); cursor: pointer; border-top: 1px solid #EEF1F8; padding: 0; }
   .lrow:first-child { border-top: none; }
-  .lrow .lk { flex-shrink: 0; font-size: 12px; font-weight: 700; color: var(--green); background: #EAF0FF; border-radius: 6px; padding: 3px 7px; }
+  .lrow .lk { flex-shrink: 0; font-size: calc(12px * var(--fs, 1)); font-weight: 700; color: var(--green); background: #EAF0FF; border-radius: 6px; padding: 3px 7px; }
   .lrow .lv { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--sub); }
   .lrow .lv b { color: var(--ink); }
   .lrow:hover .lv b { color: var(--green); }
   .home .quiz { padding: 14px 16px; gap: 8px; }
-  .home .quiz-head { min-height: 32px; font-size: 13px; }
+  .home .quiz-head { min-height: 32px; font-size: calc(13px * var(--fs, 1)); }
   .qrow { display: flex; align-items: center; gap: 10px; }
-  .qrow .q { flex: 1; font-size: 15px; line-height: 1.5; margin: 0; }
+  .qrow .q { flex: 1; font-size: calc(15px * var(--fs, 1)); line-height: 1.5; margin: 0; }
   .ox.mini { display: flex; gap: 6px; flex-shrink: 0; }
-  .ox.mini button { width: 50px; min-height: 50px; font-size: 20px; border-radius: 14px; }
-  .home .quiz .ex { font-size: 13.5px; line-height: 1.6; }
+  .ox.mini button { width: 50px; min-height: 50px; font-size: calc(20px * var(--fs, 1)); border-radius: 14px; }
+  .home .quiz .ex { font-size: calc(13.5px * var(--fs, 1)); line-height: 1.6; }
   .home .more { padding: 14px 16px; gap: 10px; }
   .home .foot { padding-top: 0; }
 
   /* 뉴스 쉽게 풀이 */
-  .brief-line { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 44px; border: none; border-radius: 12px; background: #EAF0FF; padding: 0 12px 0 8px; margin-bottom: 4px; text-align: left; font-size: 14px; cursor: pointer; }
+  .brief-line { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 44px; border: none; border-radius: 12px; background: #EAF0FF; padding: 0 12px 0 8px; margin-bottom: 4px; text-align: left; font-size: calc(14px * var(--fs, 1)); cursor: pointer; }
   .brief-line .bl-t { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .brief-line b { color: var(--green); margin-right: 4px; }
-  .bp-mood { display: flex; align-items: center; gap: 10px; font-family: 'Jua', sans-serif; font-size: 16px; line-height: 1.5; margin-bottom: 4px; }
+  .bp-mood { display: flex; align-items: center; gap: 10px; font-family: 'Jua', sans-serif; font-size: calc(16px * var(--fs, 1)); line-height: 1.5; margin-bottom: 4px; }
   .bp { border-top: 1px solid #EEF1F8; padding: 12px 0; display: flex; flex-direction: column; gap: 6px; }
-  .bp-t { font-size: 15px; font-weight: 700; }
-  .bp p { margin: 0; font-size: 14px; line-height: 1.65; }
-  .bp .me { background: #EAF0FF; border-radius: 10px; padding: 8px 10px; font-size: 13px; }
+  .bp-t { font-size: calc(15px * var(--fs, 1)); font-weight: 700; }
+  .bp p { margin: 0; font-size: calc(14px * var(--fs, 1)); line-height: 1.65; }
+  .bp .me { background: #EAF0FF; border-radius: 10px; padding: 8px 10px; font-size: calc(13px * var(--fs, 1)); }
   .bp .me b { color: var(--green); margin-right: 4px; }
   .bp-s { display: flex; gap: 6px; flex-wrap: wrap; }
-  .bp-s a { font-size: 12px; color: var(--sub); background: var(--soft); border-radius: 999px; padding: 4px 10px; display: inline-flex; align-items: center; gap: 3px; min-height: 28px; }
-  textarea.field { padding: 10px 12px; min-height: 110px; resize: vertical; line-height: 1.5; font-size: 14px; }
+  .bp-s a { font-size: calc(12px * var(--fs, 1)); color: var(--sub); background: var(--soft); border-radius: 999px; padding: 4px 10px; display: inline-flex; align-items: center; gap: 3px; min-height: 28px; }
+  textarea.field { padding: 10px 12px; min-height: 110px; resize: vertical; line-height: 1.5; font-size: calc(14px * var(--fs, 1)); }
 
   /* ═══ 파스텔 디자인 (색·글꼴·카드 모양만, 배치는 그대로) ═══ */
   body { background: #EEF1FB; color: var(--ink); }
@@ -411,8 +411,8 @@
   .top, .page-head, .askbar { background: rgba(248, 248, 255, 0.82); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); }
   .home-top .searchwrap { background: transparent; }
   h1, h2, .brand, .hand, .bp-t, .stats b, .mkt .v, .quiz .q, .bubble p { font-family: 'Jua', sans-serif; font-weight: 400; letter-spacing: 0; }
-  .page-head h1 { font-size: 20px; }
-  .sec-title h2, .home .sec-title h2 { font-size: 17px; }
+  .page-head h1 { font-size: calc(20px * var(--fs, 1)); }
+  .sec-title h2, .home .sec-title h2 { font-size: calc(17px * var(--fs, 1)); }
 
   /* 카드: 둥글고 얇은 테두리 + 부드러운 그림자 */
   .card, .mkt div, .mkt.line > *, .impact, .bubble, .results, .sresults, .searchbox {
@@ -462,8 +462,8 @@
   .more { border-color: #D8E1ED; border-radius: 22px; background: rgba(255,255,255,0.75); }
   .sheet { background: #F8F8FF; }
   .sheet .qline { background: var(--green); }
-  .stats b { font-size: 24px; }
-  .onb h1 { font-family: 'Jua', sans-serif; font-weight: 400; font-size: 26px; }
+  .stats b { font-size: calc(24px * var(--fs, 1)); }
+  .onb h1 { font-family: 'Jua', sans-serif; font-weight: 400; font-size: calc(26px * var(--fs, 1)); }
   .steps i.on { background: linear-gradient(90deg, #7C96FF, #FF9EBB); }
   .range { accent-color: #7C96FF; }
 
@@ -496,10 +496,10 @@
   .layout-lists { flex: 1 1 200px; min-width: 0; display: flex; flex-direction: column; gap: 14px; }
   .lo-row { display: flex; align-items: center; gap: 6px; min-height: 48px; border-top: 1px solid #EEF1F8; }
   .lo-row:first-of-type { border-top: none; }
-  .lo-n { width: 20px; flex-shrink: 0; font-size: 12px; color: var(--sub); text-align: center; }
-  .lo-t { flex: 1; min-width: 0; font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .lo-n { width: 20px; flex-shrink: 0; font-size: calc(12px * var(--fs, 1)); color: var(--sub); text-align: center; }
+  .lo-t { flex: 1; min-width: 0; font-size: calc(14px * var(--fs, 1)); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .lo-row.off .lo-t { color: #AEB8CC; text-decoration: line-through; }
-  .lo-b { min-width: 44px; height: 44px; border-radius: 999px; border: 1px solid #D8E1ED; background: #fff; color: var(--green); font-size: 12px; font-weight: 700; cursor: pointer; flex-shrink: 0; }
+  .lo-b { min-width: 44px; height: 44px; border-radius: 999px; border: 1px solid #D8E1ED; background: #fff; color: var(--green); font-size: calc(12px * var(--fs, 1)); font-weight: 700; cursor: pointer; flex-shrink: 0; }
   .lo-b:disabled { opacity: 0.35; cursor: default; }
   .lo-b.eye { min-width: 52px; }
   .lo-row.off .lo-b.eye { background: #F5F7FE; color: var(--sub); }
@@ -515,65 +515,65 @@
   @media (min-width: 441px) { .drawer-back { padding-left: calc(50vw - 220px); } }
   .dr-head { display: flex; align-items: center; gap: 10px; padding: 4px 0 14px 4px; border-bottom: 1px solid #E3E2F7; margin-bottom: 6px; }
   .dr-head > div { flex: 1; display: flex; flex-direction: column; }
-  .dr-head b { font-size: 17px; font-weight: 400; }
-  .dr-head span { font-size: 12px; color: var(--sub); }
+  .dr-head b { font-size: calc(17px * var(--fs, 1)); font-weight: 400; }
+  .dr-head span { font-size: calc(12px * var(--fs, 1)); color: var(--sub); }
   .dr-group { display: flex; flex-direction: column; padding: 8px 0; border-bottom: 1px solid #E3E2F7; }
   .dr-group:last-child { border-bottom: none; }
   .dr-search { margin: 4px 0 6px; }
   .dr-fold { display: flex; justify-content: space-between; align-items: center; width: 100%; }
-  .dr-chev { font-size: 20px; color: var(--sub); width: 24px; text-align: center; }
-  .dr-title { font-family: 'Jua', sans-serif; font-size: 16px; color: var(--green); text-align: left; background: transparent; border: none; padding: 6px 8px; min-height: 40px; cursor: pointer; }
+  .dr-chev { font-size: calc(20px * var(--fs, 1)); color: var(--sub); width: 24px; text-align: center; }
+  .dr-title { font-family: 'Jua', sans-serif; font-size: calc(16px * var(--fs, 1)); color: var(--green); text-align: left; background: transparent; border: none; padding: 6px 8px; min-height: 40px; cursor: pointer; }
   span.dr-title { display: flex; align-items: center; cursor: default; }
-  .dr-item { text-align: left; background: transparent; border: none; border-radius: 12px; padding: 0 12px 0 22px; min-height: 44px; font-size: 15px; color: var(--ink); cursor: pointer; position: relative; }
+  .dr-item { text-align: left; background: transparent; border: none; border-radius: 12px; padding: 0 12px 0 22px; min-height: 44px; font-size: calc(15px * var(--fs, 1)); color: var(--ink); cursor: pointer; position: relative; }
   .dr-item::before { content: ""; position: absolute; left: 10px; top: 50%; width: 5px; height: 5px; margin-top: -2.5px; border-radius: 50%; background: #C9B8F5; }
   .dr-item:hover, .dr-item:focus-visible { background: rgba(255, 255, 255, 0.75); }
   [id^="h-"], [id^="sec-"], [id^="m-"] { scroll-margin-top: 76px; }
 
   /* 경제 공부: 정렬·화제 */
   .sortbar { display: flex; gap: 4px; background: rgba(255,255,255,0.7); border: 1px solid #E3E8F5; border-radius: 999px; padding: 4px; align-self: flex-start; max-width: 100%; overflow-x: auto; }
-  .sortbar button { flex-shrink: 0; min-height: 36px; padding: 0 14px; border: none; border-radius: 999px; background: transparent; color: var(--sub); font-size: 13px; font-weight: 600; cursor: pointer; }
+  .sortbar button { flex-shrink: 0; min-height: 36px; padding: 0 14px; border: none; border-radius: 999px; background: transparent; color: var(--sub); font-size: calc(13px * var(--fs, 1)); font-weight: 600; cursor: pointer; }
   .sortbar button.on { background: var(--green); color: #fff; box-shadow: 0 4px 10px rgba(91, 124, 250, 0.25); }
-  .hot { font-size: 11px; font-weight: 700; color: #E5486A; background: #FFEAF0; border-radius: 999px; padding: 2px 7px; margin-left: 4px; vertical-align: 1px; }
+  .hot { font-size: calc(11px * var(--fs, 1)); font-weight: 700; color: #E5486A; background: #FFEAF0; border-radius: 999px; padding: 2px 7px; margin-left: 4px; vertical-align: 1px; }
   .hot-list { display: flex; flex-direction: column; }
-  .hot-item { display: flex; align-items: center; gap: 10px; min-height: 44px; border: none; background: transparent; border-top: 1px solid #EEF1F8; text-align: left; cursor: pointer; padding: 0; font-size: 15px; }
+  .hot-item { display: flex; align-items: center; gap: 10px; min-height: 44px; border: none; background: transparent; border-top: 1px solid #EEF1F8; text-align: left; cursor: pointer; padding: 0; font-size: calc(15px * var(--fs, 1)); }
   .hot-item:first-child { border-top: none; }
   .hot-row { display: flex; flex-direction: column; border-top: 1px solid #EEF1F8; }
   .hot-row:first-child { border-top: none; }
   .hot-row .hot-item { border-top: none; }
-  .hot-quiz { align-self: flex-end; margin: 0 0 8px; min-height: 36px; padding: 0 14px; border: none; border-radius: 12px; background: var(--mint); color: var(--green); font-size: 13px; font-weight: 700; cursor: pointer; }
+  .hot-quiz { align-self: flex-end; margin: 0 0 8px; min-height: 36px; padding: 0 14px; border: none; border-radius: 12px; background: var(--mint); color: var(--green); font-size: calc(13px * var(--fs, 1)); font-weight: 700; cursor: pointer; }
   .hot-quiz.done { background: transparent; color: var(--sub); }
   .mode-pick { display: flex; flex-direction: column; gap: 4px; text-align: left; cursor: pointer; border: 1px solid var(--line); }
-  .mode-pick b { font-size: 17px; }
-  .hot-rank { width: 24px; height: 24px; border-radius: 50%; flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; font-family: 'Jua', sans-serif; font-size: 14px; color: #fff; background: linear-gradient(135deg, #7C96FF, #FF9EBB); }
+  .mode-pick b { font-size: calc(17px * var(--fs, 1)); }
+  .hot-rank { width: 24px; height: 24px; border-radius: 50%; flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; font-family: 'Jua', sans-serif; font-size: calc(14px * var(--fs, 1)); color: #fff; background: linear-gradient(135deg, #7C96FF, #FF9EBB); }
   .hot-t { flex: 1; font-weight: 600; }
-  .more-btn { width: 100%; min-height: 44px; border: none; border-top: 1px solid #EEF1F8; background: transparent; color: var(--green); font-size: 13px; font-weight: 700; cursor: pointer; }
+  .more-btn { width: 100%; min-height: 44px; border: none; border-top: 1px solid #EEF1F8; background: transparent; color: var(--green); font-size: calc(13px * var(--fs, 1)); font-weight: 700; cursor: pointer; }
 
   /* 마이페이지 저장 버튼 */
   .savebar { position: sticky; bottom: 0; z-index: 6; margin: 4px -16px -20px; padding: 12px 16px calc(14px + env(safe-area-inset-bottom));
     display: flex; align-items: center; justify-content: space-between; gap: 12px;
     background: rgba(248, 248, 255, 0.9); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); border-top: 1px solid #E3E8F5; }
-  .savebar span { font-size: 13px; color: var(--sub); }
+  .savebar span { font-size: calc(13px * var(--fs, 1)); color: var(--sub); }
   .savebar .btn { min-width: 120px; }
 
   /* 목표 저축 */
   .goal { display: flex; flex-direction: column; gap: 6px; padding: 8px 0; border-top: 1px solid #EEF1F8; }
   .goal:first-of-type { border-top: none; }
   .goal-top { display: flex; align-items: center; gap: 8px; }
-  .goal-top b { flex: 1; font-size: 15px; }
+  .goal-top b { flex: 1; font-size: calc(15px * var(--fs, 1)); }
   .goal-top .num { font-weight: 700; color: var(--green); }
   .gbar { height: 10px; border-radius: 999px; background: #EEF1F8; overflow: hidden; }
   .gbar i { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, #7C96FF, #B69CFF, #FF9EBB); }
   /* 성향 진단 */
   .rt-opts { display: flex; flex-direction: column; gap: 10px; }
-  .rt-opt { min-height: 56px; padding: 12px 16px; border-radius: 18px; border: 1px solid #E3E8F5; background: #fff; text-align: left; font-size: 15px; cursor: pointer; box-shadow: 0 4px 12px rgba(110, 130, 200, 0.08); }
+  .rt-opt { min-height: 56px; padding: 12px 16px; border-radius: 18px; border: 1px solid #E3E8F5; background: #fff; text-align: left; font-size: calc(15px * var(--fs, 1)); cursor: pointer; box-shadow: 0 4px 12px rgba(110, 130, 200, 0.08); }
   .rt-opt:hover, .rt-opt:focus-visible { border-color: var(--green); background: #F5F7FF; }
   /* 퀴즈 기록 */
-  .streak { font-family: 'Pretendard Variable', Pretendard, sans-serif; font-size: 11px; font-weight: 700; color: #fff; background: linear-gradient(90deg, #FF9EBB, #B69CFF); border-radius: 999px; padding: 2px 8px; margin-left: 4px; vertical-align: 1px; }
+  .streak { font-family: 'Pretendard Variable', Pretendard, sans-serif; font-size: calc(11px * var(--fs, 1)); font-weight: 700; color: #fff; background: linear-gradient(90deg, #FF9EBB, #B69CFF); border-radius: 999px; padding: 2px 8px; margin-left: 4px; vertical-align: 1px; }
   .streak-card { display: flex; align-items: center; gap: 14px; padding: 12px 16px; background: linear-gradient(135deg, #FFF0F6, #F3ECFF); }
   .streak-card > div { display: flex; flex-direction: column; align-items: center; min-width: 76px; }
-  .streak-card b { font-family: 'Jua', sans-serif; font-weight: 400; font-size: 26px; color: #E5486A; }
-  .streak-card span { font-size: 11px; color: var(--sub); }
-  .streak-card p { margin: 0; font-size: 14px; line-height: 1.5; }
+  .streak-card b { font-family: 'Jua', sans-serif; font-weight: 400; font-size: calc(26px * var(--fs, 1)); color: #E5486A; }
+  .streak-card span { font-size: calc(11px * var(--fs, 1)); color: var(--sub); }
+  .streak-card p { margin: 0; font-size: calc(14px * var(--fs, 1)); line-height: 1.5; }
 
   .amt { display: flex; gap: 6px; }
   .amt input { flex: 1; min-width: 0; text-align: right; }
@@ -582,21 +582,21 @@
   /* 내 돈 기록 */
   .money-card { display: block; width: 100%; text-align: left; border: 1px solid #E3E8F5; cursor: pointer; font-size: inherit; }
   .money-row { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
-  .money-row b { font-family: 'Jua', sans-serif; font-weight: 400; font-size: 24px; }
+  .money-row b { font-family: 'Jua', sans-serif; font-weight: 400; font-size: calc(24px * var(--fs, 1)); }
   .cat-row { display: flex; align-items: center; gap: 8px; min-height: 30px; }
-  .cat-name { width: 72px; flex-shrink: 0; font-size: 13px; }
+  .cat-name { width: 72px; flex-shrink: 0; font-size: calc(13px * var(--fs, 1)); }
   .cat-bar { flex: 1; height: 10px; border-radius: 999px; background: #EEF1F8; overflow: hidden; }
   .cat-bar i { display: block; height: 100%; border-radius: 999px; }
-  .cat-v { width: 70px; text-align: right; font-size: 13px; font-weight: 700; flex-shrink: 0; }
+  .cat-v { width: 70px; text-align: right; font-size: calc(13px * var(--fs, 1)); font-weight: 700; flex-shrink: 0; }
   .cap-list { display: flex; flex-direction: column; }
   .cap-row, .tx-row { display: flex; align-items: center; gap: 8px; min-height: 52px; border-top: 1px solid #EEF1F8; }
   .cap-row input[type=checkbox] { width: 20px; height: 20px; accent-color: var(--green); flex-shrink: 0; }
   .cap-row.off { opacity: 0.45; }
   .cap-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
-  .cap-main b { font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .cap-cat { width: 96px; flex: 0 0 auto; min-height: 36px; font-size: 12px; padding: 0 6px; }
-  .cap-amt { font-weight: 700; font-size: 14px; white-space: nowrap; }
-  .tx-day { font-size: 12px; font-weight: 700; color: var(--sub); padding: 10px 0 2px; }
+  .cap-main b { font-size: calc(14px * var(--fs, 1)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .cap-cat { width: 96px; flex: 0 0 auto; min-height: 36px; font-size: calc(12px * var(--fs, 1)); padding: 0 6px; }
+  .cap-amt { font-weight: 700; font-size: calc(14px * var(--fs, 1)); white-space: nowrap; }
+  .tx-day { font-size: calc(12px * var(--fs, 1)); font-weight: 700; color: var(--sub); padding: 10px 0 2px; }
   .tx-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
 
   /* ═════════ 신뢰감 디자인 (맨 마지막에 두어 앞의 파스텔 스타일을 덮어씀) ═════════ */
@@ -610,14 +610,14 @@
     font-family: 'Pretendard Variable', Pretendard, sans-serif !important; letter-spacing: -0.4px;
   }
   h1, h2, .sec-title h2, .home .sec-title h2 { font-weight: 700 !important; }
-  .sec-title h2, .home .sec-title h2 { font-size: 18px; }
+  .sec-title h2, .home .sec-title h2 { font-size: calc(18px * var(--fs, 1)); }
   .hint, .sec-title span { color: var(--sub); }
 
   /* 머리·검색 */
   .top, .page-head, .askbar { background: rgba(242, 244, 246, 0.94) !important; -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); }
   .home-top { padding: 12px 8px 6px 16px !important; justify-content: space-between; }
   .brandbtn { display: flex; align-items: center; gap: 8px; border: none; background: transparent; min-height: 44px; padding: 0; cursor: pointer; }
-  .brandbtn span { font-size: 20px; font-weight: 800; letter-spacing: -0.6px; color: var(--ink); }
+  .brandbtn span { font-size: calc(20px * var(--fs, 1)); font-weight: 800; letter-spacing: -0.6px; color: var(--ink); }
   .top-icons { display: flex; align-items: center; margin-left: auto; }
   .top-icons .icon-btn, .home-top .icon-btn { color: #4E5968; background: transparent !important; border: none !important; box-shadow: none !important; }
   .searchwrap { top: 62px !important; padding: 2px 16px 10px !important; background: rgba(242, 244, 246, 0.94) !important; }
@@ -630,16 +630,16 @@
   .sg { color: var(--sub) !important; }
   .si:hover, .si:focus-visible { background: #F2F4F6 !important; }
   .si.ask { color: var(--green) !important; border-top-color: var(--line) !important; }
-  .page-head h1 { font-size: 20px; font-weight: 700; }
+  .page-head h1 { font-size: calc(20px * var(--fs, 1)); font-weight: 700; }
   .tab-head { padding: 14px 8px 8px 20px !important; }
-  .tab-head h1 { font-size: 26px !important; font-weight: 800 !important; letter-spacing: -0.8px; }
+  .tab-head h1 { font-size: calc(26px * var(--fs, 1)) !important; font-weight: 800 !important; letter-spacing: -0.8px; }
 
   /* 카드 */
   .card, .mkt div, .mkt.line > *, .impact, .bubble, .results, .more, .quiz, .hero {
     background: #FFFFFF !important; border: none !important; border-radius: 20px !important; box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04) !important;
   }
   .mkt.line > * { border-radius: 16px !important; }
-  .mkt .v, .mkt.line .v { font-weight: 800; font-size: 17px; }
+  .mkt .v, .mkt.line .v { font-weight: 800; font-size: calc(17px * var(--fs, 1)); }
   .mkt .add, .mkt.line .add { background: transparent !important; border: 1.5px dashed #D1D6DB !important; box-shadow: none !important; color: var(--sub); }
   .row, .news a, .nl a, .cal, .benefit, .benefit2, .concept, .lrow, .hot-item, .more-btn, .goal, .cap-row, .tx-row, .lo-row, .dr-group, .bp { border-color: #F2F4F6 !important; }
 
@@ -647,7 +647,7 @@
   .hero { padding: 16px !important; background: #FFFFFF !important; align-items: center !important; }
   .hero::before, .hero::after, .quiz::after { display: none !important; }
   .bubble, .home .bubble { background: #F2F4F6 !important; box-shadow: none !important; border-radius: 4px 16px 16px 16px !important; }
-  .bubble p, .home .bubble p { font-size: 15px !important; font-weight: 600; line-height: 1.55; }
+  .bubble p, .home .bubble p { font-size: calc(15px * var(--fs, 1)) !important; font-weight: 600; line-height: 1.55; }
   .dot { background: #D1D6DB; } .dot.on { background: var(--green); }
   .link-btn { color: var(--green); }
 
@@ -663,7 +663,7 @@
   .c-quiz { background: #F7F8FA; }
   .streak { background: var(--green) !important; font-weight: 700; }
   .streak-card { background: #FFFFFF !important; }
-  .streak-card b { color: var(--green) !important; font-weight: 800 !important; font-size: 26px; }
+  .streak-card b { color: var(--green) !important; font-weight: 800 !important; font-size: calc(26px * var(--fs, 1)); }
 
   /* 칩·버튼·배지 */
   .chip { border: 1px solid var(--line) !important; background: #fff; font-weight: 600; }
@@ -671,7 +671,7 @@
   .btn { background: var(--green) !important; border-radius: 14px !important; box-shadow: none !important; font-weight: 700; }
   .btn.ghost { background: #F2F4F6 !important; color: #4E5968 !important; border: none !important; }
   .btn.danger { background: var(--up-bg) !important; color: var(--up) !important; }
-  .btn.sm { min-height: 40px; padding: 0 14px; font-size: 14px; }
+  .btn.sm { min-height: 40px; padding: 0 14px; font-size: calc(14px * var(--fs, 1)); }
   .plus { background: #F2F4F6 !important; border: none !important; color: #4E5968 !important; border-radius: 10px !important; font-weight: 600; }
   .badge { border-radius: 6px !important; }
   .b-green, .lrow .lk, .cal .tagc { background: var(--mint) !important; color: #0B8F7F !important; }
@@ -688,7 +688,7 @@
   .hot { background: var(--up-bg) !important; color: var(--up) !important; }
   .lo-b { color: var(--green); border-color: var(--line) !important; }
   .money-card { border: none !important; }
-  .money-row b { font-weight: 800 !important; font-size: 26px; }
+  .money-row b { font-weight: 800 !important; font-size: calc(26px * var(--fs, 1)); }
   .me, .c-body .me, .bp .me { background: #F2F4F6 !important; }
   .c-body .me b, .bp .me b { color: var(--green) !important; }
   .sheet { background: var(--bg) !important; }
@@ -701,7 +701,7 @@
 
   /* 목차 바 */
   .drawer { background: #FFFFFF !important; box-shadow: 8px 0 30px rgba(0,0,0,0.15) !important; border-radius: 0 20px 20px 0 !important; }
-  .dr-title { color: var(--ink) !important; font-weight: 800 !important; font-size: 17px !important; }
+  .dr-title { color: var(--ink) !important; font-weight: 800 !important; font-size: calc(17px * var(--fs, 1)) !important; }
   .dr-item::before { background: #D1D6DB !important; }
   .dr-item:hover, .dr-item:focus-visible { background: #F2F4F6 !important; }
 
@@ -709,25 +709,25 @@
   .asset-card { padding: 20px !important; }
   .ac-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
   .ac-top > div { display: flex; flex-direction: column; gap: 4px; }
-  .big { font-size: 30px; font-weight: 800; letter-spacing: -1px; }
+  .big { font-size: calc(30px * var(--fs, 1)); font-weight: 800; letter-spacing: -1px; }
   .bar.thick { height: 22px; border-radius: 999px; margin: 18px 0 14px; gap: 2px; background: #F2F4F6; }
   .bar.thick > div:first-child { border-radius: 999px 0 0 999px; } .bar.thick > div:last-child { border-radius: 0 999px 999px 0; }
   .legend2 { display: flex; flex-direction: column; gap: 10px; }
-  .legend2 > div { display: flex; align-items: center; gap: 10px; font-size: 15px; }
+  .legend2 > div { display: flex; align-items: center; gap: 10px; font-size: calc(15px * var(--fs, 1)); }
   .legend2 i { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
   .legend2 span { width: 84px; }
   .legend2 b { color: var(--sub); font-weight: 500; }
   .ac-links { display: flex; justify-content: space-between; margin-top: 12px; border-top: 1px solid #F2F4F6; padding-top: 6px; }
   .mini-card { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; text-align: left; cursor: pointer; font-size: inherit; min-height: 120px; padding: 16px !important; }
-  .mini-card .mc-t { font-size: 15px; font-weight: 700; }
-  .mini-card b { font-size: 22px; font-weight: 800; color: var(--green); }
+  .mini-card .mc-t { font-size: calc(15px * var(--fs, 1)); font-weight: 700; }
+  .mini-card b { font-size: calc(22px * var(--fs, 1)); font-weight: 800; color: var(--green); }
 
   /* 하단 탭 */
   .scroll { padding-bottom: 104px !important; }
   .tabbar { position: fixed; left: 50%; transform: translateX(-50%); bottom: 0; width: 100%; max-width: 440px; z-index: 15;
     display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); background: #FFFFFF; border-top: 1px solid var(--line);
     padding: 6px 8px calc(8px + env(safe-area-inset-bottom)); }
-  .tabbar button { display: flex; flex-direction: column; align-items: center; gap: 3px; min-height: 52px; justify-content: center; border: none; background: transparent; color: #B0B8C1; font-size: 11px; font-weight: 600; cursor: pointer; }
+  .tabbar button { display: flex; flex-direction: column; align-items: center; gap: 3px; min-height: 52px; justify-content: center; border: none; background: transparent; color: #B0B8C1; font-size: calc(11px * var(--fs, 1)); font-weight: 600; cursor: pointer; }
   .tabbar button.on { color: var(--ink); }
   .savebar { bottom: calc(66px + env(safe-area-inset-bottom)) !important; background: rgba(242, 244, 246, 0.96) !important; }
   .sheet-back { z-index: 30; } .drawer-back { z-index: 40; }
@@ -736,16 +736,16 @@
   #splash { position: fixed; inset: 0; z-index: 100; background: #FFFFFF; display: flex; align-items: center; justify-content: center; transition: opacity 0.35s ease; }
   #splash.hide { opacity: 0; pointer-events: none; }
   #splash .sp-in { display: flex; flex-direction: column; align-items: center; gap: 10px; animation: sp-pop 0.5s ease-out; }
-  #splash b { font-size: 24px; font-weight: 800; letter-spacing: -0.8px; color: #191F28; margin-top: 6px; }
-  #splash span { font-size: 14px; color: #8B95A1; }
+  #splash b { font-size: calc(24px * var(--fs, 1)); font-weight: 800; letter-spacing: -0.8px; color: #191F28; margin-top: 6px; }
+  #splash span { font-size: calc(14px * var(--fs, 1)); color: #8B95A1; }
   @keyframes sp-pop { from { transform: scale(0.85); opacity: 0; } to { transform: none; opacity: 1; } }
   @media (prefers-reduced-motion: reduce) { #splash .sp-in { animation: none; } }
 
   /* 공부 탭 바로가기 */
   .hub { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
   .hub-item { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; min-height: 76px; padding: 14px; border: none; border-radius: 18px; background: #fff; box-shadow: 0 2px 12px rgba(0,0,0,0.04); text-align: left; cursor: pointer; font-size: inherit; }
-  .hub-item b { font-size: 15px; font-weight: 700; color: var(--ink); }
-  .hub-item span { font-size: 12px; color: var(--sub); }
+  .hub-item b { font-size: calc(15px * var(--fs, 1)); font-weight: 700; color: var(--ink); }
+  .hub-item span { font-size: calc(12px * var(--fs, 1)); color: var(--sub); }
   .hub-item:hover { background: #FAFBFC; }
 
   /* ═════ 루미 팔레트 ═════ */
@@ -768,7 +768,7 @@
   .ex-row { display: flex; gap: 10px; align-items: flex-start; }
   .ex-row .ex { flex: 1; }
   .lumi-says { display: flex; align-items: flex-end; gap: 10px; }
-  .bubble-onb { margin: 0; flex: 1; background: #F1F5FB; border-radius: 18px 18px 18px 4px; padding: 14px 16px; font-size: 15px; line-height: 1.6; }
+  .bubble-onb { margin: 0; flex: 1; background: #F1F5FB; border-radius: 18px 18px 18px 4px; padding: 14px 16px; font-size: calc(15px * var(--fs, 1)); line-height: 1.6; }
   .bubble-onb b { color: var(--blue); }
 
   /* ═════ 디자인 견본(DESIGN.md): 홈부터. 글꼴은 그대로, 여러 화면이 같이 쓰는 모양은 같이 바뀜 ═════ */
@@ -796,29 +796,29 @@
   .dot { background: #D2D6DD; } .dot.on { background: #3375D6 !important; }
 
   /* 글자 크기 */
-  .sec-title h2, .home .sec-title h2 { font-size: 18px; line-height: 26px; }
-  .brandbtn span { font-size: 20px; line-height: 28px; color: var(--green); }
-  .bubble p, .home .bubble p { font-size: 15px !important; line-height: 23px; }
-  .mkt .v, .mkt.line .v { font-size: 18px; line-height: 26px; }
-  .mkt .k, .mkt.line .k, .mkt .c, .mkt.line .c { font-size: 12px; line-height: 18px; }
-  .home .impact p { font-size: 14px; line-height: 20px; }
-  .nl .src { font-size: 12px; }
-  .qrow .q { font-size: 15px; line-height: 23px; }
-  .home .quiz .ex { font-size: 14px; line-height: 20px; }
-  .more .q { font-size: 16px; line-height: 24px; }
-  .home .foot { font-size: 12px; line-height: 18px; }
+  .sec-title h2, .home .sec-title h2 { font-size: calc(18px * var(--fs, 1)); line-height: 26px; }
+  .brandbtn span { font-size: calc(20px * var(--fs, 1)); line-height: 28px; color: var(--green); }
+  .bubble p, .home .bubble p { font-size: calc(15px * var(--fs, 1)) !important; line-height: 23px; }
+  .mkt .v, .mkt.line .v { font-size: calc(18px * var(--fs, 1)); line-height: 26px; }
+  .mkt .k, .mkt.line .k, .mkt .c, .mkt.line .c { font-size: calc(12px * var(--fs, 1)); line-height: 18px; }
+  .home .impact p { font-size: calc(14px * var(--fs, 1)); line-height: 20px; }
+  .nl .src { font-size: calc(12px * var(--fs, 1)); }
+  .qrow .q { font-size: calc(15px * var(--fs, 1)); line-height: 23px; }
+  .home .quiz .ex { font-size: calc(14px * var(--fs, 1)); line-height: 20px; }
+  .more .q { font-size: calc(16px * var(--fs, 1)); line-height: 24px; }
+  .home .foot { font-size: calc(12px * var(--fs, 1)); line-height: 18px; }
 
   /* 배지: 같은 계열 옅은 바탕 + 진한 글자 알약 */
-  .badge { font-size: 12px; line-height: 16px; font-weight: 700; padding: 2px 6px; border-radius: 999px !important; }
+  .badge { font-size: calc(12px * var(--fs, 1)); line-height: 16px; font-weight: 700; padding: 2px 6px; border-radius: 999px !important; }
   .b-green, .lrow .lk, .cal .tagc { background: var(--mint) !important; color: var(--green) !important; border-radius: 999px; }
   .b-sample { color: #8C5F12; background: #FAF3E8; }
 
   /* 버튼·칩 */
-  .btn { background: var(--green) !important; color: #FFFFFF; border-radius: 12px !important; min-height: 48px; font-size: 16px; box-shadow: none !important; }
+  .btn { background: var(--green) !important; color: #FFFFFF; border-radius: 12px !important; min-height: 48px; font-size: calc(16px * var(--fs, 1)); box-shadow: none !important; }
   .btn.ghost { background: var(--mint) !important; color: var(--green) !important; }
   .btn.block { min-height: 56px; border-radius: 16px !important; }
   .btn.danger { background: var(--up-bg) !important; color: var(--up) !important; }
-  .btn.sm { min-height: 40px; font-size: 14px; }
+  .btn.sm { min-height: 40px; font-size: calc(14px * var(--fs, 1)); }
   .chip { border: 1px solid var(--line) !important; background: var(--card); color: var(--ink); }
   .chip.on, .sortbar button.on { background: var(--green) !important; border-color: var(--green) !important; color: #FFFFFF !important; }
   .plus { background: var(--soft) !important; color: var(--sub) !important; border-radius: 12px !important; }
@@ -875,24 +875,24 @@
 
   /* ═════ 가계부: 달력 · 도넛 · 고치기 ═════ */
   .cal-nav { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
-  .cal-nav b { font-size: 15px; }
-  .cal-nav .icon-btn { font-size: 22px; }
+  .cal-nav b { font-size: calc(15px * var(--fs, 1)); }
+  .cal-nav .icon-btn { font-size: calc(22px * var(--fs, 1)); }
   .cal-nav .icon-btn:disabled { opacity: 0.25; }
   .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; }
-  .cal-grid i { font-style: normal; font-size: 11px; color: var(--sub); text-align: center; padding: 2px 0; }
+  .cal-grid i { font-style: normal; font-size: calc(11px * var(--fs, 1)); color: var(--sub); text-align: center; padding: 2px 0; }
   .cal-d { min-height: 44px; min-width: 0; border: none; border-radius: 8px; background: #F6F7F9; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; padding: 4px 0 2px; cursor: pointer; font: inherit; color: var(--ink); }
-  .cal-d b { font-size: 12px; font-weight: 600; }
-  .cal-d span { font-size: 10px; margin-top: 2px; letter-spacing: -0.3px; white-space: nowrap; }
+  .cal-d b { font-size: calc(12px * var(--fs, 1)); font-weight: 600; }
+  .cal-d span { font-size: calc(10px * var(--fs, 1)); margin-top: 2px; letter-spacing: -0.3px; white-space: nowrap; }
   .cal-d.today b { color: #1E40AF; text-decoration: underline; }
   .cal-d.on { outline: 2px solid #1E40AF; }
   .cal-list { margin-top: 8px; }
   .donut-wrap { display: flex; align-items: center; gap: 14px; margin: 4px 0 10px; }
   .donut { width: 104px; height: 104px; border-radius: 50%; flex-shrink: 0; display: grid; place-items: center; }
-  .donut span { width: 64px; height: 64px; border-radius: 50%; background: #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 11px; color: var(--sub); text-align: center; line-height: 1.2; }
-  .donut span b { font-size: 16px; color: var(--ink); }
+  .donut span { width: 64px; height: 64px; border-radius: 50%; background: #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: calc(11px * var(--fs, 1)); color: var(--sub); text-align: center; line-height: 1.2; }
+  .donut span b { font-size: calc(16px * var(--fs, 1)); color: var(--ink); }
   .cat-name { display: inline-flex; align-items: center; gap: 6px; width: 92px; }
   .cat-v { display: flex; flex-direction: column; align-items: flex-end; line-height: 1.2; width: 84px; }
-  .cat-v small { font-size: 11px; font-weight: 500; }
+  .cat-v small { font-size: calc(11px * var(--fs, 1)); font-weight: 500; }
   .cat-v small.up, b.up { color: var(--up); }
   .cat-v small.down, b.down { color: var(--down); }
   .cat-v small.flat { color: var(--sub); }
@@ -904,15 +904,15 @@
 
   /* ═════ 탭 나누기 · 팝업 · 분석 ═════ */
   .sortbar.seg2 { align-self: stretch; display: flex; }
-  .sortbar.seg2 button { flex: 1; font-size: 15px; min-height: 40px; }
+  .sortbar.seg2 button { flex: 1; font-size: calc(15px * var(--fs, 1)); min-height: 40px; }
   .sortbar.seg4 { align-self: stretch; display: flex; }
-  .sortbar.seg4 button { flex: 1; font-size: 15px; min-height: 40px; padding-left: 4px; padding-right: 4px; }
+  .sortbar.seg4 button { flex: 1; font-size: calc(15px * var(--fs, 1)); min-height: 40px; padding-left: 4px; padding-right: 4px; }
   .modal { max-height: calc(100dvh - 32px); overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
   .modal .lb { display: block; }
   .flow3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; text-align: center; }
   .flow3 > div { background: var(--soft); border-radius: 12px; padding: 10px 4px; display: flex; flex-direction: column; gap: 2px; }
-  .flow3 span { font-size: 12px; color: var(--sub); }
-  .flow3 b { font-size: 15px; }
+  .flow3 span { font-size: calc(12px * var(--fs, 1)); color: var(--sub); }
+  .flow3 b { font-size: calc(15px * var(--fs, 1)); }
   .flow3 b.up { color: var(--up); }
   .flow3 b.down { color: var(--down); }
   .goal-btn { width: 100%; background: none; border-left: none; border-right: none; border-bottom: none; text-align: left; font: inherit; color: inherit; cursor: pointer; padding: 10px 0; }
@@ -921,8 +921,8 @@
   /* ═════ 공부: 푼 문제 목록 ═════ */
   .solved-row { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 56px; padding: 10px 0; border: none; border-top: 1px solid #EEF1F8; background: none; text-align: left; font: inherit; color: inherit; cursor: pointer; }
   .solved-row:first-child { border-top: none; }
-  .solved-row .t { font-size: 15px; font-weight: 700; }
-  .solved-row .d { font-size: 13px; color: var(--sub); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .solved-row .t { font-size: calc(15px * var(--fs, 1)); font-weight: 700; }
+  .solved-row .d { font-size: calc(13px * var(--fs, 1)); color: var(--sub); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .modal .c-quiz, .qpage .c-quiz { display: flex; flex-direction: column; gap: 10px; }
   .openad-back { align-items: center !important; padding: 16px; z-index: 55 !important; }
   .openad { width: 100%; max-width: 360px; background: var(--card); border: 1px solid #F0F2F5; border-radius: 16px; padding: 8px 16px 16px; display: flex; flex-direction: column; gap: 8px; }
@@ -933,15 +933,15 @@
   .ad-bar i { display: block; height: 100%; border-radius: 999px; background: #3375D6; transition: width 1s linear; }
   /* 객관식 보기 · 단답식 입력 */
   .mcq { display: flex; flex-direction: column; gap: 8px; }
-  .mcq button { display: flex; align-items: flex-start; gap: 10px; width: 100%; min-height: 48px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--card); color: var(--ink); font: inherit; font-size: 15px; line-height: 22px; text-align: left; cursor: pointer; }
-  .mcq .mcn { flex: 0 0 22px; height: 22px; border-radius: 6px; background: var(--soft); color: var(--sub); font-size: 13px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; }
+  .mcq button { display: flex; align-items: flex-start; gap: 10px; width: 100%; min-height: 48px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--card); color: var(--ink); font: inherit; font-size: calc(15px * var(--fs, 1)); line-height: 22px; text-align: left; cursor: pointer; }
+  .mcq .mcn { flex: 0 0 22px; height: 22px; border-radius: 6px; background: var(--soft); color: var(--sub); font-size: calc(13px * var(--fs, 1)); font-weight: 700; display: inline-flex; align-items: center; justify-content: center; }
   .mcq button.right { border-color: var(--green); background: var(--mint); color: var(--green); font-weight: 700; }
   .mcq button.right .mcn { background: var(--green); color: #fff; }
   .mcq button.wrong { border-color: var(--up); background: var(--up-bg); color: var(--up); }
   .mcq button.dim { color: var(--sub); }
   .mcq button:disabled { cursor: default; }
   .sa-form { display: flex; gap: 8px; }
-  .sa-form .field { flex: 1; min-height: 48px; font-size: 16px; }
+  .sa-form .field { flex: 1; min-height: 48px; font-size: calc(16px * var(--fs, 1)); }
   .sa-form .field:disabled { opacity: 1; -webkit-text-fill-color: currentColor; }
   .sa-form .field.ok { border-color: var(--green); color: var(--green); background: var(--mint); }
   .sa-form .field.no { border-color: var(--up); color: var(--up); background: var(--up-bg); }
@@ -953,24 +953,24 @@
   .isl.open { border: 2px solid var(--green); }
   .isl.locked { background: var(--soft); }
   .isl.locked .isl-body b { color: var(--sub); }
-  .isl-num { flex: 0 0 48px; height: 48px; border-radius: 50%; background: var(--mint); color: var(--green); font-size: 18px; font-weight: 800; display: flex; align-items: center; justify-content: center; }
+  .isl-num { flex: 0 0 48px; height: 48px; border-radius: 50%; background: var(--mint); color: var(--green); font-size: calc(18px * var(--fs, 1)); font-weight: 800; display: flex; align-items: center; justify-content: center; }
   .isl.done .isl-num { background: var(--green); color: #fff; }
   .isl.locked .isl-num { background: #EBEEF2; color: var(--sub); }
   .isl-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
-  .isl-body b { font-size: 16px; line-height: 24px; }
+  .isl-body b { font-size: calc(16px * var(--fs, 1)); line-height: 24px; }
   .isl-bar { height: 6px; border-radius: 999px; background: var(--soft); overflow: hidden; }
   .isl-bar i { display: block; height: 100%; border-radius: 999px; background: #3375D6; }
   .isl-path { display: block; width: 0; height: 22px; margin-left: 50%; border-left: 2px dashed #D2D6DD; }
   .isl-list { padding: 4px 16px !important; }
   .isl-row { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 52px; padding: 8px 0; border: none; border-top: 1px solid #F0F2F5; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
   .isl-row:first-child { border-top: none; }
-  .isl-no { flex: 0 0 26px; height: 26px; border-radius: 8px; background: var(--soft); color: var(--sub); font-size: 13px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; }
-  .isl-t { flex: 1; min-width: 0; font-size: 15px; font-weight: 600; }
+  .isl-no { flex: 0 0 26px; height: 26px; border-radius: 8px; background: var(--soft); color: var(--sub); font-size: calc(13px * var(--fs, 1)); font-weight: 700; display: inline-flex; align-items: center; justify-content: center; }
+  .isl-t { flex: 1; min-width: 0; font-size: calc(15px * var(--fs, 1)); font-weight: 600; }
   /* 해설 그림 */
   .qfig { margin: 0; padding: 10px 10px 8px; background: var(--card); border: 1px solid #F0F2F5; border-radius: 12px; }
   .qfig svg { display: block; width: 100%; height: auto; }
-  .qfig text { font-size: 11px; fill: var(--sub); font-family: inherit; }
-  .qfig .bt { font-size: 12px; font-weight: 700; fill: var(--ink); }
+  .qfig text { font-size: calc(11px * var(--fs, 1)); fill: var(--sub); font-family: inherit; }
+  .qfig .bt { font-size: calc(12px * var(--fs, 1)); font-weight: 700; fill: var(--ink); }
   .qfig .hlt { fill: var(--green); font-weight: 700; }
   .qfig .hlb { fill: var(--up); font-weight: 700; }
   .qfig .bx { fill: var(--soft); stroke: #E5E8ED; }
@@ -985,18 +985,18 @@
   .qfig .l0 { fill: none; stroke: #B3B8C0; stroke-width: 2; stroke-dasharray: 5 4; }
   .qfig .l1 { fill: none; stroke: var(--green); stroke-width: 2.5; }
   .qfig .l2 { fill: none; stroke: var(--up); stroke-width: 2.5; }
-  .qfig figcaption { margin-top: 6px; font-size: 12px; line-height: 18px; color: var(--sub); }
+  .qfig figcaption { margin-top: 6px; font-size: calc(12px * var(--fs, 1)); line-height: 18px; color: var(--sub); }
   .quiz-done { align-self: flex-end; font-weight: 700; }
 
   /* ═════ 가계부: 달력 글씨 색 · 고정 · + 버튼 ═════ */
-  .cal-d span { font-size: 11px; font-weight: 700; line-height: 1.25; margin-top: 1px; }
+  .cal-d span { font-size: calc(11px * var(--fs, 1)); font-weight: 700; line-height: 1.25; margin-top: 1px; }
   .c-in { color: var(--up) !important; }
   .c-out { color: var(--down) !important; }
   .c-fix { color: var(--ink) !important; }
-  .cal-legend { display: flex; gap: 12px; justify-content: flex-end; font-size: 11px; font-weight: 600; margin-top: 8px; }
-  .line-plus { display: inline-flex; align-items: center; justify-content: center; width: 36px; min-width: 36px; height: 36px; min-height: 36px; padding: 0; border-radius: 50% !important; font-size: 22px; font-weight: 500; line-height: 1; flex-shrink: 0; }
+  .cal-legend { display: flex; gap: 12px; justify-content: flex-end; font-size: calc(11px * var(--fs, 1)); font-weight: 600; margin-top: 8px; }
+  .line-plus { display: inline-flex; align-items: center; justify-content: center; width: 36px; min-width: 36px; height: 36px; min-height: 36px; padding: 0; border-radius: 50% !important; font-size: calc(22px * var(--fs, 1)); font-weight: 500; line-height: 1; flex-shrink: 0; }
   .hot-item .hot-t { display: flex; flex-direction: column; gap: 2px; white-space: normal; line-height: 1.35; }
-  .hot-item .hot-t small { font-size: 12px; }
+  .hot-item .hot-t small { font-size: calc(12px * var(--fs, 1)); }
   a.hot-item { color: inherit; text-decoration: none; padding: 8px 0; }
   a.hot-item .hot-t { flex: 1; min-width: 0; }
 
@@ -1006,18 +1006,18 @@
   .cat-field span:first-of-type { flex: 1; }
   .cat-arrow { color: var(--sub); }
   .cat-grid { display: flex; flex-wrap: wrap; gap: 8px; }
-  .cat-chip { position: relative; display: inline-flex; align-items: center; gap: 6px; min-height: 40px; padding: 0 14px; border-radius: 999px; border: 1px solid #E3E8F0; background: #fff; font: inherit; font-size: 14px; color: var(--ink); cursor: pointer; }
+  .cat-chip { position: relative; display: inline-flex; align-items: center; gap: 6px; min-height: 40px; padding: 0 14px; border-radius: 999px; border: 1px solid #E3E8F0; background: #fff; font: inherit; font-size: calc(14px * var(--fs, 1)); color: var(--ink); cursor: pointer; }
   .cat-chip.on { border-color: #1E40AF; background: #EEF2FF; font-weight: 700; }
   .cat-chip.editing { padding-right: 34px; }
   .cat-chip.cat-add { border-style: dashed; color: #1E40AF; font-weight: 700; }
   .cat-chip.off { color: var(--sub); background: #F6F7F9; }
-  .cat-x { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); width: 24px; height: 24px; border-radius: 50%; background: #F04452; color: #fff; display: grid; place-items: center; font-size: 15px; line-height: 1; }
+  .cat-x { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); width: 24px; height: 24px; border-radius: 50%; background: #F04452; color: #fff; display: grid; place-items: center; font-size: calc(15px * var(--fs, 1)); line-height: 1; }
   .dup-tag { color: #E5486A; font-weight: 700; }
 
   /* ═════ 기기 연결 ═════ */
   .sync-card { display: flex; flex-direction: column; gap: 10px; }
-  .consent { margin: 0; padding-left: 18px; font-size: 14px; line-height: 1.6; display: flex; flex-direction: column; gap: 6px; }
-  .consent-check { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 700; }
+  .consent { margin: 0; padding-left: 18px; font-size: calc(14px * var(--fs, 1)); line-height: 1.6; display: flex; flex-direction: column; gap: 6px; }
+  .consent-check { display: flex; align-items: center; gap: 8px; font-size: calc(14px * var(--fs, 1)); font-weight: 700; }
   .consent-check input { width: 20px; height: 20px; }
   .cat-row-btn { width: 100%; border: none; background: none; padding: 2px 0; font: inherit; color: inherit; text-align: left; cursor: pointer; border-radius: 8px; }
   .cat-row-btn:active { background: var(--soft); }
@@ -1026,30 +1026,30 @@
   /* ═════ 공부 게임 ═════ */
   .lv-card { display: flex; gap: 12px; align-items: center; }
   .lv-prog { display: flex; flex-direction: column; gap: 4px; margin-top: 2px; }
-  .lv-prog > span { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--sub); }
+  .lv-prog > span { display: flex; align-items: center; gap: 8px; font-size: calc(12px * var(--fs, 1)); color: var(--sub); }
   .lv-prog em { font-style: normal; flex: 0 0 52px; }
   .lv-prog > span.on em { color: var(--ink); font-weight: 700; }
   .lv-pbar { flex: 1; height: 6px; border-radius: 999px; background: #E9EDF5; overflow: hidden; display: block; }
   .lv-pbar i { display: block; height: 100%; border-radius: 999px; background: #3375D6; }
-  .lv-prog b { font-size: 12px; min-width: 48px; text-align: right; color: var(--ink); }
+  .lv-prog b { font-size: calc(12px * var(--fs, 1)); min-width: 48px; text-align: right; color: var(--ink); }
   .topic-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
   .topic-card { position: relative; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-height: 92px; padding: 12px; border: 1px solid var(--line); border-radius: 16px; background: #fff; text-align: left; cursor: pointer; font: inherit; color: inherit; }
-  .topic-card b { font-size: 15px; font-weight: 700; }
-  .topic-card small { font-size: 11px; color: var(--sub); line-height: 1.35; }
-  .topic-card .tp-i { font-size: 20px; line-height: 1; margin-bottom: 4px; }
-  .topic-card .tp-n { position: absolute; top: 10px; right: 10px; font-size: 11px; color: var(--sub); }
+  .topic-card b { font-size: calc(15px * var(--fs, 1)); font-weight: 700; }
+  .topic-card small { font-size: calc(11px * var(--fs, 1)); color: var(--sub); line-height: 1.35; }
+  .topic-card .tp-i { font-size: calc(20px * var(--fs, 1)); line-height: 1; margin-bottom: 4px; }
+  .topic-card .tp-n { position: absolute; top: 10px; right: 10px; font-size: calc(11px * var(--fs, 1)); color: var(--sub); }
   .topic-card.clear { border-color: #3375D6; background: #F3F7FE; }
   .topic-card.add { border-style: dashed; }
   .topic-card.add.on { border-color: #3375D6; }
   .topic-form { display: flex; flex-direction: column; gap: 8px; }
   .cnews-btn { width: 100%; }
   .cnews { display: flex; flex-direction: column; gap: 6px; padding: 12px; border: 1px solid var(--line); border-radius: 12px; }
-  .cnews h3 { margin: 0; font-size: 15px; }
+  .cnews h3 { margin: 0; font-size: calc(15px * var(--fs, 1)); }
   .cnews-more { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 4px; }
   .cnews-more .link-btn { padding-left: 0; }
   .lv-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
   .lv-top { display: flex; align-items: baseline; gap: 8px; }
-  .lv-top b { font-size: 22px; color: #1E40AF; }
+  .lv-top b { font-size: calc(22px * var(--fs, 1)); color: #1E40AF; }
   .lv-title { font-weight: 700; flex: 1; }
   .xpbar { height: 10px; border-radius: 999px; background: #E9EDF5; overflow: hidden; }
   .xpbar i { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, #3375D6, #245296); }
@@ -1060,24 +1060,24 @@
   .stage-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
   .stage { display: flex; flex-direction: column; gap: 8px; text-align: left; padding: 14px; border-radius: 16px; border: 1px solid #E3E8F0; background: #fff; font: inherit; color: inherit; cursor: pointer; }
   .stage.clear { border-color: #3375D6; background: #EBF1FB; }
-  .st-top { display: flex; justify-content: space-between; align-items: center; font-size: 15px; }
+  .st-top { display: flex; justify-content: space-between; align-items: center; font-size: calc(15px * var(--fs, 1)); }
   .stage-head { display: flex; align-items: center; gap: 8px; }
-  .stage-head h2 { margin: 0; font-size: 20px; }
+  .stage-head h2 { margin: 0; font-size: calc(20px * var(--fs, 1)); }
   .path { display: flex; flex-direction: column; gap: 6px; padding: 18px 16px; }
   .node-row { display: flex; align-items: center; gap: 12px; }
   .node-row.r { flex-direction: row-reverse; text-align: right; }
   .node-row + .node-row { margin-top: -2px; }
-  .node { width: 64px; height: 64px; flex-shrink: 0; border-radius: 50%; border: none; font: inherit; font-weight: 800; font-size: 18px; cursor: pointer; box-shadow: 0 4px 0 rgba(0,0,0,0.12); }
-  .node .nd { font-size: 16px; }
+  .node { width: 64px; height: 64px; flex-shrink: 0; border-radius: 50%; border: none; font: inherit; font-weight: 800; font-size: calc(18px * var(--fs, 1)); cursor: pointer; box-shadow: 0 4px 0 rgba(0,0,0,0.12); }
+  .node .nd { font-size: calc(16px * var(--fs, 1)); }
   .node.done { background: #245296; color: #fff; }
   .node.doing { background: #1E40AF; color: #fff; }
-  .node.doing .nd { font-size: 13px; }
+  .node.doing .nd { font-size: calc(13px * var(--fs, 1)); }
   .node.open { background: #fff; color: #1E40AF; border: 3px solid #1E40AF; }
   .node.wrong { background: #F04452; color: #fff; }
   .node.locked { background: #E9EDF5; color: #9AA3B5; box-shadow: none; }
   .node-t { display: flex; flex-direction: column; min-width: 0; flex: 1; }
-  .node-t b { font-size: 15px; }
-  .node-t small { font-size: 12px; color: var(--sub); }
+  .node-t b { font-size: calc(15px * var(--fs, 1)); }
+  .node-t small { font-size: calc(12px * var(--fs, 1)); color: var(--sub); }
   .qq-top { display: flex; justify-content: space-between; align-items: center; }
   .qq-combo { font-weight: 800; color: #E5486A; }
   .qq-dots { display: flex; gap: 6px; }
@@ -1089,38 +1089,38 @@
   .qq-result h2 { margin: 0; }
   .qq-result p { margin: 0; }
   .qq-xp { display: flex; flex-direction: column; align-items: center; background: #EBF1FB; border-radius: 14px; padding: 10px 24px; }
-  .qq-xp b { font-size: 26px; color: #245296; }
+  .qq-xp b { font-size: calc(26px * var(--fs, 1)); color: #245296; }
   .qq-xp small { color: var(--sub); }
   .badge-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
   .bdg { display: flex; flex-direction: column; align-items: center; gap: 2px; text-align: center; padding: 10px 6px; border-radius: 14px; background: #F6F7F9; opacity: 0.55; }
   .bdg.on { background: #FFF8E1; opacity: 1; }
-  .bdg-i { font-size: 26px; }
-  .bdg b { font-size: 12px; }
-  .bdg small { font-size: 10px; color: var(--sub); line-height: 1.3; }
+  .bdg-i { font-size: calc(26px * var(--fs, 1)); }
+  .bdg b { font-size: calc(12px * var(--fs, 1)); }
+  .bdg small { font-size: calc(10px * var(--fs, 1)); color: var(--sub); line-height: 1.3; }
 
   /* ═════ 자산관리: 순자산 그래프 · 예산 ═════ */
   .net-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; margin-bottom: 4px; }
-  .net-head b { font-size: 22px; }
+  .net-head b { font-size: calc(22px * var(--fs, 1)); }
   .net-svg { width: 100%; height: auto; display: block; }
   .net-grid { stroke: #EEF1F6; stroke-width: 1; }
-  .net-ax { font-size: 10px; fill: var(--sub); }
+  .net-ax { font-size: calc(10px * var(--fs, 1)); fill: var(--sub); }
   .net-line { fill: none; stroke: #1E40AF; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
   .net-dot { fill: #1E40AF; stroke: #fff; stroke-width: 2; }
   .net-dot.on { fill: #3375D6; }
   .net-hit { fill: transparent; cursor: pointer; }
-  .bud-total { display: flex; flex-direction: column; gap: 2px; margin-bottom: 8px; font-size: 15px; }
+  .bud-total { display: flex; flex-direction: column; gap: 2px; margin-bottom: 8px; font-size: calc(15px * var(--fs, 1)); }
   .bud-row { display: flex; flex-direction: column; gap: 4px; padding: 8px 0; border-top: 1px solid #EEF1F8; }
-  .bud-top { display: flex; justify-content: space-between; align-items: center; font-size: 14px; }
+  .bud-top { display: flex; justify-content: space-between; align-items: center; font-size: calc(14px * var(--fs, 1)); }
   .bud-top .num { font-weight: 700; }
   .bud-bar { height: 10px; border-radius: 999px; background: #E9EDF5; overflow: hidden; }
   .bud-bar i { display: block; height: 100%; border-radius: 999px; }
-  .bud-note { font-size: 12px; color: var(--sub); }
+  .bud-note { font-size: calc(12px * var(--fs, 1)); color: var(--sub); }
   .bud-note.over { color: var(--up); font-weight: 700; }
   .bud-form { display: flex; flex-direction: column; gap: 8px; max-height: 55vh; overflow-y: auto; }
   .bud-in { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-  .bud-in label { display: flex; flex-direction: column; font-size: 14px; font-weight: 600; }
+  .bud-in label { display: flex; flex-direction: column; font-size: calc(14px * var(--fs, 1)); font-weight: 600; }
   .bud-in label .tx-dot { display: inline-block; margin-right: 6px; }
-  .bud-in small { font-weight: 400; font-size: 11px; }
+  .bud-in small { font-weight: 400; font-size: calc(11px * var(--fs, 1)); }
 
   /* ═════ 공부: 탈출 지도(레트로 오락실) ═════ */
   .arc-card { padding: 0 0 12px; overflow: hidden; background: var(--abg) !important; border: 3px solid var(--agir) !important; color: #fff; gap: 6px; }
@@ -1128,27 +1128,27 @@
   .arc-thumb { width: 100%; aspect-ratio: 150 / 64; display: block; }
   .arc-bar { height: 8px; border-radius: 999px; background: rgba(255,255,255,0.18); overflow: hidden; }
   .arc-bar i { display: block; height: 100%; background: var(--agir); }
-  .arc-sub { font-size: 12px; color: rgba(255,255,255,0.75); }
+  .arc-sub { font-size: calc(12px * var(--fs, 1)); color: rgba(255,255,255,0.75); }
   .arcade { position: relative; width: 100%; border-radius: 20px; overflow: hidden; border: 3px solid; margin-top: 10px; }
   .arcade canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
   .arc-node { position: absolute; width: max-content; display: flex; align-items: center; gap: 4px; transform: translate(-22px, -50%); background: none; border: 0; padding: 0; font: inherit; cursor: pointer; text-align: left; }
   .arc-node.r { flex-direction: row-reverse; transform: translate(calc(-100% + 22px), -50%); text-align: right; }
   .arc-node .hit { width: 44px; height: 44px; flex-shrink: 0; border-radius: 50%; }
-  .arc-node .lb { max-width: 124px; font-size: 11px; line-height: 1.3; font-weight: 700; color: #fff; background: rgba(0,0,0,0.5); padding: 3px 7px; border-radius: 8px; }
-  .arc-node .lb small { display: block; font-size: 10px; color: #ffd23f; }
+  .arc-node .lb { max-width: 124px; font-size: calc(11px * var(--fs, 1)); line-height: 1.3; font-weight: 700; color: #fff; background: rgba(0,0,0,0.5); padding: 3px 7px; border-radius: 8px; }
+  .arc-node .lb small { display: block; font-size: calc(10px * var(--fs, 1)); color: #ffd23f; }
   .arc-node.locked .lb { opacity: 0.55; }
   .arc-node.wrong .lb small { color: #ff8a9b; }
   .arc-node:focus-visible .hit { outline: 3px solid #fff; }
   /* ═════ 모의투자 (DESIGN.md: 흰 면 + 1px 선, 파랑 하나로 강조, 오르면 빨강·내리면 파랑, 그림자 없음) ═════ */
   .inv { gap: 12px; }
   .inv .lumi-says { align-items: flex-start; }
-  .inv-says .bubble-onb, .inv-eval .bubble-onb { background: var(--soft); border-radius: 4px 12px 12px 12px; padding: 10px 12px; font-family: 'Jua', sans-serif; font-size: 15px; line-height: 23px; }
+  .inv-says .bubble-onb, .inv-eval .bubble-onb { background: var(--soft); border-radius: 4px 12px 12px 12px; padding: 10px 12px; font-family: 'Jua', sans-serif; font-size: calc(15px * var(--fs, 1)); line-height: 23px; }
   .b-ok { color: var(--down); background: var(--down-bg); } .b-no { color: var(--up); background: var(--up-bg); } .b-warn { color: #7A5300; background: #FFF4D6; }
   .inv-top { display: flex; flex-direction: column; gap: 6px; }
   .inv-total { display: flex; align-items: center; gap: 8px; }
-  .inv-total b { font-size: 26px; line-height: 34px; font-weight: 800; letter-spacing: -0.01em; }
+  .inv-total b { font-size: calc(26px * var(--fs, 1)); line-height: 34px; font-weight: 800; letter-spacing: -0.01em; }
   .inv-seg { display: flex; background: var(--soft); border-radius: 12px; padding: 3px; margin-top: 8px; }
-  .inv-seg button { flex: 1; border: 0; background: transparent; border-radius: 10px; min-height: 34px; font-size: 13px; font-weight: 600; color: var(--sub); cursor: pointer; }
+  .inv-seg button { flex: 1; border: 0; background: transparent; border-radius: 10px; min-height: 34px; font-size: calc(13px * var(--fs, 1)); font-weight: 600; color: var(--sub); cursor: pointer; }
   .inv-seg button.on { background: #fff; color: var(--ink); font-weight: 700; box-shadow: 0 0 0 1px var(--line); }
   .inv-chart { width: 100%; height: auto; display: block; margin-top: 6px; }
   .inv-chart .me { fill: none; stroke-width: 2.4; stroke-linejoin: round; stroke-linecap: round; }
@@ -1156,74 +1156,74 @@
   .inv-chart .dot { fill: #fff; stroke-width: 2.4; }
   .inv-chart .k { fill: none; stroke: #A9B0BC; stroke-width: 1.6; stroke-dasharray: 4 4; }
   .inv-chart .base { stroke: #E5E8ED; stroke-width: 1; }
-  .inv-chart .lb { font-size: 10px; fill: var(--sub); }
-  .inv-legend { display: flex; gap: 12px; flex-wrap: wrap; font-size: 11px; color: var(--sub); }
+  .inv-chart .lb { font-size: calc(10px * var(--fs, 1)); fill: var(--sub); }
+  .inv-legend { display: flex; gap: 12px; flex-wrap: wrap; font-size: calc(11px * var(--fs, 1)); color: var(--sub); }
   .inv-legend i { display: inline-block; width: 14px; height: 0; border-top: 2.4px solid var(--up); vertical-align: middle; margin-right: 4px; }
   .inv-legend i.k { border-top: 1.6px dashed #A9B0BC; } .inv-legend i.base { border-top: 1px solid #D2D6DD; }
   .inv-empty { margin: 10px 0 4px; text-align: center; }
   .inv-bars { display: flex; align-items: flex-end; gap: 6px; height: 110px; margin-top: 10px; overflow-x: auto; }
-  .inv-bars .ib { flex: 1; min-width: 38px; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 3px; font-size: 10px; }
+  .inv-bars .ib { flex: 1; min-width: 38px; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 3px; font-size: calc(10px * var(--fs, 1)); }
   .inv-bars .ib i { width: 100%; max-width: 28px; border-radius: 6px 6px 2px 2px; background: var(--up); } .inv-bars .ib i.down { background: var(--down); }
   .inv-bars small { color: var(--sub); white-space: nowrap; }
   .inv-rank { display: flex; flex-direction: column; gap: 10px; }
   .inv-lock { display: flex; gap: 10px; align-items: center; background: var(--soft); border-radius: 12px; padding: 12px; }
-  .inv-lock p { margin: 0; font-size: 13px; line-height: 20px; color: var(--sub); }
+  .inv-lock p { margin: 0; font-size: calc(13px * var(--fs, 1)); line-height: 20px; color: var(--sub); }
   .rk-list { display: flex; flex-direction: column; gap: 6px; }
-  .rk { display: grid; grid-template-columns: 22px minmax(0, 72px) 1fr 78px; align-items: center; gap: 8px; font-size: 13px; padding: 6px 8px; border-radius: 10px; }
+  .rk { display: grid; grid-template-columns: 22px minmax(0, 72px) 1fr 78px; align-items: center; gap: 8px; font-size: calc(13px * var(--fs, 1)); padding: 6px 8px; border-radius: 10px; }
   .rk.me { background: var(--mint); color: var(--green); font-weight: 700; }
   .rk .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .rk .bar { height: 8px; background: var(--soft); border-radius: 999px; overflow: hidden; } .rk .bar i { display: block; height: 100%; background: var(--green); border-radius: 999px; }
-  .rk > :last-child { text-align: right; } .rk-gap { text-align: center; color: var(--sub); font-size: 12px; }
-  .rk .rk-ret { display: flex; flex-direction: column; align-items: flex-end; line-height: 1.25; } .rk .rk-ret small { font-size: 11px; color: var(--sub); font-weight: 400; }
+  .rk > :last-child { text-align: right; } .rk-gap { text-align: center; color: var(--sub); font-size: calc(12px * var(--fs, 1)); }
+  .rk .rk-ret { display: flex; flex-direction: column; align-items: flex-end; line-height: 1.25; } .rk .rk-ret small { font-size: calc(11px * var(--fs, 1)); color: var(--sub); font-weight: 400; }
   .inv-sbox { margin: 0; background: var(--soft); border-radius: 12px; }
   .inv-sbox input { background: transparent; }
   #inv-results { display: flex; flex-direction: column; margin-top: 6px; }
   .inv-sr { display: flex; justify-content: space-between; align-items: center; gap: 8px; width: 100%; border: 0; border-bottom: 1px solid #F0F2F5; background: transparent; padding: 10px 2px; text-align: left; cursor: pointer; min-height: 52px; }
   .inv-sr:last-child { border-bottom: 0; }
   .inv-sr > span:first-child { display: flex; flex-direction: column; gap: 2px; }
-  .inv-sr b { font-size: 15px; }
-  .inv-buy { color: var(--green); background: var(--mint); border-radius: 12px; padding: 8px 14px; font-size: 13px; font-weight: 700; }
+  .inv-sr b { font-size: calc(15px * var(--fs, 1)); }
+  .inv-buy { color: var(--green); background: var(--mint); border-radius: 12px; padding: 8px 14px; font-size: calc(13px * var(--fs, 1)); font-weight: 700; }
   .inv-chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 8px; }
   .inv-chips .hint { width: 100%; }
   .inv-hint-open { display: flex; align-items: center; gap: 10px; width: 100%; border: 0; background: transparent; padding: 0; text-align: left; cursor: pointer; min-height: 44px; }
-  .inv-hint-open > span:nth-child(2) { flex: 1; display: flex; flex-direction: column; gap: 2px; } .inv-hint-open b { font-size: 16px; }
-  .inv-hint-open .plus { font-size: 18px; display: inline-flex; align-items: center; justify-content: center; color: var(--green); }
+  .inv-hint-open > span:nth-child(2) { flex: 1; display: flex; flex-direction: column; gap: 2px; } .inv-hint-open b { font-size: calc(16px * var(--fs, 1)); }
+  .inv-hint-open .plus { font-size: calc(18px * var(--fs, 1)); display: inline-flex; align-items: center; justify-content: center; color: var(--green); }
   .inv-hint { display: flex; flex-direction: column; gap: 6px; padding: 12px 0; border-top: 1px solid #F0F2F5; }
-  .inv-hint p { margin: 0; font-size: 14px; line-height: 21px; }
+  .inv-hint p { margin: 0; font-size: calc(14px * var(--fs, 1)); line-height: 21px; }
   .inv-hint .r, .inv-q .r, .modal .r { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
   .inv-hint a { color: var(--sub); } .inv-hs { display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
   .inv-news { display: flex; flex-direction: column; gap: 6px; background: var(--soft); border-radius: 12px; padding: 12px; }
-  .inv-news a { color: var(--ink); font-size: 13px; line-height: 19px; text-decoration: none; }
+  .inv-news a { color: var(--ink); font-size: calc(13px * var(--fs, 1)); line-height: 19px; text-decoration: none; }
   .inv-mix { display: flex; gap: 16px; align-items: center; margin: 4px 0 10px; }
   .inv-donut { width: 108px; height: 108px; border-radius: 50%; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
   .inv-donut span { width: 68px; height: 68px; border-radius: 50%; background: #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; }
-  .inv-donut small { font-size: 10px; color: var(--sub); } .inv-donut b { font-size: 17px; font-weight: 800; }
-  .inv-leg { flex: 1; display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
+  .inv-donut small { font-size: calc(10px * var(--fs, 1)); color: var(--sub); } .inv-donut b { font-size: calc(17px * var(--fs, 1)); font-weight: 800; }
+  .inv-leg { flex: 1; display: flex; flex-direction: column; gap: 6px; font-size: calc(13px * var(--fs, 1)); }
   .inv-leg div { display: grid; grid-template-columns: 10px 1fr auto auto; align-items: center; gap: 6px; }
   .inv-leg i { width: 10px; height: 10px; border-radius: 3px; } .inv-leg small { min-width: 52px; text-align: right; }
   .inv-holds { display: flex; flex-direction: column; border-top: 1px solid #F0F2F5; }
   .inv-hold { display: flex; align-items: center; gap: 10px; width: 100%; border: 0; border-bottom: 1px solid #F0F2F5; background: transparent; padding: 12px 0; text-align: left; cursor: pointer; }
   .inv-hold:last-child { border-bottom: 0; }
   .inv-hold .dotc { width: 8px; height: 32px; border-radius: 4px; flex-shrink: 0; }
-  .inv-hold .hm { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; } .inv-hold .hm b { font-size: 15px; }
-  .inv-hold .hv { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; } .inv-hold .hv b { font-size: 15px; }
+  .inv-hold .hm { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; } .inv-hold .hm b { font-size: calc(15px * var(--fs, 1)); }
+  .inv-hold .hv { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; } .inv-hold .hv b { font-size: calc(15px * var(--fs, 1)); }
   .inv-eval { display: flex; flex-direction: column; gap: 10px; padding: 12px 0; border-top: 1px solid #F0F2F5; }
   .modal .inv-eval { border-top: 0; padding-top: 0; }
-  .inv-eval h3 { margin: 0; font-size: 15px; }
-  .ev-grid { display: grid; grid-template-columns: 1fr auto; gap: 6px 12px; background: var(--soft); border-radius: 12px; padding: 12px; font-size: 14px; }
+  .inv-eval h3 { margin: 0; font-size: calc(15px * var(--fs, 1)); }
+  .ev-grid { display: grid; grid-template-columns: 1fr auto; gap: 6px 12px; background: var(--soft); border-radius: 12px; padding: 12px; font-size: calc(14px * var(--fs, 1)); }
   .ev-grid > :nth-child(even) { text-align: right; }
   .inv-badges { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
   .inv-badges div { display: flex; flex-direction: column; align-items: center; gap: 2px; text-align: center; background: var(--soft); border-radius: 12px; padding: 10px 6px; filter: grayscale(1); opacity: 0.55; }
   .inv-badges div.ok { filter: none; opacity: 1; background: var(--mint); }
-  .inv-badges span { font-size: 22px; } .inv-badges b { font-size: 12px; } .inv-badges small { font-size: 10px; line-height: 14px; color: var(--sub); }
+  .inv-badges span { font-size: calc(22px * var(--fs, 1)); } .inv-badges b { font-size: calc(12px * var(--fs, 1)); } .inv-badges small { font-size: calc(10px * var(--fs, 1)); line-height: 14px; color: var(--sub); }
   .inv-q { background: var(--soft); border-radius: 12px; padding: 12px; display: flex; flex-direction: column; gap: 6px; }
   .inv-step { display: flex; align-items: center; gap: 6px; }
-  .inv-step .icon-btn { width: 36px; height: 36px; border-radius: 10px; background: var(--soft); font-size: 18px; font-weight: 700; }
+  .inv-step .icon-btn { width: 36px; height: 36px; border-radius: 10px; background: var(--soft); font-size: calc(18px * var(--fs, 1)); font-weight: 700; }
   .inv-step .field { width: 68px; text-align: center; padding: 6px; min-height: 36px; }
-  .learn-pop .page-head h1 { font-size: 18px; }
+  .learn-pop .page-head h1 { font-size: calc(18px * var(--fs, 1)); }
   .inv-sub { margin: 10px 0 2px; }
-  .inv-px { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; } .inv-px b { font-size: 15px; } .inv-px small { font-size: 12px; }
-  .inv-bomb p { margin: 8px 0 0; font-size: 14px; line-height: 21px; }
+  .inv-px { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; } .inv-px b { font-size: calc(15px * var(--fs, 1)); } .inv-px small { font-size: calc(12px * var(--fs, 1)); }
+  .inv-bomb p { margin: 8px 0 0; font-size: calc(14px * var(--fs, 1)); line-height: 21px; }
   .inv-bomb .link-btn { padding: 0; min-height: 0; display: inline; }
   .inv-bomb.ok { background: var(--mint) !important; border-color: var(--mint) !important; }
   .inv-hint.rumor b { color: #7A5300; }
@@ -1232,23 +1232,23 @@
   .inv-info summary::-webkit-details-marker { display: none; }
   .inv-info summary::after { content: "›"; margin-left: auto; color: var(--sub); transform: rotate(90deg); }
   .inv-info[open] summary::after { transform: rotate(-90deg); }
-  .inv-info .ev-grid { background: #fff; margin-top: 8px; font-size: 13px; }
+  .inv-info .ev-grid { background: #fff; margin-top: 8px; font-size: calc(13px * var(--fs, 1)); }
   .inv-info .btn { margin-top: 10px; }
   .inv-fill { white-space: normal; flex-direction: column; height: auto; padding-top: 12px; padding-bottom: 12px; }
-  .inv-fill small { display: block; font-size: 12px; font-weight: 500; opacity: 0.85; }
+  .inv-fill small { display: block; font-size: calc(12px * var(--fs, 1)); font-weight: 500; opacity: 0.85; }
   .inv-mixrec { display: flex; flex-direction: column; gap: 10px; }
   .mix-row { display: grid; grid-template-columns: 28px 1fr; align-items: center; gap: 8px; }
   .mix-bar { display: flex; height: 14px; border-radius: 999px; overflow: hidden; background: var(--soft); }
   .mix-bar i { display: block; height: 100%; }
-  .mix-leg { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 12px; font-size: 13px; }
+  .mix-leg { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 12px; font-size: calc(13px * var(--fs, 1)); }
   .mix-leg div { display: grid; grid-template-columns: 10px 1fr auto; align-items: center; gap: 6px; }
   .mix-leg i { width: 10px; height: 10px; border-radius: 3px; } .mix-leg small { grid-column: 2 / 4; margin-top: -4px; }
-  .inv-why { margin-top: 6px; padding: 0; min-height: 36px; font-family: inherit; font-size: 15px; font-weight: 700; color: var(--green); }
-  .mix-cmp { margin: 0; padding: 10px 12px; border-radius: 12px; background: var(--soft); font-size: 14px; font-weight: 600; line-height: 20px; }
+  .inv-why { margin-top: 6px; padding: 0; min-height: 36px; font-family: inherit; font-size: calc(15px * var(--fs, 1)); font-weight: 700; color: var(--green); }
+  .mix-cmp { margin: 0; padding: 10px 12px; border-radius: 12px; background: var(--soft); font-size: calc(14px * var(--fs, 1)); font-weight: 600; line-height: 20px; }
   .inv-mixmini { display: flex; justify-content: space-between; align-items: center; gap: 10px; width: 100%; text-align: left; cursor: pointer; }
-  .inv-mixmini > span:first-child { display: flex; flex-direction: column; gap: 2px; } .inv-mixmini b { font-size: 16px; }
-  .inv-mixmini .plus { font-size: 18px; color: var(--green); display: inline-flex; align-items: center; justify-content: center; }
-  .qplus { background: var(--mint); color: var(--green) !important; border-radius: 999px; padding: 2px 10px; font-size: 13px; font-weight: 700; }
+  .inv-mixmini > span:first-child { display: flex; flex-direction: column; gap: 2px; } .inv-mixmini b { font-size: calc(16px * var(--fs, 1)); }
+  .inv-mixmini .plus { font-size: calc(18px * var(--fs, 1)); color: var(--green); display: inline-flex; align-items: center; justify-content: center; }
+  .qplus { background: var(--mint); color: var(--green) !important; border-radius: 999px; padding: 2px 10px; font-size: calc(13px * var(--fs, 1)); font-weight: 700; }
 </style>
 </head>
 <body>
@@ -1413,12 +1413,12 @@ async function deleteRemote() {
 function syncCard() {
   if (sync.on) return `<section class="card sync-card" id="sec-sync">
       <div class="sec-title"><h2>기기 연결</h2><span class="badge b-green">연결됨</span></div>
-      <p style="margin:0;font-size:14px;line-height:1.6"><b>${esc(sync.email || "구글 계정")}</b>으로 연결돼 있어요. 이 계정으로 로그인한 기기끼리 기록이 같아져요.${sync.lastSync ? `<br><span class="hint">마지막 저장 ${new Date(sync.lastSync).toLocaleString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}</span>` : ""}</p>
+      <p style="margin:0;font-size:calc(14px * var(--fs, 1));line-height:1.6"><b>${esc(sync.email || "구글 계정")}</b>으로 연결돼 있어요. 이 계정으로 로그인한 기기끼리 기록이 같아져요.${sync.lastSync ? `<br><span class="hint">마지막 저장 ${new Date(sync.lastSync).toLocaleString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}</span>` : ""}</p>
       <button class="btn ghost" data-act="sync-logout">로그아웃</button>
     </section>`;
   return `<section class="card sync-card" id="sec-sync">
       <div class="sec-title"><h2>기기 연결</h2><span>선택</span></div>
-      <p style="margin:0;font-size:14px;line-height:1.6">구글로 로그인하면 컴퓨터와 휴대폰의 기록(자산·가계부·퀴즈 등)이 같아져요. 로그인하지 않으면 지금처럼 이 기기에만 저장돼요.</p>
+      <p style="margin:0;font-size:calc(14px * var(--fs, 1));line-height:1.6">구글로 로그인하면 컴퓨터와 휴대폰의 기록(자산·가계부·퀴즈 등)이 같아져요. 로그인하지 않으면 지금처럼 이 기기에만 저장돼요.</p>
       <button class="btn" data-act="sync-start">구글로 로그인하고 연결하기</button>
     </section>`;
 }
@@ -1446,7 +1446,7 @@ function loadUi() {
   try { return JSON.parse(localStorage.getItem(UI_KEY)) || {}; } catch { return {}; }
 }
 function saveUi() {
-  try { localStorage.setItem(UI_KEY, JSON.stringify({ hideMoney: ui.hideMoney, lumiStill: ui.lumiStill })); } catch {}
+  try { localStorage.setItem(UI_KEY, JSON.stringify({ hideMoney: ui.hideMoney, lumiStill: ui.lumiStill, fs: ui.fs, lang: ui.lang })); } catch {}
 }
 const LEARN_KEY = "myeco.learn.v1";
 function loadLearn() {
@@ -1472,6 +1472,94 @@ const ui = {
   onb: { step: 0, draft: null }, search: { q: "", results: [], sample: false },
   ...loadUi(),
 };
+// 기타 → 글자 크기(배율)·언어. 글자 크기는 CSS의 모든 font-size에 곱하는 --fs
+const FS_STEPS = [[0.9, "작게"], [1, "보통"], [1.12, "크게"], [1.25, "아주 크게"]];
+function applyDisplay() {
+  document.documentElement.style.setProperty("--fs", ui.fs || 1);
+  document.documentElement.lang = ui.lang === "en" ? "en" : "ko";
+}
+applyDisplay();
+
+// ── 영어 버전: 화면에 그려진 한국어를 AI(제미나이)로 번역해 그 자리에서 바꿔 끼운다 ──
+// 번역은 이 기기에 기억해 두고(TR_KEY) 다음부터는 바로 쓴다. 굵은 글씨가 섞인 한 문장은 [[1]]…[[/1]] 표시를 붙여 한 번에 번역한다.
+// translate="no"가 붙은 곳과 입력 칸 안의 글자는 바꾸지 않는다. canvas 그림 속 글자는 한국어로 남는다.
+const TR_KEY = "myeco.tr.en.v1";
+const HANGUL = /[가-힣]/;
+let trMem = {};
+try { trMem = JSON.parse(localStorage.getItem(TR_KEY) || "{}") || {}; } catch {}
+const trDone = new WeakSet(), trWait = new Set(), trFail = new Map();
+let trTimer = null, trBusy = false;
+const TR_INLINE = new Set(["B", "STRONG", "SMALL", "I", "EM", "SPAN", "U"]);
+const TR_BLOCKS = "body,#app,main,section,.card,.modal";
+const trSimple = (n) => n.nodeType === 3 || n.nodeName === "BR" || (n.nodeType === 1 && TR_INLINE.has(n.nodeName) && n.getAttribute("translate") !== "no" && [...n.childNodes].every((c) => c.nodeType === 3));
+const trSentence = (el) => el && !el.matches(TR_BLOCKS) && el.childNodes.length > 1 && [...el.childNodes].every(trSimple);
+function trUnit(t) {
+  const el = t.parentElement;
+  if (!el) return t;
+  if (TR_INLINE.has(el.nodeName) && trSentence(el.parentElement)) return el.parentElement;
+  return trSentence(el) ? el : t;
+}
+function trSrc(u) {
+  if (u.nodeType === 3) return u.nodeValue.trim();
+  let k = 0;
+  return [...u.childNodes].map((c) => (c.nodeType === 3 ? c.nodeValue : c.nodeName === "BR" ? "[[br]]" : `[[${++k}]]${c.textContent}[[/${k}]]`)).join("").replace(/\s+/g, " ").trim();
+}
+function trApply(u, en) {
+  if (u.nodeType === 3) {
+    const m = u.nodeValue.match(/^(\s*)[\s\S]*?(\s*)$/);
+    u.nodeValue = m[1] + en + m[2]; trDone.add(u); return;
+  }
+  const kids = [...u.childNodes].filter((c) => c.nodeType === 1 && c.nodeName !== "BR");
+  const out = [], re = /\[\[br\]\]|\[\[(\d+)\]\]([\s\S]*?)\[\[\/\1\]\]/g;
+  let last = 0, m, used = 0;
+  while ((m = re.exec(en))) {
+    if (m.index > last) out.push(document.createTextNode(en.slice(last, m.index)));
+    if (m[0] === "[[br]]") out.push(document.createElement("br"));
+    else { const k = kids[Number(m[1]) - 1]; if (k) { const c = k.cloneNode(false); c.textContent = m[2]; out.push(c); used++; } else out.push(document.createTextNode(m[2])); }
+    last = re.lastIndex;
+  }
+  if (last < en.length) out.push(document.createTextNode(en.slice(last)));
+  if (!out.length) return;
+  u.replaceChildren(...out);
+  out.forEach((n) => { trDone.add(n); if (n.firstChild) trDone.add(n.firstChild); });
+}
+function trPass() {
+  if (ui.lang !== "en") return;
+  const units = new Set();
+  const w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, { acceptNode: (n) => (!trDone.has(n) && HANGUL.test(n.nodeValue) && !n.parentElement?.closest('script,style,textarea,[translate="no"]') ? 1 : 3) });
+  for (let n; (n = w.nextNode());) units.add(trUnit(n));
+  for (const u of units) {
+    const src = trSrc(u);
+    if (!src || src.length > 1500) continue;
+    const en = trMem[src];
+    if (en != null) trApply(u, en); else if (!(trFail.get(src) > Date.now())) trWait.add(src);
+  }
+  document.querySelectorAll("[placeholder]").forEach((el) => {
+    const ph = el.getAttribute("placeholder");
+    if (!HANGUL.test(ph)) return;
+    if (trMem[ph] != null) el.setAttribute("placeholder", trMem[ph]); else trWait.add(ph);
+  });
+  if (trWait.size && !trTimer) trTimer = setTimeout(trFetch, 120);
+}
+async function trFetch() {
+  trTimer = null;
+  if (trBusy || !trWait.size) return;
+  trBusy = true;
+  const batch = [];
+  let chars = 0;
+  for (const s of trWait) { if (batch.length >= 40 || chars + s.length > 4000) break; batch.push(s); chars += s.length; }
+  batch.forEach((s) => trWait.delete(s));
+  try {
+    const j = await getJson("/api/ask", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ translate: batch }) });
+    for (const s of batch) if (typeof j.tr?.[s] === "string") trMem[s] = j.tr[s]; else trFail.set(s, Date.now() + 60e3);
+    if (Object.keys(trMem).length > 6000) trMem = Object.fromEntries(Object.entries(trMem).slice(-4000)); // 너무 많으면 오래된 것부터
+    try { localStorage.setItem(TR_KEY, JSON.stringify(trMem)); } catch {}
+  } catch { batch.forEach((s) => trFail.set(s, Date.now() + 60e3)); } // 실패하면 1분 뒤에 다시
+  trBusy = false;
+  trPass();
+  if (trWait.size && !trTimer) trTimer = setTimeout(trFetch, 300);
+}
+new MutationObserver(() => { if (ui.lang === "en") trPass(); }).observe(document.documentElement, { childList: true, subtree: true, characterData: true });
 
 // ───────────────────────── 상수 ─────────────────────────
 const PREFS = ["쇼핑", "여행", "음식", "자기계발", "저축", "부동산", "취미"];
@@ -1507,17 +1595,17 @@ function modalKQuiz(m) {
   if (m.i >= KQ.length) {
     const lv = kqLevel(m.right);
     return `<div class="sec-title" style="margin:0"><h2>경제 지식 퀴즈</h2>${close}</div>
-      <div style="text-align:center;display:flex;flex-direction:column;align-items:center;gap:8px">${mascot(56)}<span class="hint">${KQ.length}문제 중 ${m.right}개 맞혔어요</span><b style="font-size:22px">${LEVELS[lv]}</b>
+      <div style="text-align:center;display:flex;flex-direction:column;align-items:center;gap:8px">${mascot(56)}<span class="hint">${KQ.length}문제 중 ${m.right}개 맞혔어요</span><b style="font-size:calc(22px * var(--fs, 1))">${LEVELS[lv]}</b>
       <p class="hint" style="margin:0">루미가 이 수준에 맞춰 설명할게요. 나중에 마이페이지에서 언제든 바꿀 수 있어요.</p></div>
       <button class="btn" data-act="kq-apply" data-v="${lv}">이걸로 정하기</button>`;
   }
   const q = KQ[m.i], pick = m.pick;
   return `<div class="sec-title" style="margin:0"><h2>경제 지식 퀴즈</h2><span>${m.i + 1} / ${KQ.length}</span>${close}</div>
     <div class="steps">${KQ.map((_, i) => `<i class="${i <= m.i ? "on" : ""}"></i>`).join("")}</div>
-    <p style="margin:0;font-size:16px;font-weight:700;line-height:1.5">${esc(q.q)}</p>
+    <p style="margin:0;font-size:calc(16px * var(--fs, 1));font-weight:700;line-height:1.5">${esc(q.q)}</p>
     <div class="mcq">${q.a.map((x, i) => `<button class="${pick == null ? "" : i === q.c ? "ok" : i === pick ? "no" : ""}" data-act="kq-pick" data-v="${i}" ${pick == null ? "" : "disabled"}>${esc(x)}</button>`).join("")}</div>
     ${pick == null ? `<p class="hint" style="margin:0">모르면 아무거나 골라도 돼요. 점수가 아니라 설명 수준을 정하는 데만 써요.</p>`
-      : `<p style="margin:0;font-size:14px;line-height:1.6">${pick === q.c ? "맞았어요! " : "아쉬워요. "}${esc(q.ex)}</p><button class="btn" data-act="kq-next">${m.i + 1 < KQ.length ? "다음 문제" : "결과 보기"}</button>`}`;
+      : `<p style="margin:0;font-size:calc(14px * var(--fs, 1));line-height:1.6">${pick === q.c ? "맞았어요! " : "아쉬워요. "}${esc(q.ex)}</p><button class="btn" data-act="kq-next">${m.i + 1 < KQ.length ? "다음 문제" : "결과 보기"}</button>`}`;
 }
 const kqLink = `<button class="link-btn" data-act="kq-open" style="align-self:flex-start;padding-left:0">잘 모르겠어요 · 퀴즈 7문제로 알아보기 ›</button>`;
 // 뉴스·풀이를 찾을 관심사: 관심 종목 → 관심 분야 → 돈 목표 → 선호 순으로 고르게 섞어 n개
@@ -2025,7 +2113,7 @@ function newsBlock(c) {
       <div class="sec-title" style="margin:0"><h3>‘${esc(kw)}’ 관련 뉴스</h3><button class="link-btn" data-act="cnews-toggle" data-id="${c.id}">접기</button></div>
       <div class="nl">${!got ? `<p class="hint">불러오는 중…</p>` : items.length ? items.slice(0, 3).map(newsLine).join("") : `<p class="hint">지금은 관련 뉴스를 찾지 못했어요.</p>`}</div>
       <div class="cnews-more"><a class="link-btn" href="https://search.naver.com/search.naver?where=news&query=${encodeURIComponent(kw)}" target="_blank" rel="noopener">뉴스 더 보기 ›</a><button class="link-btn" data-act="nav" data-route="news" data-target="">정부 보도자료 쉽게 풀이 ›</button></div>
-      <p class="hint" style="margin:0;font-size:11px">뉴스 제목·링크를 그대로 보여줘요.</p>
+      <p class="hint" style="margin:0;font-size:calc(11px * var(--fs, 1))">뉴스 제목·링크를 그대로 보여줘요.</p>
     </div>`;
 }
 function loadConceptNews(kw) {
@@ -2375,9 +2463,9 @@ function modalConcept(m) {
   }
   return `<div class="sec-title" style="margin:0"><h2>${esc(c.term)}</h2><span class="tagc">${esc(catName(c.cat))}</span></div>
     <p class="hint" style="margin:0">${esc(c.short)}</p>
-    <p style="margin:0;font-size:15px;line-height:1.7">${esc(c.body)}</p>
+    <p style="margin:0;font-size:calc(15px * var(--fs, 1));line-height:1.7">${esc(c.body)}</p>
     <p class="me" style="margin:0"><b>나와 연결하면</b> ${esc(c.me)}</p>
-    ${c.ai ? `<p class="hint" style="margin:0;font-size:12px">루미(AI)가 만든 설명과 문제라 틀린 내용이 있을 수 있어요. 중요한 결정 전엔 공식 자료로 꼭 확인해 주세요.</p>` : ""}
+    ${c.ai ? `<p class="hint" style="margin:0;font-size:calc(12px * var(--fs, 1))">루미(AI)가 만든 설명과 문제라 틀린 내용이 있을 수 있어요. 중요한 결정 전엔 공식 자료로 꼭 확인해 주세요.</p>` : ""}
     <div class="c-quiz"><span class="tagc">${done ? "3단계 모두 맞혔어요 · 다시 보기" : LV_NAME[m.lv]}</span>${quizBox(c, m.lv, false)}</div>
     ${newsBlock(c)}
     <div class="inline"><button class="btn ghost" data-act="note-toggle" data-id="${c.id}" style="flex:1">${learnState.notes[c.id] ? "★ 노트에서 빼기" : "☆ 노트에 담기"}</button><button class="btn ghost" data-act="qp-back" style="flex:1">닫기</button></div>`;
@@ -2859,9 +2947,9 @@ function viewRiskTest() {
       <section class="card" style="text-align:center;display:flex;flex-direction:column;align-items:center;gap:10px;padding:24px 18px">
         ${mascot(72)}
         <span class="hint">나의 투자 성향은</span>
-        <h1 style="margin:0;font-size:30px">${type}</h1>
+        <h1 style="margin:0;font-size:calc(30px * var(--fs, 1))">${type}</h1>
         <span class="badge b-green">위험기피 ${avert}/10 · ${score}점 / 35점</span>
-        <p style="margin:6px 0 0;font-size:15px;line-height:1.7">${esc(RISK_DESC[type])}</p>
+        <p style="margin:6px 0 0;font-size:calc(15px * var(--fs, 1));line-height:1.7">${esc(RISK_DESC[type])}</p>
       </section>
       <button class="btn block" data-act="rt-apply" data-v="${avert}" data-s="${score}">내 성향에 반영하기</button>
       <button class="btn ghost block" data-act="rt-restart">다시 하기</button>
@@ -2873,7 +2961,7 @@ function viewRiskTest() {
   <main class="scroll">
     <div class="steps" aria-label="${T.step + 1}/${RISK_TEST.length} 문항">${RISK_TEST.map((_, i) => `<i class="${i <= T.step ? "on" : ""}"></i>`).join("")}</div>
     <span class="hint">${T.step + 1} / ${RISK_TEST.length}</span>
-    <h1 style="margin:0;font-size:22px;line-height:1.45">${esc(q.q)}</h1>
+    <h1 style="margin:0;font-size:calc(22px * var(--fs, 1));line-height:1.45">${esc(q.q)}</h1>
     <div class="rt-opts">${q.a.map(([label, v]) => `<button class="rt-opt" data-act="rt-pick" data-v="${v}">${esc(label)}</button>`).join("")}</div>
     ${T.step > 0 ? `<button class="link-btn" style="align-self:flex-start;padding-left:0" data-act="rt-back">‹ 이전 문항</button>` : ""}
   </main>`;
@@ -3106,7 +3194,7 @@ function modalCatDetail(m) {
   const byDate = {};
   list.forEach((t) => (byDate[t.date] = byDate[t.date] || []).push(t));
   return `<div class="sec-title" style="margin:0"><h2><i class="tx-dot" style="background:${catColor(m.c)};display:inline-block;margin-right:6px"></i>${esc(m.c)}</h2><span>${m.period === "week" ? "이번 주" : "이번 달"} ${S.a.slice(5).replace("-", "/")} ~ ${S.b.slice(5).replace("-", "/")}</span></div>
-    <div class="money-row"><b class="num" style="font-size:24px">${won(total)}</b><span class="hint">${list.length}건${S.total ? ` · 전체의 ${Math.round((total / S.total) * 100)}%` : ""}</span></div>
+    <div class="money-row"><b class="num" style="font-size:calc(24px * var(--fs, 1))">${won(total)}</b><span class="hint">${list.length}건${S.total ? ` · 전체의 ${Math.round((total / S.total) * 100)}%` : ""}</span></div>
     <div class="cat-detail">${Object.entries(byDate).map(([d, ts]) => {
       const dt = new Date(d + "T00:00:00");
       return `<div class="tx-day" style="display:flex;justify-content:space-between"><span>${dt.getMonth() + 1}월 ${dt.getDate()}일 (${"일월화수목금토"[dt.getDay()]})</span><span class="num">${won(ts.reduce((a, t) => a + t.amount, 0))}</span></div>${ts.map(txRow).join("")}`;
@@ -3250,7 +3338,7 @@ function moneyBody() {
     </div>
     <section class="card" id="m-summary">
       <div class="sec-title" style="margin-bottom:4px"><h2>${kind === "week" ? "이번 주" : "이번 달"} 쓴 돈</h2><span>${s.a.slice(5).replace("-", "/")} ~ ${s.b.slice(5).replace("-", "/")}</span></div>
-      <div class="money-row"><b class="num" style="font-size:28px">${won(s.total)}</b>${ch !== null ? `<span class="badge ${ch > 0 ? "b-up" : "b-down"}">${kind === "week" ? "지난주" : "지난달"}보다 ${ch > 0 ? "+" : ""}${ch}%</span>` : ""}</div>
+      <div class="money-row"><b class="num" style="font-size:calc(28px * var(--fs, 1))">${won(s.total)}</b>${ch !== null ? `<span class="badge ${ch > 0 ? "b-up" : "b-down"}">${kind === "week" ? "지난주" : "지난달"}보다 ${ch > 0 ? "+" : ""}${ch}%</span>` : ""}</div>
       <div class="hint" style="margin-bottom:10px">${s.count}건${s.income ? ` · 들어온 돈 ${won(s.income)}` : ""}</div>
       ${cats.length ? `<div class="donut-wrap"><div class="donut" style="background:conic-gradient(${donutStops(cats)})" role="img" aria-label="분류별 지출 비율"><span>${esc(cats[0][0])}<b class="num">${Math.round((cats[0][1] / sumCats) * 100)}%</b></span></div>
           <p class="hint" style="margin:0">${kind === "week" ? "지난주" : "지난달"}와 비교하면<br>${compareLine(cats, p.byCat, kind)}</p></div>`
@@ -3377,8 +3465,8 @@ function investCheckHtml() {
         <p class="hint" style="margin:6px 0 0">예금·현금 ${M(cash)} + 투자 ${M(invest)} 가운데 투자 비율이에요 (보증금 같은 기타 자산은 빼요).</p>
       </div>
       <div class="mp-tiles">
-        <div class="mp-tile"><span class="hint">관심 종목 주식</span>${held.length ? `<b class="num">${M(stockSum)}</b><span class="hint">${held.length}종목 · 가장 큰 ${esc(top[0])} ${topShare}%</span>${stockSum > invest * 1.1 ? `<span class="hint" style="color:#B3261E">입력한 투자 금액보다 커요. '자산 · 대출 입력'을 고쳐 주세요</span>` : ""}` : `<b style="font-size:15px">-</b><span class="hint">관심 종목에 보유 수량을 넣으면 쏠림을 봐 드려요</span>`}</div>
-        <div class="mp-tile"><span class="hint">모의투자 속 나</span>${game ? `<b>${game.like}</b><span class="hint">주식 ${game.sp}% · 진단은 ${type}</span>` : `<b style="font-size:15px">-</b><span class="hint">모의투자를 해 보면 비교해 드려요</span>`}</div>
+        <div class="mp-tile"><span class="hint">관심 종목 주식</span>${held.length ? `<b class="num">${M(stockSum)}</b><span class="hint">${held.length}종목 · 가장 큰 ${esc(top[0])} ${topShare}%</span>${stockSum > invest * 1.1 ? `<span class="hint" style="color:#B3261E">입력한 투자 금액보다 커요. '자산 · 대출 입력'을 고쳐 주세요</span>` : ""}` : `<b style="font-size:calc(15px * var(--fs, 1))">-</b><span class="hint">관심 종목에 보유 수량을 넣으면 쏠림을 봐 드려요</span>`}</div>
+        <div class="mp-tile"><span class="hint">모의투자 속 나</span>${game ? `<b>${game.like}</b><span class="hint">주식 ${game.sp}% · 진단은 ${type}</span>` : `<b style="font-size:calc(15px * var(--fs, 1))">-</b><span class="hint">모의투자를 해 보면 비교해 드려요</span>`}</div>
       </div>
       <h3 class="mp-h">루미의 처방</h3>
       <ol class="mp-rx">${rx.slice(0, 3).map((x, i) => `<li><span class="mp-no">${i + 1}</span><span>${x}</span></li>`).join("")}</ol>
@@ -4214,7 +4302,7 @@ function analysisHtml() {
   const foot = `<p class="foot">가계부 기록과 입력한 자산으로 계산한 일반적인 참고 기준이에요. 투자 권유가 아니에요.</p>`;
   if (!list.length) return `<section class="card" id="sec-analysis">
       <div class="sec-title"><h2>소비 분석</h2><span>최근 30일</span></div>
-      <div class="ans" style="display:flex;gap:10px">${mascot(40, "curious")}<p style="margin:0;font-size:14px;line-height:1.7">최근 30일 가계부 기록이 없어요. 가계부에 쓴 돈과 들어온 돈을 기록하면, 내 자산에 비해 소비가 괜찮은지 분석해 드릴게요.</p></div>
+      <div class="ans" style="display:flex;gap:10px">${mascot(40, "curious")}<p style="margin:0;font-size:calc(14px * var(--fs, 1));line-height:1.7">최근 30일 가계부 기록이 없어요. 가계부에 쓴 돈과 들어온 돈을 기록하면, 내 자산에 비해 소비가 괜찮은지 분석해 드릴게요.</p></div>
       <div class="inline" style="margin-top:12px"><button class="btn ghost" style="flex:1" data-act="fb-need-ledger">루미에게 피드백 받기</button><button class="btn" style="flex:1" data-act="nav" data-route="ledger" data-target="m-capture">가계부에 기록하기</button></div>
     </section>${foot}`;
   const sum = (arr) => arr.reduce((s2, x) => s2 + x.amount, 0);
@@ -4302,7 +4390,7 @@ function analysisHtml() {
       </div>
       ${!incomeRec && incomeEst ? `<p class="hint" style="margin:6px 0 0">가계부에 수입 기록이 없어서, 입력한 연 소득으로 한 달 수입을 추정했어요.</p>` : ""}
       ${span < 21 ? `<p class="hint" style="margin:6px 0 0">기록이 ${span}일치라 실제 한 달 지출보다 적게 잡혔을 수 있어요.</p>` : ""}
-      <div class="ans" style="display:flex;gap:10px;margin-top:10px">${mascot(36, cnt("warn") ? "reassure" : "happy")}<p style="margin:0;font-size:14px;line-height:1.7;background:var(--soft);border-radius:6px 16px 16px 16px;padding:10px 12px;flex:1">잘하고 있는 점 <b>${cnt("good")}개</b>, 점검할 점 <b>${cnt("warn")}개</b>예요.${cnt("warn") ? " 점검할 곳부터 위에 모아뒀어요." : " 지금처럼만 하면 돼요!"}</p></div>
+      <div class="ans" style="display:flex;gap:10px;margin-top:10px">${mascot(36, cnt("warn") ? "reassure" : "happy")}<p style="margin:0;font-size:calc(14px * var(--fs, 1));line-height:1.7;background:var(--soft);border-radius:6px 16px 16px 16px;padding:10px 12px;flex:1">잘하고 있는 점 <b>${cnt("good")}개</b>, 점검할 점 <b>${cnt("warn")}개</b>예요.${cnt("warn") ? " 점검할 곳부터 위에 모아뒀어요." : " 지금처럼만 하면 돼요!"}</p></div>
     </section>
     ${moneyProfileHtml({ p, a, income, incomeRec, spend, outs, total, over, baseName, small, need, interest })}
     ${foot}`;
@@ -4394,11 +4482,11 @@ function moneyProfileHtml({ p, a, income, incomeRec, spend, outs, total, over, b
   const tileAsset = total > 0 ? `<div class="mp-tile"><span class="hint">현재 자산</span><b class="num">${man(total)}</b>
         <div class="mp-bar sm">${assetCols.map(([v, , col]) => `<i style="width:${pct(Number(v), total)}%;background:${col}"></i>`).join("")}</div>
         <span class="mp-leg">${assetCols.map(([v, l, col]) => `<span><i class="dot" style="background:${col}"></i>${l}</span>`).join("")}</span>${debtSum > 0 ? `<span class="hint">대출 ${man(debtSum)}</span>` : ""}</div>`
-    : `<div class="mp-tile"><span class="hint">현재 자산</span><b style="font-size:15px">입력 전</b><span class="hint">'자산' 칸에서 넣으면 보여드려요</span></div>`;
+    : `<div class="mp-tile"><span class="hint">현재 자산</span><b style="font-size:calc(15px * var(--fs, 1))">입력 전</b><span class="hint">'자산' 칸에서 넣으면 보여드려요</span></div>`;
   const tileCash = months !== null ? `<div class="mp-tile"><span class="hint">비상금</span><b class="num ${months < 3 ? "up" : ""}">${fmt(months, 1)}개월 치</b>
         <div class="mp-bar sm" style="position:relative"><i style="width:${pct(Math.min(months, 6), 6)}%;background:${months < 3 ? "#D6453D" : "var(--green)"}"></i><em style="left:50%"></em></div>
         <span class="hint">가운데 선이 3개월 (권장)</span></div>`
-    : `<div class="mp-tile"><span class="hint">비상금</span><b style="font-size:15px">-</b><span class="hint">예금·현금을 넣으면 몇 달 버틸지 알려드려요</span></div>`;
+    : `<div class="mp-tile"><span class="hint">비상금</span><b style="font-size:calc(15px * var(--fs, 1))">-</b><span class="hint">예금·현금을 넣으면 몇 달 버틸지 알려드려요</span></div>`;
   const habitChips = habits.length ? `<div class="mp-chips">${habits.map(([k, f]) => { const it = mcItemOf({ merchant: k, cat: f.cat }); return `<span class="mp-chip"><img src="${mcSvgSrc(it.key)}" alt="" width="28" height="28"><span><b>${esc(k)}</b><small>30일에 ${f.n}번</small></span></span>`; }).join("")}</div>` : "";
   const goalLine = goalsOpen.length ? `<p class="hint" style="margin:8px 0 0">목표: ${goalsOpen.slice(0, 2).map((g) => `${esc(g.name)} ${man(g.target)}`).join(" · ")}</p>` : "";
   const worryList = worries.length
@@ -4408,7 +4496,7 @@ function moneyProfileHtml({ p, a, income, incomeRec, spend, outs, total, over, b
   const teaser = worries[0] ? worries[0].replace(/<[^>]+>/g, "") : "지금은 크게 걱정할 부분이 없어요.";
   if (!ui.mpOpen) return `<section class="card" id="sec-check">
       <div class="sec-title"><h2>${nick}님의 머니 프로필</h2><span>최근 30일 기준</span></div>
-      <div class="ans" style="display:flex;gap:10px;align-items:center">${mascot(40, worries.length ? "reassure" : "happy")}<p style="margin:0;font-size:14px;line-height:1.6;flex:1">${esc(teaser)}</p></div>
+      <div class="ans" style="display:flex;gap:10px;align-items:center">${mascot(40, worries.length ? "reassure" : "happy")}<p style="margin:0;font-size:calc(14px * var(--fs, 1));line-height:1.6;flex:1">${esc(teaser)}</p></div>
       <button class="btn ghost" data-act="mp-toggle" style="width:100%;margin-top:12px">머니 프로필 · 돈 고민 · 루미의 처방 보기</button>
     </section>`;
   return `<section class="card" id="sec-check">
@@ -4637,17 +4725,17 @@ function viewLearn() {
     ${mode === "basic" ? hotBlock + hub : ""}
     <section class="card mission" id="l-mission">
       <div class="sec-title" style="margin:0"><h2>오늘의 미션</h2><span>${learnState.missionDay === ymd(today0()) ? "완료 ✓" : `+${MISSION_XP} XP`}</span></div>
-      <p style="margin:0;font-size:14px">문제 ${MISSION}개 풀기 · <b class="num">${todayN}/${MISSION}</b></p>
+      <p style="margin:0;font-size:calc(14px * var(--fs, 1))">문제 ${MISSION}개 풀기 · <b class="num">${todayN}/${MISSION}</b></p>
       <div class="msn-dots">${Array.from({ length: MISSION }, (_, k) => `<i class="${k < todayN ? "on" : ""}"></i>`).join("")}</div>
       <button class="btn block" data-act="qq-start">⚡ 빠른 퀴즈 도전 (5문제)</button>
     </section>
-    ${mode === "basic" && todayQuizShown(tq) ? `<section class="quiz"><span class="hand" style="font-size:14px;color:var(--sub)">${quizLabel(tq.c)} · ${esc(tq.c.term)}</span>${quizBox(tq.c, tq.lv, true, false, true)}</section>` : ""}
+    ${mode === "basic" && todayQuizShown(tq) ? `<section class="quiz"><span class="hand" style="font-size:calc(14px * var(--fs, 1));color:var(--sub)">${quizLabel(tq.c)} · ${esc(tq.c.term)}</span>${quizBox(tq.c, tq.lv, true, false, true)}</section>` : ""}
     <section class="card stats">
       <button data-act="nav" data-route="solved"><b class="num">${solved.length}<small>/${totalQ}</small></b><span>푼 문제 ›</span></button>
       <div><b class="num">${att.pct}%</b><span>출석률 · ${att.n}/${att.of}일</span></div>
       <button data-act="nav" data-route="review"><b class="num" style="color:${wrong.length ? "var(--up)" : "inherit"}">${wrong.length}</b><span>복습할 문제 ›</span></button>
     </section>
-    ${mode === "exam" ? `<div class="sec-title" style="margin:6px 2px 0" id="l-map"><h2 style="font-size:20px">탈출 지도</h2><button class="link-btn" data-act="notes-open">내 노트 ${Object.keys(learnState.notes).length} ›</button></div>
+    ${mode === "exam" ? `<div class="sec-title" style="margin:6px 2px 0" id="l-map"><h2 style="font-size:calc(20px * var(--fs, 1))">탈출 지도</h2><button class="link-btn" data-act="notes-open">내 노트 ${Object.keys(learnState.notes).length} ›</button></div>
     <div class="stage-grid">${stages}</div>
     ${topicSection()}
     ${hub}
@@ -4926,7 +5014,7 @@ function startArcade() {
 // 시험 공부의 '주제별 공부': 추천 주제 + 기타(직접 적기)
 function topicSection() {
   const left = topicGenLeft(), busy = ui.topicBusy;
-  return `<div class="sec-title" style="margin:6px 2px 0" id="l-topic"><h2 style="font-size:20px">주제별 공부</h2><span>2030에게 쓸모 있는 주제</span></div>
+  return `<div class="sec-title" style="margin:6px 2px 0" id="l-topic"><h2 style="font-size:calc(20px * var(--fs, 1))">주제별 공부</h2><span>2030에게 쓸모 있는 주제</span></div>
     <div class="topic-grid">${topicList().map((t) => {
       const list = stageConcepts(t.cat), ok = list.filter(mastered).length;
       return `<button class="topic-card ${list.length && ok === list.length ? "clear" : ""}" data-act="topic-open" data-c="${t.cat}"><span class="tp-i" aria-hidden="true">${t.icon}</span><b>${esc(t.name)}</b><small>${esc(t.desc)}</small><span class="tp-n num">${ok}/${list.length}</span></button>`;
@@ -5054,7 +5142,7 @@ function viewBenefits() {
   const rates = data.rates?.available ? data.rates.items : [];
   const body = !p.region?.sido ? `<p class="hint" style="margin:0">위에서 사는 곳을 고르면 지자체·교육청·정부 혜택을 나이와 상황에 맞춰 찾아드려요.</p>`
     : !B ? `<p class="hint" style="margin:0">찾는 중…</p>`
-    : B.available === false ? `<p style="margin:0;font-size:14px;line-height:1.6">공공데이터포털 키를 연결하면 정부24 혜택이 여기에 떠요.</p><a class="btn ghost" style="display:inline-flex;align-items:center;margin-top:10px" href="https://www.gov.kr/portal/rcvfvrSvc/main" target="_blank" rel="noopener">보조금24에서 직접 찾기 ${ICON.out}</a>`
+    : B.available === false ? `<p style="margin:0;font-size:calc(14px * var(--fs, 1));line-height:1.6">공공데이터포털 키를 연결하면 정부24 혜택이 여기에 떠요.</p><a class="btn ghost" style="display:inline-flex;align-items:center;margin-top:10px" href="https://www.gov.kr/portal/rcvfvrSvc/main" target="_blank" rel="noopener">보조금24에서 직접 찾기 ${ICON.out}</a>`
     : items.length ? items.map((b) => `<a class="benefit2" href="${esc(b.url || "https://www.gov.kr")}" target="_blank" rel="noopener">
         <div class="t">${esc(b.name)}</div>
         ${b.summary ? `<div class="d">${esc(b.summary)}</div>` : ""}
@@ -5068,7 +5156,7 @@ function viewBenefits() {
     <section class="card" style="padding:6px 16px">${body}</section>
     ${p.school ? `<a class="card line" href="https://search.naver.com/search.naver?query=${encodeURIComponent(p.school + " 장학금 공지")}" target="_blank" rel="noopener"><span><b>${esc(p.school)}</b> <span class="hint">장학·지원 공지 찾아보기</span></span>${ICON.out}</a>` : ""}
     ${rates.length ? `<section class="card"><div class="sec-title"><h2>은행 정기예금 금리 TOP 3</h2><span>12개월 · 기본금리</span></div>
-      ${rates.map((r) => `<div class="row" style="min-height:40px"><span style="font-size:14px"><b>${esc(r.bank)}</b> ${esc(r.product)}</span><span class="num" style="font-weight:700;color:var(--green);white-space:nowrap">연 ${fmt(r.base, 2)}%</span></div>`).join("")}</section>` : ""}
+      ${rates.map((r) => `<div class="row" style="min-height:40px"><span style="font-size:calc(14px * var(--fs, 1))"><b>${esc(r.bank)}</b> ${esc(r.product)}</span><span class="num" style="font-weight:700;color:var(--green);white-space:nowrap">연 ${fmt(r.base, 2)}%</span></div>`).join("")}</section>` : ""}
     <p class="foot">정부24 ‘대한민국 공공서비스 정보’ 기준이에요. 학교별 공지는 자동으로 모을 수 없어서 검색으로 연결해요.<br>조건은 바뀔 수 있으니 신청 전에 꼭 확인하세요.</p>
   </main>`;
 }
@@ -5077,7 +5165,8 @@ async function loadBrief() {
   // 쉽게 풀이는 하루 2번까지 새로 부른다(이미 받아 둔 풀이를 다시 보는 건 세지 않음)
   const p = profile;
   const who = [p.status, ...(p.aims || []).slice(0, 2).map((a) => AIM_LABEL[a])].filter(Boolean).join(", ");
-  const interests = `${myInterests(5).join(",")}&lv=${p.level ?? ""}&who=${encodeURIComponent(who)}`; // 같은 날 같은 조건이면 받아 둔 풀이를 다시 쓴다
+  const lang = ui.lang === "en" ? "&lang=en" : "";
+  const interests = `${myInterests(5).join(",")}&lv=${p.level ?? ""}&who=${encodeURIComponent(who)}${lang}`; // 같은 날 같은 조건이면 받아 둔 풀이를 다시 쓴다
   const saved = lastGet().brief;
   if (saved?.day === ymd(today0()) && saved.interests === interests) {
     data.brief = saved.data;
@@ -5091,7 +5180,7 @@ async function loadBrief() {
     return;
   }
   try {
-    data.brief = await getJson(`/api/brief?interests=${encodeURIComponent(myInterests(5).join(","))}&lv=${p.level ?? ""}&who=${encodeURIComponent(who)}`);
+    data.brief = await getJson(`/api/brief?interests=${encodeURIComponent(myInterests(5).join(","))}&lv=${p.level ?? ""}&who=${encodeURIComponent(who)}${lang}`);
     if (data.brief?.points?.length) { const v = aiUse(); v.brief++; aiSave(v); lastSet("brief", { day: ymd(today0()), interests, data: data.brief }); }
   } catch { data.brief = null; }
   if (["home", "news"].includes(route())) render();
@@ -5246,7 +5335,7 @@ function lastFb(kind) { const f = lastGet()["fb-" + kind]; return f && f.from ==
 // AI 피드백을 머니 프로필 모양으로: 돈 고민(가장 큰 걱정은 표시) → 루미의 처방
 function moneyFbHtml(F, kind) {
   const who = esc(profile.nickname || "나");
-  if (!F.fb) return `<p style="margin:0;font-size:14px;line-height:1.7;white-space:pre-line">${esc(F.text)}</p>`;
+  if (!F.fb) return `<p style="margin:0;font-size:calc(14px * var(--fs, 1));line-height:1.7;white-space:pre-line">${esc(F.text)}</p>`;
   const f = F.fb;
   return `<div style="flex:1;min-width:0">
       <h3 class="mp-h" style="margin-top:0">${who}님의 ${kind === "week" ? "이번 주" : "이번 달"} 돈 고민</h3>
@@ -5327,7 +5416,7 @@ async function askAi(q) {
   ui.q = ""; ui.sremote = []; ui.searchOpen = false;
   render();
   try {
-    const j = await getJson("/api/ask", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ question: q, ...summaryForAi() }) });
+    const j = await getJson("/api/ask", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ question: q, ...summaryForAi(), lang: ui.lang || "ko" }) });
     aiCount();
     ui.sheet = { q, a: j.answer || "답을 만들지 못했어요." };
     if (j.answer) lastSet("sheet", { day: ymd(today0()), q, a: j.answer });
@@ -5379,7 +5468,7 @@ function viewSheet() {
   const s = ui.sheet;
   return `<div class="sheet-back" data-act="close-sheet">
     <div class="sheet" role="dialog" aria-modal="true" aria-label="질문 답변" data-stop="1">
-      <div style="display:flex;justify-content:space-between;align-items:center"><b class="hand" style="font-size:16px">물어봐요</b><button class="icon-btn" data-act="close-sheet" aria-label="닫기">${ICON.close}</button></div>
+      <div style="display:flex;justify-content:space-between;align-items:center"><b class="hand" style="font-size:calc(16px * var(--fs, 1))">물어봐요</b><button class="icon-btn" data-act="close-sheet" aria-label="닫기">${ICON.close}</button></div>
       <div class="qline">${esc(s.q)}</div>
       <div class="ans">${mascot(40)}<p class="${s.loading ? "hand" : ""}">${s.loading ? "음… 생각하는 중이에요" : esc(s.a)}</p></div>
       ${!s.loading ? `<p class="hint" style="margin:0">${s.limited ? "" : "참고용 설명이에요. 투자 결정은 직접 판단해 주세요. · "}${fbLeftText()}</p>${s.limited ? adButton("fb") : ""}` : ""}
@@ -5435,7 +5524,7 @@ function mySections() {
     profile: `
     <section class="card" style="display:flex;align-items:center;gap:14px">
       ${mascot(56)}
-      <div style="flex:1"><div style="font-size:18px;font-weight:700">${esc(p.nickname || "이름 없음")}님</div>
+      <div style="flex:1"><div style="font-size:calc(18px * var(--fs, 1));font-weight:700">${esc(p.nickname || "이름 없음")}님</div>
       <div class="hint">${p.age ? `만 ${p.age}세 · ` : ""}${riskType(p.avert)} · ${p.prefs.map(esc).join(", ") || "선호 미입력"}</div></div>
     </section>
     `,
@@ -5475,7 +5564,7 @@ function mySections() {
     <section class="card" id="sec-diag">
       <div class="sec-title"><h2>내 자산 진단</h2><button class="link-btn" data-act="toggle-hide">${hide ? "금액 보이기" : "금액 숨기기"}</button></div>
       ${hasAssets ? `
-        <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px"><span class="hint">순자산</span><span class="num" style="font-size:24px;font-weight:700">${money(net)}</span></div>
+        <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px"><span class="hint">순자산</span><span class="num" style="font-size:calc(24px * var(--fs, 1));font-weight:700">${money(net)}</span></div>
         <div class="bar" aria-hidden="true">${seg(Number(a.cash) || 0, "#5B7CFA")}${seg(Number(a.invest) || 0, "#FF9EBB")}${seg(Number(a.other) || 0, "#C9B8F5")}</div>
         <div class="legend" style="margin:8px 0 12px"><span><i style="background:#5B7CFA"></i>예금·현금 ${money(a.cash || 0)}</span><span><i style="background:#FF9EBB"></i>투자 ${money(a.invest || 0)}</span><span><i style="background:#C9B8F5"></i>기타 ${money(a.other || 0)}</span><span>부채 ${money(debtSum)}</span></div>
         <div class="diag">${diag.map(([c, t, s]) => `<div class="diag-line"><span class="badge ${c}">${t}</span><span>${esc(s)}</span></div>`).join("")}</div>
@@ -5556,7 +5645,7 @@ function mySections() {
     privacy: `
     <section class="card form" id="sec-privacy">
       <div class="sec-title"><h2>개인정보 관리</h2></div>
-      <p style="margin:0;font-size:14px;line-height:1.6">입력한 정보는 서버에 저장하지 않고 <b>이 기기(브라우저)에만</b> 저장돼요. 질문창을 쓸 때만 나이대·성향·금액 요약이 답변을 만드는 데 쓰여요 (닉네임은 보내지 않아요).</p>
+      <p style="margin:0;font-size:calc(14px * var(--fs, 1));line-height:1.6">입력한 정보는 서버에 저장하지 않고 <b>이 기기(브라우저)에만</b> 저장돼요. 질문창을 쓸 때만 나이대·성향·금액 요약이 답변을 만드는 데 쓰여요 (닉네임은 보내지 않아요).</p>
       <button class="btn danger" data-act="wipe">내 정보 전부 지우기</button>
     </section>
     `,
@@ -5615,8 +5704,8 @@ function pushCard() {
   return `<section class="card form" id="sec-push">
       <div class="sec-title"><h2>아침 알림</h2><span>매일 아침 8시쯤 한 번</span></div>
       <p class="hint" style="margin:0">"오늘 나에게 중요한 3가지"를 보러 오라고 알려 드려요. 알림 주소만 서버에 맡기고, 이름이나 기록은 보내지 않아요.</p>
-      ${st === "unsupported" ? `<p style="margin:0;font-size:14px;line-height:1.6">${ios ? "아이폰은 사파리 아래쪽 공유 버튼 → <b>홈 화면에 추가</b>로 앱을 설치한 뒤, 그 앱에서 켤 수 있어요(iOS 16.4 이상)." : "이 브라우저는 알림을 지원하지 않아요. 크롬이나 사파리에서 열어 주세요."}</p>`
-        : st === "denied" ? `<p style="margin:0;font-size:14px;line-height:1.6">알림이 꺼져 있어요. 휴대폰 설정 → 이 앱(또는 브라우저) → 알림에서 허용한 뒤 다시 눌러 주세요.</p><button class="btn ghost" data-act="push-on">다시 시도</button>`
+      ${st === "unsupported" ? `<p style="margin:0;font-size:calc(14px * var(--fs, 1));line-height:1.6">${ios ? "아이폰은 사파리 아래쪽 공유 버튼 → <b>홈 화면에 추가</b>로 앱을 설치한 뒤, 그 앱에서 켤 수 있어요(iOS 16.4 이상)." : "이 브라우저는 알림을 지원하지 않아요. 크롬이나 사파리에서 열어 주세요."}</p>`
+        : st === "denied" ? `<p style="margin:0;font-size:calc(14px * var(--fs, 1));line-height:1.6">알림이 꺼져 있어요. 휴대폰 설정 → 이 앱(또는 브라우저) → 알림에서 허용한 뒤 다시 눌러 주세요.</p><button class="btn ghost" data-act="push-on">다시 시도</button>`
         : st === "on" ? `<button class="btn ghost" data-act="push-off">아침 알림 끄기</button>` : `<button class="btn" data-act="push-on">아침 알림 받기</button>`}
     </section>`;
 }
@@ -5653,6 +5742,16 @@ function viewEtc() {
   const S = mySections();
   return `${pageHead("기타")}
   <main class="scroll">
+    <section class="card form" id="sec-fs">
+      <div class="sec-title"><h2>글자 크기</h2><span>모든 화면에 적용돼요</span></div>
+      <div class="chips">${FS_STEPS.map(([v, l]) => `<button class="chip ${(ui.fs || 1) === v ? "on" : ""}" data-act="set-fs" data-v="${v}" aria-pressed="${(ui.fs || 1) === v}">${l}</button>`).join("")}</div>
+      <p style="margin:0;font-size:calc(15px * var(--fs, 1));line-height:1.6">미리 보기: 오늘 코스피가 1.2% 올랐어요.</p>
+    </section>
+    <section class="card form" id="sec-lang">
+      <div class="sec-title"><h2>언어</h2><span translate="no">Language</span></div>
+      <div class="chips" translate="no">${[["ko", "한국어"], ["en", "English"]].map(([v, l]) => `<button class="chip ${(ui.lang || "ko") === v ? "on" : ""}" data-act="set-lang" data-v="${v}" aria-pressed="${(ui.lang || "ko") === v}">${l}</button>`).join("")}</div>
+      <p class="hint" style="margin:0">English는 화면 글자를 AI(구글 제미나이)로 번역해요. 처음 여는 화면은 1~2초 뒤에 영어로 바뀌고, 번역은 이 기기에 기억해 두어 다음부터는 바로 보여요. 루미의 설명·풀이는 처음부터 영어로 써요. 돈 정리 카드 같은 그림 속 글자는 한국어로 남아요.</p>
+    </section>
     <section class="card form" id="sec-lumi">
       <div class="sec-title"><h2>루미 움직임</h2><span>홈에서 코스피 분위기대로 움직여요</span></div>
       <button class="btn ${ui.lumiStill ? "" : "ghost"}" data-act="lumi-move">${ui.lumiStill ? "움직이게 하기" : "멈추기"}</button>
@@ -5661,7 +5760,7 @@ function viewEtc() {
     ${S.privacy}
     <section class="card" id="sec-info">
       <div class="sec-title"><h2>앱 정보</h2><span>v0.5</span></div>
-      <p style="margin:0;font-size:14px;line-height:1.7">주가·지수: 공공데이터포털(금융위원회, 전일 종가) · 환율: 한국수출입은행 · 뉴스: 네이버·정책브리핑·NewsData(국내), GDELT·BBC(해외) — 제목·링크만 · 쉽게 풀이·화제순: 정책브리핑 정책뉴스 · 혜택: 정부24 공공서비스 정보 · AI: Google Gemini(무료 등급 먼저, 보낸 내용을 구글이 서비스 개선에 쓸 수 있음) · OpenAI</p>
+      <p style="margin:0;font-size:calc(14px * var(--fs, 1));line-height:1.7">주가·지수: 공공데이터포털(금융위원회, 전일 종가) · 환율: 한국수출입은행 · 뉴스: 네이버·정책브리핑·NewsData(국내), GDELT·BBC(해외) — 제목·링크만 · 쉽게 풀이·화제순: 정책브리핑 정책뉴스 · 혜택: 정부24 공공서비스 정보 · AI: Google Gemini(무료 등급 먼저, 보낸 내용을 구글이 서비스 개선에 쓸 수 있음) · OpenAI</p>
       <p class="hint" style="margin:8px 0 0">이 앱의 정보는 투자 권유가 아닌 참고용이에요.</p>
     </section>
   </main>`;
@@ -5692,12 +5791,12 @@ function onbRiskTest(d) {
   const T = ui.onb.rt || (ui.onb.rt = { step: 0, picks: [] });
   if (d.riskTest) {
     const type = riskType(d.avert);
-    return `<div class="card form"><span class="lb">투자 성향 진단 결과</span><b style="font-size:20px">${type}</b><p class="hint" style="margin:0">${esc(RISK_DESC[type])}</p>
+    return `<div class="card form"><span class="lb">투자 성향 진단 결과</span><b style="font-size:calc(20px * var(--fs, 1))">${type}</b><p class="hint" style="margin:0">${esc(RISK_DESC[type])}</p>
       <button class="link-btn" data-act="onb-rt-restart" style="align-self:flex-start;padding-left:0">다시 하기</button></div>`;
   }
   const q = RISK_TEST[T.step];
   return `<div class="card form"><span class="lb">투자 성향 진단 ${T.step + 1} / ${RISK_TEST.length}</span>
-      <p style="margin:0;font-size:15px;font-weight:700;line-height:1.5">${esc(q.q)}</p>
+      <p style="margin:0;font-size:calc(15px * var(--fs, 1));font-weight:700;line-height:1.5">${esc(q.q)}</p>
       <div class="rt-opts">${q.a.map(([label, v]) => `<button class="rt-opt" data-act="onb-rt" data-v="${v}">${esc(label)}</button>`).join("")}</div>
       <div style="display:flex;gap:12px">${T.step > 0 ? `<button class="link-btn" style="padding-left:0" data-act="onb-rt-back">‹ 이전 문항</button>` : ""}<button class="link-btn" style="padding-left:0" data-act="onb-manual">${ui.onb.manual ? "직접 고르기 닫기" : "진단 대신 직접 고를래요"}</button></div></div>`;
 }
@@ -5716,7 +5815,7 @@ function viewOnboard() {
       <div><label class="lb" for="o-age">만 나이</label><input class="field num" id="o-age" inputmode="numeric" data-o="age" value="${d.age ?? ""}" placeholder="예: 24"></div>
       <p class="hint" style="margin:0">나이는 받을 수 있는 청년 혜택·정책을 찾는 데만 써요. 이 기기에만 저장돼요.</p>
     </div>
-    ${sync.on ? `<div class="card" style="padding:12px 14px;font-size:14px;line-height:1.6">✓ <b>${esc(sync.email || "구글 계정")}</b>과 연결돼 있어요. 아직 불러올 기록이 없었어요. 기록이 있는 기기에서 같은 계정으로 연결한 뒤 눌러 주세요.<br><button class="btn ghost" style="margin-top:8px;width:100%" data-act="sync-pull">기록 다시 불러오기</button></div>`
+    ${sync.on ? `<div class="card" style="padding:12px 14px;font-size:calc(14px * var(--fs, 1));line-height:1.6">✓ <b>${esc(sync.email || "구글 계정")}</b>과 연결돼 있어요. 아직 불러올 기록이 없었어요. 기록이 있는 기기에서 같은 계정으로 연결한 뒤 눌러 주세요.<br><button class="btn ghost" style="margin-top:8px;width:100%" data-act="sync-pull">기록 다시 불러오기</button></div>`
       : `<p class="hint" style="margin:0">구글로 로그인하면 다른 기기에서 쓰던 기록을 불러오고, 모의투자 순위도 볼 수 있어요. 로그인 없이도 모든 기능을 쓸 수 있어요.</p>`}`;
   if (st === 1) body = `
     ${lumiSays(`반가워요, ${esc(d.nickname || "")}님! 지금 상황과 사는 곳을 알면 받을 수 있는 혜택과 정책을 찾아드려요.`, "wave", "up")}
@@ -6223,7 +6322,7 @@ function chartBlock() {
   if (per === "1d") {
     const c = dayChart();
     body = c ? `${c}<div class="inv-legend"><span><i class="me"></i>내 포트폴리오 전체</span><span><i class="base"></i>시작 금액</span></div>
-      <p class="hint" style="margin:6px 0 0;font-size:12px">가격은 하루 한 번 들어오는 전 거래일 종가라, 하루 안에서는 새 종가가 들어올 때와 사고팔 때 값이 바뀌어요.</p>`
+      <p class="hint" style="margin:6px 0 0;font-size:calc(12px * var(--fs, 1))">가격은 하루 한 번 들어오는 전 거래일 종가라, 하루 안에서는 새 종가가 들어올 때와 사고팔 때 값이 바뀌어요.</p>`
       : `<p class="hint inv-empty">${invData.game ? "앱을 열고 사고팔 때마다 점이 찍혀요." : "그래프를 불러오는 중…"}</p>`;
   } else {
     const pts = invChartPoints(per);
@@ -6492,9 +6591,9 @@ function stockWhy(id) {
       ${Q ? `<span class="hint">마지막 거래일</span><span class="num">${fmt(Q.v)}원 (${pct(Q.pct)})</span>` : ""}
     </div>` : ""}
     ${say ? `<div class="lumi-says inv-says">${mascot(36)}<p class="bubble-onb">${say}</p></div>` : ""}
-    <h3 style="margin:4px 0 0;font-size:15px">루미의 힌트</h3>
+    <h3 style="margin:4px 0 0;font-size:calc(15px * var(--fs, 1))">루미의 힌트</h3>
     ${mine.length || sector.length ? [...mine, ...sector].map(hintCard).join("") : `<p class="hint" style="margin:0">${invData.hints ? `오늘은 ${esc(name)} 힌트가 없어요. 아래 뉴스 제목에서 이유를 찾아봐요.` : "힌트를 만드는 중이에요…"}</p>`}
-    <h3 style="margin:4px 0 0;font-size:15px">${esc(name)} 최근 뉴스</h3>
+    <h3 style="margin:4px 0 0;font-size:calc(15px * var(--fs, 1))">${esc(name)} 최근 뉴스</h3>
     <div class="nl">${!news ? `<p class="hint">불러오는 중…</p>` : news.length ? news.slice(0, 3).map((it) => newsLine(it, true)).join("") : `<p class="hint">관련 뉴스를 찾지 못했어요.</p>`}</div>
     <p class="hint" style="margin:0">뉴스는 제목·링크 그대로예요. 사라·팔라는 뜻이 아니에요.</p>
     <div style="display:flex;gap:8px"><button class="btn ghost" style="flex:1" data-act="inv-open" data-k="stock:${esc(id)}">${esc(name)} 사고팔기</button><button class="btn" style="flex:1" data-act="modal-close">닫기</button></div>`;
@@ -6519,7 +6618,7 @@ function modalInvPlayer(m) {
   return `<div class="sec-title" style="margin:0"><h2>${esc(x.nick || "익명")}${me ? " (나)" : ""}</h2><span>${m.i + 1}위 · <b class="num ${rkGain(x) >= 0 ? "up" : "down"}">${rkRetPct(x) > 0 ? "+" : ""}${fmt(rkRetPct(x), 2)}% (${rkGain(x) > 0 ? "+" : ""}${fmt(rkGain(x))}원)</b></span></div>
     ${parts.length ? `<div class="mix-bar" role="img" aria-label="투자 비중">${parts.map(([k, , c]) => `<i style="width:${(mix[k] / sum) * 100}%;background:${c}"></i>`).join("")}</div>
     <div class="rows">${parts.map(([k, name, c]) => `<div class="row" style="min-height:36px"><span><i class="tx-dot" style="display:inline-block;margin-right:6px;background:${c}"></i>${name}</span><b class="num">${mix[k]}%</b></div>`).join("")}</div>
-    <p style="margin:0;font-size:14px">${stockPct >= 70 ? "주식에 많이 담은 공격적인 포트폴리오예요." : stockPct >= 40 ? "주식과 안전한 상품을 섞은 포트폴리오예요." : stockPct > 0 ? "안전한 쪽에 더 많이 담은 포트폴리오예요." : "아직 주식은 담지 않았어요."}</p>`
+    <p style="margin:0;font-size:calc(14px * var(--fs, 1))">${stockPct >= 70 ? "주식에 많이 담은 공격적인 포트폴리오예요." : stockPct >= 40 ? "주식과 안전한 상품을 섞은 포트폴리오예요." : stockPct > 0 ? "안전한 쪽에 더 많이 담은 포트폴리오예요." : "아직 주식은 담지 않았어요."}</p>`
       : `<p class="hint" style="margin:0">${mix ? "아직 아무것도 사지 않고 현금으로 들고 있어요." : "투자 비중은 다음 순위 계산 때(최대 10분) 보여드려요."}</p>`}
     ${playerHold(m, x, me)}
     <p class="hint" style="margin:0">${me ? "내 비중은 지금 값이에요." : "서버가 공식 종가로 계산한 값이에요."}</p>
@@ -6771,7 +6870,7 @@ document.addEventListener("click", async (e) => {
       ui.letter = { text, loading: true, result: null, error: "" };
       render();
       try {
-        const j = await getJson("/api/brief", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text, lv: profile.level ?? null }) });
+        const j = await getJson("/api/brief", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text, lv: profile.level ?? null, lang: ui.lang || "ko" }) });
         if (j.available !== false) aiCount();
         ui.letter = { text, loading: false, result: j.available === false ? null : j, error: j.available === false ? "AI 키가 연결되면 풀이할 수 있어요" : "" };
       } catch (err) {
@@ -6901,6 +7000,16 @@ document.addEventListener("click", async (e) => {
       if (i !== undefined) profile.goals[i] = { ...profile.goals[i], ...g };
       else profile.goals = [...(profile.goals || []), g];
       saveProfile(); ui.modal = null; render(); toast(i !== undefined ? "목표를 고쳤어요" : "목표를 만들었어요");
+      break;
+    }
+    case "set-fs": ui.fs = Number(el.dataset.v); saveUi(); applyDisplay(); render(); break;
+    case "set-lang": {
+      const v = el.dataset.v === "en" ? "en" : "ko";
+      if ((ui.lang || "ko") === v) break;
+      ui.lang = v; saveUi(); applyDisplay();
+      data.brief = null; // 쉽게 풀이는 그 언어로 다시
+      if (v === "ko") location.reload(); // 이미 바꿔 끼운 영어를 모두 한국어로 되돌리려면 새로 그린다
+      else { render(); toast("Switching to English…"); }
       break;
     }
     case "lumi-move": ui.lumiStill = !ui.lumiStill; saveUi(); render(); toast(ui.lumiStill ? "루미가 멈췄어요" : "루미가 다시 움직여요"); break;
