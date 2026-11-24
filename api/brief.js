@@ -2,7 +2,7 @@
 // 네이버 뉴스 검색 결과는 약관상 AI 요약에 쓸 수 없어서 쓰지 않는다. 근거 보도자료는 링크로 붙인다.
 // GET  /api/brief?interests=삼성전자,여행   → 오늘 경제 정책 풀이 (1시간 동안 같은 결과를 재사용해 비용 절약)
 // POST /api/brief { text }                  → 붙여넣은 뉴스레터 풀이 (저장하지 않음)
-import { generate, aiReady } from "./_ai.js";
+import { generate, aiReady, levelRule } from "./_ai.js";
 import { cache } from "./_util.js";
 import { pressReleases, isEcon, interestScore } from "./_policy.js";
 
@@ -57,7 +57,7 @@ export default async function handler(req, res) {
     if (text.length < 50) return res.status(400).json({ error: "내용을 조금 더 붙여넣어 주세요" }); // 짧은 글은 횟수를 깎지 않는다
     letterHits.set(ip, { day, n: used + 1 });
     try {
-      const out = await ask(RULES + "\n- 사용자가 구독하는 뉴스레터 내용을 붙여넣었어. 핵심 2~3개만 골라 points로 정리하고, sources는 빈 배열로 둬.", text.slice(0, 6000));
+      const out = await ask(RULES + levelRule(req.body?.lv) + "\n- 사용자가 구독하는 뉴스레터 내용을 붙여넣었어. 핵심 2~3개만 골라 points로 정리하고, sources는 빈 배열로 둬.", text.slice(0, 6000));
       return res.status(200).json({ available: true, ...out });
     } catch (e) {
       console.error(e);
@@ -68,6 +68,7 @@ export default async function handler(req, res) {
   if (!process.env.DATA_GO_KR_KEY) return res.status(200).json({ available: false });
 
   const interests = String(req.query.interests || "").split(",").map((s) => s.trim()).filter(Boolean).slice(0, 5);
+  const who = String(req.query.who || "").slice(0, 60); // 예: "대학생, 전세·내 집 마련"
   try {
     // 최근 7일 경제 보도자료 중 관심사와 겹치는 것을 앞에 두고 40개까지
     const pool = (await pressReleases(7)).filter(isEcon)
@@ -77,7 +78,7 @@ export default async function handler(req, res) {
     if (pool.length < 3) return res.status(200).json({ available: true, mood: "", points: [] });
 
     const listText = pool.map((n, i) => `[${i}] (${n.org}) ${n.title} — ${n.sub} ${n.body.slice(0, 200)}`).join("\n");
-    const out = await ask(RULES + `
+    const out = await ask(RULES + levelRule(req.query.lv) + (who ? `\n- 이 사람의 상황·목표: ${who}. forMe는 이 상황과 목표에 이어서 말해줘.` : "") + `
 - 아래는 최근 7일 정부 보도자료야(관심사와 관련된 것이 앞쪽에 있어). 생활과 돈에 영향이 큰 흐름 3개를 골라 points로 정리해. 관심사(${interests.join(", ") || "없음"})와 관련된 게 있으면 하나 이상 꼭 포함하고, 그 point의 forMe에서 관심사와 이어서 설명해.
 - sources에는 근거 보도자료 번호를 1~3개 넣어.`, listText);
     const points = (out.points || []).slice(0, 3).map((p) => ({

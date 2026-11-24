@@ -1437,6 +1437,20 @@ const ui = {
 
 // ───────────────────────── 상수 ─────────────────────────
 const PREFS = ["쇼핑", "여행", "음식", "자기계발", "저축", "부동산", "취미"];
+// 첫 설문에서 더 묻는 것: 돈 목표·고민, 관심 분야(업종), 경제 지식 수준, 투자 경험. 뉴스·중요한 3가지·루미 설명에 쓴다
+const AIMS = ["비상금", "첫 투자", "내 집 마련", "대출 갚기", "여행 자금", "취업·이직", "노후·연금"];
+const AIM_LABEL = { 비상금: "비상금 모으기", "첫 투자": "첫 투자 시작", "내 집 마련": "전세·내 집 마련", "대출 갚기": "학자금·대출 갚기", "여행 자금": "여행 자금 모으기", "취업·이직": "취업·이직 준비", "노후·연금": "노후·연금 준비" };
+const FIELDS = ["반도체", "2차전지", "AI", "바이오", "자동차", "게임·엔터", "은행·금융"];
+// 모의투자 힌트의 업종 이름(api/market.js SECTORS)에 이 낱말이 들어 있으면 그 관심 분야 소식
+const FIELD_HINT = { 반도체: "반도체", "2차전지": "배터리", AI: "플랫폼", 바이오: "바이오", 자동차: "자동차", "게임·엔터": "콘텐츠", "은행·금융": "은행" };
+const LEVELS = ["처음이에요", "뉴스는 보는데 어려워요", "어느 정도 알아요"];
+const EXPS = ["없어요", "예적금만 해 봤어요", "주식도 해 봤어요"];
+// 뉴스·풀이를 찾을 관심사: 관심 종목 → 관심 분야 → 돈 목표 → 선호 순으로 고르게 섞어 n개
+function myInterests(n = 6, p = profile) {
+  const w = p.watch.map((x) => x.name), f = p.fields || [], a = p.aims || [], pr = p.prefs || [];
+  return [...new Set([...w.slice(0, 2), ...f.slice(0, 2), ...a.slice(0, 2), ...pr.slice(0, 2), ...w.slice(2, 4), ...f.slice(2), ...a.slice(2), ...pr.slice(2)])].slice(0, n);
+}
+const hasAim = (k) => (profile?.aims || []).includes(k);
 const POPULAR = ["삼성전자", "SK하이닉스", "LG에너지솔루션", "현대차", "NAVER", "카카오", "셀트리온", "KB금융"];
 const LETTERS = [
   { id: "uppity", name: "머니레터", by: "어피티", url: "https://uppity.co.kr" },
@@ -1539,6 +1553,7 @@ function newProfile() {
     watch: [], letters: [], customLetters: [],
     assets: { cash: null, invest: null, other: null }, debts: null, payday: null,
     region: { sido: "", sigungu: "" }, status: "", school: "",
+    aims: [], fields: [], level: null, exp: null,
     skipped: {}, createdAt: new Date().toISOString(),
   };
 }
@@ -1569,7 +1584,7 @@ async function loadAll(manual = false) {
   data.loading = true;
   data.newsFull = null; // 관심사가 바뀌었을 수 있으니 더보기 목록은 다시 받는다
   const names = profile.watch.map((w) => w.name).join(",");
-  const interests = [...profile.watch.map((w) => w.name).slice(0, 3), ...profile.prefs.slice(0, 3)].join(",");
+  const interests = myInterests(6).join(",");
   const jobs = [
     getJson(`/api/market?stocks=${encodeURIComponent(names)}`).then((j) => (data.market = j)).catch(() => {}),
     getJson(`/api/news?interests=${encodeURIComponent(interests)}`).then((j) => (data.news = keepForYou("home", interests, j))).catch(() => {}),
@@ -1648,12 +1663,12 @@ function impacts() {
     const vs = m.usd.vs || 0, up = vs > 0;
     let text;
     if (!vs) text = "환율이 직전 고시와 같아요. 해외결제 비용 변화는 없어요.";
-    else if (p.prefs.includes("여행")) text = `여행을 좋아하는 당신, 1,000달러를 환전하면 직전 고시보다 약 ${won(Math.abs(vs * 1000))} ${up ? "더 들어요" : "덜 들어요"}.`;
+    else if (p.prefs.includes("여행") || hasAim("여행 자금")) text = `여행${hasAim("여행 자금") ? " 자금을 모으는" : "을 좋아하는"} 당신, 1,000달러를 환전하면 직전 고시보다 약 ${won(Math.abs(vs * 1000))} ${up ? "더 들어요" : "덜 들어요"}.`;
     else if (p.prefs.includes("쇼핑")) text = `쇼핑을 좋아하는 당신, 해외직구 100달러 결제 시 약 ${won(Math.abs(vs * 100))} ${up ? "더 내요" : "덜 내요"}.`;
     else text = up ? "수입품 가격과 해외결제 비용이 조금 오를 수 있어요." : "해외결제·수입품 비용 부담이 조금 줄어요.";
     const fxSrc = m.src?.usd === "ecos" ? ["한국은행 경제통계(ECOS) 원/달러 환율", "https://ecos.bok.or.kr"] : ["한국수출입은행 환율", "https://www.koreaexim.go.kr"];
     const fxNews = (data.fxNews || []).find((n) => /환율/.test(n.title) && /^https?:\/\//.test(n.url));
-    out.push({ kind: "fx", score: 1 + (p.prefs.includes("여행") || p.prefs.includes("쇼핑") ? 2 : 0) + Math.min(2, Math.abs(m.usd.pct || 0)),
+    out.push({ kind: "fx", score: 1 + (p.prefs.includes("여행") || p.prefs.includes("쇼핑") || hasAim("여행 자금") ? 2 : 0) + Math.min(2, Math.abs(m.usd.pct || 0)),
       tag: `환율 ${arrow(vs)} ${fmt(m.usd.v, 1)}원`, tone: tone(vs), text, num: fxSrc[0], src: fxNews ? [`${fxNews.source || "뉴스"} 기사`, fxNews.url] : fxSrc });
   }
   const rateEvent = upcoming(20).find((e) => (e.tags || []).includes("금리"));
@@ -1662,8 +1677,15 @@ function impacts() {
   const when = rateEvent ? `${rateEvent.d.getMonth() + 1}/${rateEvent.d.getDate()} ${isBok ? "금통위" : "FOMC"}` : "다음 금리 결정";
   const rateSrc = isBok ? ["한국은행 기준금리 추이", "https://www.bok.or.kr/portal/singl/baseRate/list.do?dataSeCd=01&menuNo=200643"] : ["미국 연준 FOMC 일정", "https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm"];
   if (p.debts === null) { // 대출은 묻지 않는다. 내 돈 '자산'에서 직접 넣을 때까지 일반 설명만
-    const text = p.assets.cash ? `${when}에서 금리가 0.25%p 바뀌면, 예금 ${man(p.assets.cash)}의 1년 이자가 약 ${won(p.assets.cash * 1e4 * 0.0025)} 달라질 수 있어요.` : `${rateEvent ? `${when}에 기준금리가 정해져요. ` : ""}금리가 오르면 예금 이자는 늘고, 대출 이자는 커져요.`;
-    out.push({ tag: rateEvent ? `금리 · ${when}` : "금리", tone: "flat", text, kind: "rate", score: 1 + rateSoon, num: p.assets.cash ? "예금: 내가 입력한 금액" : "금리 일정: 한국은행·연준 발표", src: rateSrc });
+    // 돈 목표가 있으면 그 목표 쪽으로 풀어 말한다 (일반 설명, 내 대출 금액은 묻지 않음)
+    const head = rateEvent ? `${when}에 기준금리가 정해져요. ` : "";
+    const aimText = hasAim("내 집 마련") ? `${head}전세·내 집 마련을 준비 중이라면, 금리가 오르면 전세대출·주택담보대출 이자가 커지고 내리면 줄어요.`
+      : hasAim("대출 갚기") ? `${head}대출을 갚는 중이라면, 변동금리 대출은 금리가 오를 때 이자가 커져요. 고정금리는 그대로예요.`
+      : hasAim("비상금") ? `${head}비상금을 모으는 중이라면, 금리가 오르면 예금·파킹통장 이자가 늘어요.`
+      : "";
+    const text = p.assets.cash ? `${when}에서 금리가 0.25%p 바뀌면, 예금 ${man(p.assets.cash)}의 1년 이자가 약 ${won(p.assets.cash * 1e4 * 0.0025)} 달라질 수 있어요.` : aimText || `${head}금리가 오르면 예금 이자는 늘고, 대출 이자는 커져요.`;
+    const aimBoost = hasAim("내 집 마련") || hasAim("대출 갚기") ? 2 : hasAim("비상금") ? 1 : 0;
+    out.push({ tag: rateEvent ? `금리 · ${when}` : "금리", tone: "flat", text, kind: "rate", score: 1 + rateSoon + aimBoost, num: p.assets.cash ? "예금: 내가 입력한 금액" : "금리 일정: 한국은행·연준 발표", src: rateSrc });
   } else {
     const variable = p.debts.filter((d) => d.kind === "변동").reduce((s, d) => s + (Number(d.amount) || 0), 0);
     let text;
@@ -1685,10 +1707,11 @@ function impacts() {
   }
   // 코스피가 크게 움직인 날
   const kp = m.kospi?.pct;
-  if (kp !== null && kp !== undefined && Math.abs(kp) >= 1.5) {
+  const starter = hasAim("첫 투자"); // 투자를 시작하려는 사람에게는 코스피가 조금만 움직여도 알려준다
+  if (kp !== null && kp !== undefined && Math.abs(kp) >= (starter ? 0.8 : 1.5)) {
     const ecos = m.src?.index === "ecos";
-    out.push({ kind: "index", score: 1 + Math.abs(kp), tag: `코스피 ${pct(kp)}`, tone: tone(kp),
-      text: `코스피가 전일보다 ${fmt(Math.abs(kp), 2)}% ${kp > 0 ? "올랐어요" : "내렸어요"}.${p.watch.length ? " 내 관심 종목도 함께 움직였을 수 있어요." : ""}`,
+    out.push({ kind: "index", score: 1 + Math.abs(kp) + (starter ? 1 : 0), tag: `코스피 ${pct(kp)}`, tone: tone(kp),
+      text: `코스피가 전일보다 ${fmt(Math.abs(kp), 2)}% ${kp > 0 ? "올랐어요" : "내렸어요"}.${starter ? " 첫 투자를 준비 중이라면, 코스피는 우리나라 주식 전체의 흐름을 보여주는 숫자예요." : p.watch.length ? " 내 관심 종목도 함께 움직였을 수 있어요." : ""}`,
       num: "",
       src: ecos ? ["출처 한국은행 경제통계(ECOS)", "https://ecos.bok.or.kr"] : ["출처 금융위원회 지수시세", "https://www.data.go.kr/data/15094807/openapi.do"] });
   }
@@ -1732,6 +1755,9 @@ function nextQuestion() {
   const p = profile, s = p.skipped || {};
   if (!p.region?.sido && !s.region) return "region";
   if (!p.status && !s.status) return "status";
+  if (!(p.aims || []).length && !s.aims) return "aims";
+  if (p.level == null && !s.level) return "level";
+  if (!(p.fields || []).length && !s.fields) return "fields";
   if (!p.income && !p.monthlyIncome && !s.income) return "income";
   if (p.assets.cash === null && !s.cash) return "cash";
   if (!p.payday && !s.payday) return "payday";
@@ -1751,6 +1777,8 @@ function summaryForAi() {
       debtMan: debts.reduce((s, d) => s + (Number(d.amount) || 0), 0),
       variableDebtMan: debts.filter((d) => d.kind === "변동").reduce((s, d) => s + (Number(d.amount) || 0), 0),
       watchlist: p.watch.map((w) => w.name),
+      status: p.status || undefined, aims: (p.aims || []).map((a) => AIM_LABEL[a]), fields: p.fields || [],
+      knowledge: LEVELS[p.level] || undefined, investExp: EXPS[p.exp] || undefined,
     },
     market: data.market ? {
       kospi: data.market.kospi, usdkrw: data.market.usd,
@@ -2352,7 +2380,7 @@ function homeBlocks() {
   const n = data.news;
   const letters = [...LETTERS.filter((l) => profile.letters.includes(l.id)), ...profile.customLetters];
   const pick = n ? homeNewsPick(n) : { mine: [], rest: [] };
-  const myTags = [...new Set([...profile.watch.map((w) => w.name).slice(0, 3), ...profile.prefs.slice(0, 3)])];
+  const myTags = myInterests(6);
   const kws = n?.keywords || [];
   const newsBlock = `<section class="card" id="h-news">
       <div class="sec-title"><h2>뉴스</h2><div style="display:flex;gap:6px;align-items:center">${n?.sample ? `<span class="badge b-sample">예시</span>` : ""}<button class="plus" data-act="news-more">+ 더보기</button></div></div>
@@ -2562,7 +2590,7 @@ async function openNews(tab) {
   const jobs = [];
   if (tab === "brief" && !data.brief) loadBrief(); // AI 풀이는 볼 때만 만든다 (비용 절약)
   if (!data.newsFull) {
-    const interests = [...profile.watch.map((w) => w.name).slice(0, 4), ...profile.prefs.slice(0, 3)].join(",");
+    const interests = myInterests(6).join(",");
     jobs.push(getJson(`/api/news?full=1&interests=${encodeURIComponent(interests)}`).then((j) => (data.newsFull = keepForYou("full", interests, j))).catch(() => (data.newsFull = keepForYou("full", interests, { issues: [], forYou: [] }))));
   }
   if (tab.startsWith("kw:") && !ui.news.kwItems[tab.slice(3)]) {
@@ -4863,7 +4891,9 @@ function viewBenefits() {
 
 async function loadBrief() {
   // 쉽게 풀이는 하루 2번까지 새로 부른다(이미 받아 둔 풀이를 다시 보는 건 세지 않음)
-  const interests = [...profile.watch.map((w) => w.name).slice(0, 2), ...profile.prefs.slice(0, 3)].join(",");
+  const p = profile;
+  const who = [p.status, ...(p.aims || []).slice(0, 2).map((a) => AIM_LABEL[a])].filter(Boolean).join(", ");
+  const interests = `${myInterests(5).join(",")}&lv=${p.level ?? ""}&who=${encodeURIComponent(who)}`; // 같은 날 같은 조건이면 받아 둔 풀이를 다시 쓴다
   const saved = lastGet().brief;
   if (saved?.day === ymd(today0()) && saved.interests === interests) {
     data.brief = saved.data;
@@ -4877,7 +4907,7 @@ async function loadBrief() {
     return;
   }
   try {
-    data.brief = await getJson(`/api/brief?interests=${encodeURIComponent(interests)}`);
+    data.brief = await getJson(`/api/brief?interests=${encodeURIComponent(myInterests(5).join(","))}&lv=${p.level ?? ""}&who=${encodeURIComponent(who)}`);
     if (data.brief?.points?.length) { const v = aiUse(); v.brief++; aiSave(v); lastSet("brief", { day: ymd(today0()), interests, data: data.brief }); }
   } catch { data.brief = null; }
   if (["home", "news"].includes(route())) render();
@@ -5139,6 +5169,14 @@ function moreQuestion(k) {
       <label for="q-sgg" class="sr">시·군·구</label><input class="field" id="q-sgg" placeholder="시·군·구" maxlength="10" style="flex:1"><button class="btn" data-act="set-region">저장</button></div>${skip}`;
   if (k === "status") return `${head}<p class="q">지금 어떤 상황이에요?</p>
     <div class="chips">${STATUSES.map((x) => `<button class="chip" data-act="set-status" data-v="${x}">${x}</button>`).join("")}</div>${skip}`;
+  if (k === "aims" || k === "fields") {
+    const sel = ui.qSel?.[k] || [], list = k === "aims" ? AIMS : FIELDS;
+    return `${head}<p class="q">${k === "aims" ? "요즘 돈 목표나 고민이 있나요? (여러 개)" : "관심 있는 분야가 있나요? 그 분야 뉴스를 챙겨드려요 (여러 개)"}</p>
+    <div class="chips">${list.map((x) => `<button class="chip ${sel.includes(x) ? "on" : ""}" data-act="q-toggle" data-k="${k}" data-v="${x}" aria-pressed="${sel.includes(x)}">${k === "aims" ? AIM_LABEL[x] : x}</button>`).join("")}</div>
+    <button class="btn" data-act="q-save" data-k="${k}" ${sel.length ? "" : "disabled"}>저장</button>${skip}`;
+  }
+  if (k === "level") return `${head}<p class="q">경제, 얼마나 알고 있어요? 루미가 설명 수준을 맞출게요</p>
+    <div class="chips">${LEVELS.map((x, i) => `<button class="chip" data-act="set-level" data-v="${i}">${x}</button>`).join("")}</div>${skip}`;
   if (k === "income") return `${head}<p class="q">연 소득은 어느 구간인가요? (혜택 추천에 써요)</p>
     <div class="chips">${INCOME.slice(1).map((t, i) => `<button class="chip" data-act="set-income" data-v="${i + 1}">${t}</button>`).join("")}</div>${skip}`;
   if (k === "cash") return `${head}<p class="q">예금·현금은 대략 얼마나 있나요?</p>
@@ -5284,6 +5322,10 @@ function mySections() {
       <div class="range-ends"><span>1 · 위험 괜찮아요</span><span>10 · 손실은 싫어요</span></div>
       <button class="btn ghost" data-act="go-risktest">${p.riskTest ? `정밀 진단 다시 받기 (지난 결과: ${esc(p.riskTest.type)})` : "7문항 정밀 진단 받기 ›"}</button>
       <div><span class="lb">무엇에 가치를 두나요? (여러 개)</span><div class="chips">${PREFS.map((x) => `<button class="chip ${p.prefs.includes(x) ? "on" : ""}" data-act="pref" data-v="${x}" aria-pressed="${p.prefs.includes(x)}">${x}</button>`).join("")}</div></div>
+      <div><span class="lb">요즘 돈 목표·고민 (여러 개)</span><div class="chips">${AIMS.map((x) => { const on = (p.aims || []).includes(x); return `<button class="chip ${on ? "on" : ""}" data-act="aim" data-v="${x}" aria-pressed="${on}">${AIM_LABEL[x]}</button>`; }).join("")}</div></div>
+      <div><span class="lb">관심 있는 분야 (여러 개)</span><div class="chips">${FIELDS.map((x) => { const on = (p.fields || []).includes(x); return `<button class="chip ${on ? "on" : ""}" data-act="field" data-v="${x}" aria-pressed="${on}">${x}</button>`; }).join("")}</div></div>
+      <div><span class="lb">경제 지식 (루미가 설명 수준을 맞춰요)</span><div class="chips">${LEVELS.map((x, i) => `<button class="chip ${p.level === i ? "on" : ""}" data-act="set-level" data-v="${i}" aria-pressed="${p.level === i}">${x}</button>`).join("")}</div></div>
+      <div><span class="lb">투자 경험</span><div class="chips">${EXPS.map((x, i) => `<button class="chip ${p.exp === i ? "on" : ""}" data-act="set-exp" data-v="${i}" aria-pressed="${p.exp === i}">${x}</button>`).join("")}</div></div>
     </section>
     `,
     goals: goalsMy(p),
@@ -5461,10 +5503,12 @@ function lumiSays(html, face, anim) {
 function viewOnboard() {
   const st = ui.onb.step;
   const d = ui.onb.draft || (ui.onb.draft = newProfile());
-  const steps = `<div class="steps" aria-label="${st + 1}/3 단계">${[0, 1, 2].map((i) => `<i class="${i <= st ? "on" : ""}"></i>`).join("")}</div>`;
+  const LAST = 5;
+  const steps = `<div class="steps" aria-label="${st + 1}/${LAST + 1} 단계">${[0, 1, 2, 3, 4, 5].map((i) => `<i class="${i <= st ? "on" : ""}"></i>`).join("")}</div>`;
+  const chip = (act, v, on, label = v) => `<button class="chip ${on ? "on" : ""}" data-act="${act}" data-v="${v}" aria-pressed="${on}">${label}</button>`;
   let body = "";
   if (st === 0) body = `
-    ${lumiSays("안녕하세요! 저는 <b>이루미</b>, 루미라고 불러주세요.<br><b>나만의 경제</b>는 내 자산·성향·관심사에 맞춰 오늘의 경제 소식이 <b>나에게 어떤 의미인지</b> 쉬운 말로 알려주는 앱이에요.<br>세 가지만 물어볼게요!", "main", "up")}
+    ${lumiSays("안녕하세요! 저는 <b>이루미</b>, 루미라고 불러주세요.<br><b>나만의 경제</b>는 내 자산·성향·관심사에 맞춰 오늘의 경제 소식이 <b>나에게 어떤 의미인지</b> 쉬운 말로 알려주는 앱이에요.<br>나에게 꼭 맞는 소식을 고르려고 몇 가지 물어볼게요. 1분이면 끝나요!", "main", "up")}
     <h1>먼저, 뭐라고 불러드릴까요?</h1>
     <div class="form">
       <div><label class="lb" for="o-nick">닉네임</label><input class="field" id="o-nick" maxlength="12" data-o="nickname" value="${esc(d.nickname)}" placeholder="예: 경제새싹"></div>
@@ -5474,12 +5518,48 @@ function viewOnboard() {
     ${sync.on ? `<div class="card" style="padding:12px 14px;font-size:14px;line-height:1.6">✓ <b>${esc(sync.email || "구글 계정")}</b>과 연결돼 있어요. 아직 불러올 기록이 없었어요. 기록이 있는 기기에서 같은 계정으로 연결한 뒤 눌러 주세요.<br><button class="btn ghost" style="margin-top:8px;width:100%" data-act="sync-pull">기록 다시 불러오기</button></div>`
       : `<p class="hint" style="margin:0">구글로 로그인하면 다른 기기에서 쓰던 기록을 불러오고, 모의투자 순위도 볼 수 있어요. 로그인 없이도 모든 기능을 쓸 수 있어요.</p>`}`;
   if (st === 1) body = `
-    ${lumiSays(`반가워요, ${esc(d.nickname || "")}님! 관심 있는 종목을 알려주면 매일 챙겨볼게요.`, "wave", "up")}
+    ${lumiSays(`반가워요, ${esc(d.nickname || "")}님! 지금 상황과 사는 곳을 알면 받을 수 있는 혜택과 정책을 찾아드려요.`, "wave", "up")}
+    <h1>지금 어떤 상황이에요?</h1>
+    <div class="card form">
+      <span class="lb">지금 나는</span>
+      <div class="chips">${STATUSES.map((x) => chip("set-status", x, d.status === x)).join("")}</div>
+    </div>
+    <div class="card form">
+      <span class="lb">사는 곳</span>
+      <div class="grid2">
+        <div><label class="sr" for="o-sido">시·도</label><select class="field" id="o-sido" data-o="sido"><option value="">시·도 선택</option>${SIDO.map((s) => `<option ${d.region.sido === s ? "selected" : ""}>${s}</option>`).join("")}</select></div>
+        <div><label class="sr" for="o-sgg">시·군·구</label><input class="field" id="o-sgg" data-o="sigungu" maxlength="10" placeholder="예: 강남구" value="${esc(d.region.sigungu || "")}"></div>
+      </div>
+    </div>
+    <p class="hint" style="margin:0">모르겠거나 알려주기 싫으면 ‘건너뛰기’를 눌러도 돼요. 이 기기에만 저장돼요.</p>`;
+  if (st === 2) body = `
+    ${lumiSays("요즘 돈과 관련해서 이루고 싶은 것이나 고민이 있나요? 그 쪽 소식을 먼저 챙길게요.", "lookup", "up")}
+    <h1>요즘 돈 목표나<br>고민이 있나요?</h1>
+    <p class="hint" style="margin:-8px 0 0">여러 개 골라도 돼요.</p>
+    <div class="chips">${AIMS.map((x) => chip("aim", x, d.aims.includes(x), AIM_LABEL[x])).join("")}</div>`;
+  if (st === 3) body = `
+    ${lumiSays("관심 있는 종목과 분야를 알려주면 매일 챙겨볼게요.", "wave", "up")}
     <h1>관심 있는 종목을<br>골라주세요</h1>
     <p class="hint" style="margin:-8px 0 0">종목은 주식시장에서 사고파는 회사(예: 삼성전자)예요. 홈에서 가격과 등락을 바로 보여드려요.<br>잘 모르겠으면 고르지 않고 ‘다음’을 눌러도 돼요. 나중에 바꿀 수 있어요.</p>
     <div class="chips">${d.watch.map((w, i) => `<span class="chip on">${esc(w.name)}<button class="icon-btn" style="width:28px;height:28px;color:#fff" data-act="rm-watch" data-i="${i}" aria-label="${esc(w.name)} 빼기">${ICON.x}</button></span>`).join("") || `<span class="hint">아직 고른 종목이 없어요</span>`}</div>
-    ${stockSearch()}`;
-  if (st === 2) body = `
+    ${stockSearch()}
+    <div class="card form">
+      <span class="lb">관심 있는 분야 (여러 개)</span>
+      <div class="chips">${FIELDS.map((x) => chip("field", x, d.fields.includes(x))).join("")}</div>
+      <p class="hint" style="margin:0">그 분야 뉴스와 모의투자 힌트를 먼저 보여드려요.</p>
+    </div>`;
+  if (st === 4) body = `
+    ${lumiSays("경제를 얼마나 아는지 알려주면, 같은 소식도 딱 맞는 말로 설명할게요.", "lookup", "up")}
+    <h1>경제, 얼마나<br>알고 있어요?</h1>
+    <div class="card form">
+      <span class="lb">경제 지식</span>
+      <div class="chips">${LEVELS.map((x, i) => chip("set-level", i, d.level === i, x)).join("")}</div>
+    </div>
+    <div class="card form">
+      <span class="lb">투자를 해 본 적 있나요?</span>
+      <div class="chips">${EXPS.map((x, i) => chip("set-exp", i, d.exp === i, x)).join("")}</div>
+    </div>`;
+  if (st === 5) body = `
     ${lumiSays("마지막이에요! 성향을 알면 같은 뉴스도 당신에게 맞게 풀어드릴 수 있어요.", "lookup", "flat")}
     <h1>마지막으로,<br>당신의 성향을 알려주세요</h1>
     <div class="card form">
@@ -5498,11 +5578,13 @@ function viewOnboard() {
     </div>
     <p class="hint" style="margin:0">자산·소득은 홈에서 하나씩 천천히 여쭤볼게요.</p>`;
   const canNext = st === 0 ? d.nickname.trim() && d.age > 0 : true;
+  // 고른 게 없으면 '건너뛰기', 하나라도 골랐으면 '다음'
+  const picked = [true, d.status || d.region.sido, d.aims.length, d.watch.length || d.fields.length, d.level != null || d.exp != null, true][st];
   return `<main class="onb">${steps}${body}
     <div style="margin-top:auto;display:flex;gap:8px">
       ${st > 0 ? `<button class="btn ghost block" style="flex:0 0 96px" data-act="onb-back">이전</button>` : ""}
       ${st === 0 && !sync.on ? `<button class="btn ghost block" style="flex:1" data-act="sync-start">구글 로그인하기</button>` : ""}
-      <button class="btn block" style="flex:1" data-act="onb-next" ${canNext ? "" : "disabled"}>${st === 2 ? "루미와 시작하기" : st === 0 && !sync.on ? "로그인 없이 시작하기" : "다음"}</button>
+      <button class="btn block" style="flex:1" data-act="onb-next" ${canNext ? "" : "disabled"}>${st === LAST ? "루미와 시작하기" : st === 0 && !sync.on ? "로그인 없이 시작하기" : picked ? "다음" : "건너뛰기"}</button>
     </div></main>`;
 }
 
@@ -5598,7 +5680,9 @@ function invHints() {
   const day = invData.game?.today || ymd(today0());
   const r = (h) => hashStr(`${inv.seed}|${day}|${h.id}`);
   const market = pool.filter((h) => h.kind === "market").slice(0, 2);
-  const news = pool.filter((h) => h.kind === "news").sort((a, b) => r(a) - r(b)).slice(0, 3);
+  const words = (profile?.fields || []).map((f) => FIELD_HINT[f]).filter(Boolean);
+  const mine = (h) => (words.some((w) => String(h.sector || "").includes(w)) ? 0 : 1); // 관심 분야 소식이 먼저, 그 안에서는 사람마다 날마다 다르게
+  const news = pool.filter((h) => h.kind === "news").sort((a, b) => mine(a) - mine(b) || r(a) - r(b)).slice(0, 3);
   return [...news, ...market];
 }
 function hintById(id) { return (invData.hints?.pool || []).find((h) => h.id === id); }
@@ -6400,7 +6484,7 @@ document.addEventListener("click", async (e) => {
       ui.letter = { text, loading: true, result: null, error: "" };
       render();
       try {
-        const j = await getJson("/api/brief", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text }) });
+        const j = await getJson("/api/brief", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text, lv: profile.level ?? null }) });
         if (j.available !== false) aiCount();
         ui.letter = { text, loading: false, result: j.available === false ? null : j, error: j.available === false ? "AI 키가 연결되면 풀이할 수 있어요" : "" };
       } catch (err) {
@@ -6581,6 +6665,29 @@ document.addEventListener("click", async (e) => {
     case "no-debt": t.debts = []; commit(); toast("대출 없음으로 저장했어요"); break;
     case "set-income": t.income = Number(el.dataset.v); commit(); break;
     case "set-gender": t.gender = el.dataset.v; commit(); break;
+    case "set-level": t.level = Number(el.dataset.v); commit(); if (profile) { data.brief = null; } break;
+    case "set-exp": t.exp = Number(el.dataset.v); commit(); break;
+    case "aim": case "field": { // 첫 설문·마이페이지의 돈 목표·관심 분야 (여러 개)
+      const k = act === "aim" ? "aims" : "fields", v = el.dataset.v, cur = t[k] || [];
+      t[k] = cur.includes(v) ? cur.filter((x) => x !== v) : [...cur, v];
+      commit();
+      if (profile) { data.news = null; data.brief = null; loadAll(); }
+      break;
+    }
+    case "q-toggle": { // 홈 질문 카드: 골라 두었다가 '저장'
+      const k = el.dataset.k, v = el.dataset.v;
+      ui.qSel = ui.qSel || {};
+      const cur = ui.qSel[k] || [];
+      ui.qSel[k] = cur.includes(v) ? cur.filter((x) => x !== v) : [...cur, v];
+      render(); break;
+    }
+    case "q-save": {
+      const k = el.dataset.k;
+      t[k] = [...(ui.qSel?.[k] || [])]; if (ui.qSel) delete ui.qSel[k];
+      commit(); toast("루미가 기억할게요. 뉴스와 중요한 3가지에 반영해요");
+      data.news = null; data.brief = null; loadAll();
+      break;
+    }
     case "set-cash": {
       const v = parseInt(document.getElementById("q-cash").value.replace(/[^0-9]/g, ""), 10);
       if (Number.isFinite(v)) { t.assets.cash = v; commit(); toast("마이페이지에서 자산 진단을 볼 수 있어요"); }
@@ -6800,7 +6907,7 @@ document.addEventListener("click", async (e) => {
       break;
     case "onb-back": ui.onb.step--; ui.search = { q: "", results: [], sample: false }; render(); break;
     case "onb-next":
-      if (ui.onb.step < 2) { ui.onb.step++; ui.search = { q: "", results: [], sample: false }; render(); window.scrollTo(0, 0); }
+      if (ui.onb.step < 5) { ui.onb.step++; ui.search = { q: "", results: [], sample: false }; render(); window.scrollTo(0, 0); }
       else { profile = ui.onb.draft; saveProfile(); ui.onb = { step: 0, draft: null }; location.hash = ""; render(); loadAll(); }
       break;
   }
@@ -6910,6 +7017,7 @@ document.addEventListener("input", (e) => {
     const d = ui.onb.draft;
     if (el.dataset.o === "nickname") d.nickname = el.value.slice(0, 12);
     if (el.dataset.o === "age") d.age = parseInt(el.value, 10) || null;
+    if (el.dataset.o === "sido" || el.dataset.o === "sigungu") { d.region = { ...d.region, [el.dataset.o]: el.dataset.o === "sido" ? el.value : el.value.trim().slice(0, 10) }; const b = document.querySelector('[data-act="onb-next"]'); if (b && ui.onb.step === 1) b.textContent = d.region.sido || d.status ? "다음" : "건너뛰기"; return; }
     if (el.dataset.o === "avert") { d.avert = Number(el.value); showAvert(d.avert); return; }
     const btn = document.querySelector('[data-act="onb-next"]');
     if (btn) btn.disabled = !(d.nickname.trim() && d.age > 0);

@@ -63,6 +63,14 @@ async function openai({ system, text, images, schema, schemaName, maxTokens }) {
   return r.output_text;
 }
 
+// 경제 지식 수준(첫 설문): 0 처음이에요 · 1 뉴스는 보는데 어려워요 · 2 어느 정도 알아요
+export const LEVEL_RULE = [
+  "- 이 사람은 경제를 처음 접해. 경제 용어는 하나도 빼지 말고 모두 쉬운 말로 풀고, 생활 속 예시(용돈·월세·장보기 등)를 하나 들어줘.",
+  "- 이 사람은 뉴스는 보지만 어려워해. 핵심 용어만 괄호로 짧게 풀어줘.",
+  "- 이 사람은 기초를 알아. 기본 용어 풀이는 빼고 핵심과 숫자 위주로 짧게 말해줘.",
+];
+export const levelRule = (lv) => LEVEL_RULE[Number(lv)] && lv !== "" && lv !== null ? "\n" + LEVEL_RULE[Number(lv)] : "";
+
 export function aiReady() { return !!(process.env.GEMINI_API_KEY || process.env.OPENAI_API_KEY); }
 
 // → { text, ai: "gemini" | "openai" }. images는 data:image/...;base64 주소들
