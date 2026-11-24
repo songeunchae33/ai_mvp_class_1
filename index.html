@@ -5079,6 +5079,15 @@ let inv = loadInv();
 try { ["myeco.invest.v1", "myeco.invest.v2"].forEach((k) => localStorage.removeItem(k)); } catch {} // 예전 게임(실제 종목 1차·가상 시장) 기록은 지운다
 if (!inv.seed) inv.seed = Math.random().toString(36).slice(2, 10);
 function saveInv() { try { localStorage.setItem(INV_KEY, JSON.stringify(inv)); } catch {} syncSoon(); }
+// 1일 그래프용: 그때그때 내 포트폴리오 전체 값을 [시각, 원]으로 남긴다. 값이 100원 넘게 바뀌었거나 1시간이 지났을 때만, 최근 3일치
+function invTick() {
+  if (!invData.game) return;
+  const now = Date.now(), v = Math.round(invTotal());
+  const T = (inv.ticks || []).filter((t) => t[0] > now - 3 * 86400e3);
+  const last = T[T.length - 1];
+  if (!last || Math.abs(v - last[1]) >= 100 || now - last[0] >= 3600e3) T.push([now, v]);
+  inv.ticks = T.slice(-300);
+}
 function saveInvQuiet() { try { localStorage.setItem(INV_KEY, JSON.stringify(inv)); } catch {} }
 const invData = { game: null, rank: null, loading: false, extra: [], search: [] };
 
@@ -5158,6 +5167,7 @@ async function loadInvest() {
     }
     if (inv.idx0 == null && g.index?.length) inv.idx0 = g.index[0][1];
     inv.lastIdx = curIdx();
+    invTick();
     saveInvQuiet();
   } catch { invData.error = true; }
   await Promise.all([loadRank(), invData.hints ? null : getJson("/api/market?game=hints").then((j) => (invData.hints = j)).catch(() => (invData.hints = { pool: [] }))]);
@@ -5250,6 +5260,7 @@ function withdrawRate(id) {
 }
 function afterTrade(msg, keepModal) {
   if (!keepModal) ui.modal = null;
+  invTick();
   checkInvBadges();
   saveInv();
   render();
@@ -5367,15 +5378,61 @@ function valueOn(d, useOpen) {
 function invChartPoints(period) {
   const K = invData.game?.index || [];
   if (!K.length) return [];
-  if (period === "1d") {
-    const ds = K.slice(-2).map((x) => x[0]), latest = ds[ds.length - 1];
-    return [...(ds.length > 1 ? [{ d: ds[0], v: valueOn(ds[0]), label: "어제" }] : []), { d: latest, v: valueOn(latest, true), label: "오늘 시가" }, { d: latest, v: valueOn(latest), label: "오늘 종가" }];
-  }
-  const ds = period === "1w" ? K.slice(-7) : K;
+  const ds = period === "3d" ? K.slice(-3) : period === "1w" ? K.slice(-5) : K; // 3일·1주는 거래일 기준(주말·휴일 빼고)
   const k0 = ds[0]?.[1];
   const pts = ds.map((x) => ({ d: x[0], v: valueOn(x[0]), k: x[1] }));
   if (pts.length) { const v0 = pts[0].v; pts.forEach((p) => (p.kv = k0 ? v0 * (p.k / k0) : null)); }
+  // 가격은 전 거래일 종가라, 그 뒤(오늘)에 사고판 것은 날짜 점에 안 들어간다 → 맨 끝에 '지금' 값을 하나 더
+  if (pts.length) pts.push({ d: "", v: invTotal(), kv: pts[pts.length - 1].kv, label: "지금" });
   return pts;
+}
+// 시각 at(ms)의 내 자산: 그때까지의 거래를 따라가고, 주식은 그때 알 수 있던 가격(그 종목의 마지막 거래 가격, 없으면 그 전날까지의 종가)
+function valueAt(at) {
+  const H = invData.game?.series || {}, day = ymd(new Date(at)).replace(/-/g, "");
+  let cash = INV_START;
+  const qty = {}, last = {}, lots = [];
+  for (const t of [...inv.trades].reverse()) {
+    if (t.at > at) break;
+    if (t.kind === "bonus") cash += t.amt;
+    else if (t.kind === "stock") { qty[t.id] = (qty[t.id] || 0) + (t.side === "buy" ? t.qty : -t.qty); cash += (t.side === "buy" ? -1 : 1) * t.qty * t.price; last[t.id] = t.price; }
+    else if (t.side === "buy") { cash -= t.amt; lots.push({ ...t }); }
+    else { cash += t.amt; for (let i = lots.length - 1; i >= 0; i--) if (lots[i].id === t.id) lots.splice(i, 1); }
+  }
+  let v = cash + lots.reduce((s, l) => s + lotValue(l, at), 0);
+  for (const [id, q] of Object.entries(qty)) if (q > 0) v += q * (last[id] ?? (H[id] || []).filter((r) => r[0] < day).pop()?.[2] ?? 0);
+  return v;
+}
+// 1일: 최근 24시간 내 포트폴리오 전체 값을 시간 순서대로(계단 모양). 값은 새 종가가 들어올 때·사고팔 때 바뀐다
+function dayChart() {
+  const now = Date.now(), from = now - 86400e3;
+  // 기록(ticks)이 없던 때도 보이게, 최근 24시간에 사고판 시각의 값은 거래 기록으로 다시 계산해 넣는다
+  const fromTrades = inv.trades.filter((t) => t.at >= from && t.kind !== "bonus").map((t) => [t.at, Math.round(valueAt(t.at))]);
+  const T = [...(inv.ticks || []), ...fromTrades].filter((t) => t[0] <= now).sort((a, b) => a[0] - b[0]);
+  const before = T.filter((t) => t[0] < from).pop();
+  const pts = [...(before ? [[from, before[1]]] : []), ...T.filter((t) => t[0] >= from), [now, Math.round(invTotal())]];
+  if (pts.length < 2 || pts[0][0] === now) return "";
+  const W = 320, H = 132, P = 8, t0 = from; // 가로축은 늘 '24시간 전 → 지금
+  const vals = pts.map((p) => p[1]);
+  let lo = Math.min(...vals, invBase()), hi = Math.max(...vals, invBase());
+  if (hi - lo < 1) { hi += 1; lo -= 1; }
+  const pad = (hi - lo) * 0.12; lo -= pad; hi += pad;
+  const x = (t) => P + ((t - t0) / Math.max(1, now - t0)) * (W - P * 2);
+  const y = (v) => P + (1 - (v - lo) / (hi - lo)) * (H - P * 2 - 16);
+  const d = pts.map((p, i) => (i ? `H${x(p[0]).toFixed(1)}V${y(p[1]).toFixed(1)}` : `M${x(p[0]).toFixed(1)},${y(p[1]).toFixed(1)}`)).join("");
+  const up = pts[pts.length - 1][1] >= invBase();
+  const hh = (t) => `${new Date(t).getHours()}시`;
+  // 가운데 눈금: 이 기기 시각으로 0·6·12·18시
+  const marks = [], m = new Date(t0); m.setMinutes(0, 0, 0); m.setHours(Math.ceil((m.getHours() + 1) / 6) * 6);
+  for (let t = m.getTime(); t < now - 2 * 3600e3; t += 21600e3) if (t > t0 + 2 * 3600e3) marks.push(t);
+  const dots = pts.slice(1, -1).map((p) => `<circle cx="${x(p[0]).toFixed(1)}" cy="${y(p[1]).toFixed(1)}" r="2.2" class="dot ${up ? "up" : "down"}"/>`).join("");
+  return `<svg class="inv-chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="최근 24시간 내 포트폴리오 그래프">
+    <line x1="${P}" y1="${y(invBase()).toFixed(1)}" x2="${W - P}" y2="${y(invBase()).toFixed(1)}" class="base"/>
+    <path d="${d}" class="me ${up ? "up" : "down"}"/>${dots}
+    <circle cx="${x(now).toFixed(1)}" cy="${y(pts[pts.length - 1][1]).toFixed(1)}" r="3.5" class="dot ${up ? "up" : "down"}"/>
+    <text x="${P}" y="${H - 2}" class="lb">어제 ${hh(t0)}</text>
+    ${marks.map((t) => `<text x="${x(t).toFixed(1)}" y="${H - 2}" class="lb" text-anchor="middle">${hh(t)}</text>`).join("")}
+    <text x="${W - P}" y="${H - 2}" class="lb" text-anchor="end">지금</text>
+  </svg>`;
 }
 function lineChart(pts, opts = {}) {
   const W = 320, H = opts.h || 132, P = 8;
@@ -5397,19 +5454,16 @@ function lineChart(pts, opts = {}) {
     <text x="${P}" y="${H - 2}" class="lb">${lab(pts[0])}</text><text x="${W - P}" y="${H - 2}" class="lb" text-anchor="end">${lab(pts[pts.length - 1])}</text>
   </svg>`;
 }
-function seasonBars() {
-  const list = [...(inv.seasons || []).slice(-11), { season: inv.season, ret: Math.round(invRet() * 100) / 100, now: true }];
-  const mx = Math.max(1, ...list.map((s) => Math.abs(s.ret)));
-  return `<div class="inv-bars">${list.map((s) => `<div class="ib"><span class="num ${s.ret >= 0 ? "up" : "down"}">${s.ret > 0 ? "+" : ""}${fmt(s.ret, 1)}%</span>
-      <i class="${s.ret >= 0 ? "up" : "down"}" style="height:${Math.max(4, Math.round((Math.abs(s.ret) / mx) * 56))}px"></i><small>${Number(s.season.slice(5))}월${s.now ? "·지금" : ""}</small></div>`).join("")}</div>
-    ${list.length < 2 ? `<p class="hint" style="margin:6px 0 0">시즌이 끝날 때마다 한 칸씩 쌓여요.</p>` : ""}`;
-}
 function chartBlock() {
-  const per = ui.invPeriod || "1m";
-  const seg = [["1d", "1일"], ["1w", "1주"], ["1m", "1개월"], ["1y", "1년"]].map(([v, t]) => `<button class="${per === v ? "on" : ""}" data-act="inv-period" data-v="${v}">${t}</button>`).join("");
+  const per = ["1d", "3d", "1w", "1m"].includes(ui.invPeriod) ? ui.invPeriod : "1d";
+  const seg = [["1d", "1일"], ["3d", "3일"], ["1w", "1주"], ["1m", "1개월"]].map(([v, t]) => `<button class="${per === v ? "on" : ""}" data-act="inv-period" data-v="${v}">${t}</button>`).join("");
   let body;
-  if (per === "1y") body = seasonBars();
-  else {
+  if (per === "1d") {
+    const c = dayChart();
+    body = c ? `${c}<div class="inv-legend"><span><i class="me"></i>내 포트폴리오 전체</span><span><i class="base"></i>시작 금액</span></div>
+      <p class="hint" style="margin:6px 0 0;font-size:12px">가격은 하루 한 번 들어오는 전 거래일 종가라, 하루 안에서는 새 종가가 들어올 때와 사고팔 때 값이 바뀌어요.</p>`
+      : `<p class="hint inv-empty">${invData.game ? "앱을 열고 사고팔 때마다 점이 찍혀요." : "그래프를 불러오는 중…"}</p>`;
+  } else {
     const pts = invChartPoints(per);
     body = pts.length >= 2 ? `${lineChart(pts)}<div class="inv-legend"><span><i class="me"></i>내 자산</span>${per !== "1d" ? `<span><i class="k"></i>${idxName()} (같은 비율로)</span>` : ""}<span><i class="base"></i>시작 금액</span></div>`
       : `<p class="hint inv-empty">${invData.game ? "날이 쌓이면 그래프가 그려져요." : "그래프를 불러오는 중…"}</p>`;
