@@ -860,8 +860,6 @@
   .ad-slot { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-height: 200px; padding: 16px; border: 1px dashed #D2D6DD; border-radius: 12px; background: var(--soft); text-align: center; }
   .ad-bar { height: 6px; border-radius: 999px; background: var(--soft); overflow: hidden; }
   .ad-bar i { display: block; height: 100%; border-radius: 999px; background: #3375D6; transition: width 1s linear; }
-  .loc-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-  .loc-row .btn { flex-shrink: 0; }
   /* 객관식 보기 · 단답식 입력 */
   .mcq { display: flex; flex-direction: column; gap: 8px; }
   .mcq button { display: flex; align-items: flex-start; gap: 10px; width: 100%; min-height: 48px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--card); color: var(--ink); font: inherit; font-size: 15px; line-height: 22px; text-align: left; cursor: pointer; }
@@ -5956,7 +5954,6 @@ document.addEventListener("click", async (e) => {
       commit(); loadBenefits(); toast("우리 지역 혜택을 찾고 있어요");
       break;
     }
-    case "locate": locateRegion(el); break;
     case "ad-open": startAd(el.dataset.k); break;
     case "openad-close": ui.openAd = false; render(); break;
     case "ad-reward": rewardAd(); break;
