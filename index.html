@@ -1171,6 +1171,7 @@
   .mix-leg { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 12px; font-size: 13px; }
   .mix-leg div { display: grid; grid-template-columns: 10px 1fr auto; align-items: center; gap: 6px; }
   .mix-leg i { width: 10px; height: 10px; border-radius: 3px; } .mix-leg small { grid-column: 2 / 4; margin-top: -4px; }
+  .inv-why { margin-top: 6px; padding: 0; min-height: 36px; font-family: inherit; font-size: 15px; font-weight: 700; color: var(--green); }
   .mix-cmp { margin: 0; padding: 10px 12px; border-radius: 12px; background: var(--soft); font-size: 14px; font-weight: 600; line-height: 20px; }
   .inv-mixmini { display: flex; justify-content: space-between; align-items: center; gap: 10px; width: 100%; text-align: left; cursor: pointer; }
   .inv-mixmini > span:first-child { display: flex; flex-direction: column; gap: 2px; } .inv-mixmini b { font-size: 16px; }
@@ -4895,6 +4896,7 @@ function viewMy() {
     ${syncCard()}
     ${S.basic}
     ${S.risk}
+    ${mixMyCard()}
     <section class="card links">
       <button class="lrow" data-act="nav" data-route="assets" data-target="sec-assets"><span class="lk">자산</span><span class="lv">자산·대출 입력과 진단은 <b>나의 자산관리</b>에서</span><span aria-hidden="true">›</span></button>
       <button class="lrow" data-act="nav" data-route="etc" data-target=""><span class="lk">기타</span><span class="lv">개인정보·데이터 지우기, 앱 정보</span><span aria-hidden="true">›</span></button>
@@ -5431,34 +5433,42 @@ const MIX_WHY = {
   적극투자형: "더 크게 불리려고 주식을 절반 넘게 담고, 나머지로 흔들림을 줄여요.",
   공격투자형: "크게 오르내려도 괜찮아서 주식을 대부분 담아요. 그만큼 크게 잃을 수도 있어요.",
 };
+// 나눠 담기 기준 비율: 마이페이지에서 직접 고친 비율(합 100)이 있으면 그것, 없으면 투자 성향 예시
+function myMix() {
+  const m = profile.mix;
+  if (m && Object.keys(INV_MIX.위험중립형).every((g) => Number.isFinite(m[g])) && Object.values(m).reduce((a, b) => a + b, 0) === 100) return { mix: m, label: "내가 정한 비율", own: true };
+  const type = riskType(profile.avert);
+  return { mix: INV_MIX[type], label: `${type} 예시`, own: false };
+}
 // 지금 비율이 성향 예시보다 어디에 더·덜 담겼는지 한 줄로 (5%p 넘게 차이 나는 것만, 큰 순서로 둘)
 function mixCompare() {
-  const type = riskType(profile.avert), mix = INV_MIX[type], G = invGroups(), total = invTotal();
+  const { mix, label, own } = myMix(), G = invGroups(), total = invTotal();
   if (!inv.trades.some((t) => t.kind !== "bonus") || !total) return "";
   const diffs = Object.keys(mix).map((g) => [g, Math.round((G[g] / total) * 100 - mix[g])]).filter(([, d]) => Math.abs(d) > 5).sort((a, b) => Math.abs(b[1]) - Math.abs(a[1])).slice(0, 2);
-  if (!diffs.length) return `${type} 예시 비율과 거의 비슷하게 나눠 담았어요.`;
-  return `${type} 예시보다 ${diffs.map(([g, d]) => `${g}에 ${Math.abs(d)}%p ${d > 0 ? "더" : "덜"}`).join(", ")} 담았어요.`;
+  if (!diffs.length) return `${own ? "내가 정한 비율과" : `${label} 비율과`} 거의 비슷하게 나눠 담았어요.`;
+  return `${label}보다 ${diffs.map(([g, d]) => `${g}에 ${Math.abs(d)}%p ${d > 0 ? "더" : "덜"}`).join(", ")} 담았어요.`;
 }
+// 모의투자 탭에는 첫 거래 전에만 보여 주는 추천 (거래 뒤에는 마이페이지에서 보고 고친다)
 function mixBlock() {
-  const type = riskType(profile.avert), mix = INV_MIX[type], G = invGroups(), total = invTotal();
+  const type = riskType(profile.avert), { mix, own } = myMix(), G = invGroups(), total = invTotal();
   const bar = (vals) => `<div class="mix-bar">${Object.entries(vals).filter(([, v]) => v > 0).map(([g, v]) => `<i style="width:${v}%;background:${INV_COLORS[g]}"></i>`).join("")}</div>`;
   const now = Object.fromEntries(Object.entries(G).map(([g, v]) => [g, (v / total) * 100]));
   const need = ["채권", "예금·CMA"].map((g) => [g, Math.floor(Math.max(0, (mix[g] / 100) * total - G[g]) / 1e4) * 1e4]);
   const canFill = need.some(([, v]) => v > 0) && inv.cash > 1e4;
   return `<section class="card inv-mixrec">
-    <div class="sec-title" style="margin:0"><h2>내 성향에 맞는 나눠 담기</h2><span class="badge b-green">${type}</span></div>
-    <p class="hint" style="margin:0">${profile.riskTest ? `${profile.riskTest.date} 투자 성향 진단 결과 기준` : "첫 설문의 성향 기준이에요"} · 정답이 아니라, 같은 성향에서 흔히 나누는 참고 비율이에요</p>
+    <div class="sec-title" style="margin:0"><h2>투자하기 전에, 내 성향에 맞는 비율 알려드려요!</h2><span class="badge b-green">${own ? "내 비율" : type}</span></div>
+    <p class="hint" style="margin:0">${own ? "마이페이지에서 직접 정한 비율이에요" : profile.riskTest ? `${profile.riskTest.date} 투자 성향 진단 결과 기준` : "첫 설문의 성향 기준이에요"} · 정답이 아니라 참고 비율이에요. 첫 거래를 하면 이 칸은 사라지고, 마이페이지에서 언제든 보고 고칠 수 있어요</p>
     <div class="mix-row"><span class="hint">예시</span>${bar(mix)}</div>
     <div class="mix-row"><span class="hint">지금</span>${bar(now)}</div>
     <div class="mix-leg">${Object.keys(mix).map((g) => `<div><i style="background:${INV_COLORS[g]}"></i><span>${g}</span><b class="num">${mix[g]}%</b><small class="hint num">지금 ${fmt(Math.round(now[g]))}%</small></div>`).join("")}</div>
     ${mixCompare() ? `<p class="mix-cmp">${esc(mixCompare())}</p>` : ""}
-    <div class="lumi-says inv-says">${mascot(36)}<p class="bubble-onb">${MIX_WHY[type]} 주식 ${mix.주식}%(약 ${invMan(total * mix.주식 / 100)})는 아래 주식 시장에서 직접 골라 보세요.</p></div>
+    <div class="lumi-says inv-says">${mascot(36)}<p class="bubble-onb">${own ? "직접 정한 비율대로 담아 볼까요?" : MIX_WHY[type]} 주식 ${mix.주식}%(약 ${invMan(total * mix.주식 / 100)})는 아래 주식 시장에서 직접 골라 보세요.</p></div>
     ${canFill ? `<button class="btn ghost block inv-fill" data-act="inv-fill">예시 비율만큼 채권·예금 담기<small>${need.filter(([, v]) => v > 0).map(([g, v]) => `${g} ${invMan(v)}`).join(" · ")}</small></button>` : ""}
     <button class="link-btn" data-act="inv-risktest" style="align-self:flex-start;padding-left:0">${profile.riskTest ? "투자 성향 진단 다시 받기 ›" : "7문항 투자 성향 진단 받기 ›"}</button>
   </section>`;
 }
 function fillMix() {
-  const mix = INV_MIX[riskType(profile.avert)], G = invGroups(), total = invTotal();
+  const { mix } = myMix(), G = invGroups(), total = invTotal();
   const plan = [["ktb3", "채권"], ["cma", "예금·CMA"]].map(([id, g]) => [id, Math.floor(Math.max(0, (mix[g] / 100) * total - G[g]) / 1e4) * 1e4]).filter(([, v]) => v > 0);
   let done = 0;
   for (const [id, v] of plan) {
@@ -5469,13 +5479,25 @@ function fillMix() {
   }
   if (done) afterTrade(`채권·예금에 ${invMan(done)}을 나눠 담았어요. 종목은 아래 주식 시장에서 골라 보세요`);
 }
+// 마이페이지: 나눠 담기 비율 보기·고치기 + 지금 모의투자와 비교
+function mixMyCard() {
+  const type = riskType(profile.avert), { mix, own } = myMix(), ex = INV_MIX[type];
+  const G = invGroups(), total = invTotal(), traded = inv.trades.some((t) => t.kind !== "bonus");
+  return `<section class="card form" id="sec-mix">
+      <div class="sec-title"><h2>나눠 담기 비율</h2><span class="badge b-green">${own ? "내가 정한 비율" : `${type} 예시`}</span></div>
+      <p class="hint" style="margin:0">모의투자에서 주식·채권·예금·현금을 어떤 비율로 담을지 정해요. 처음엔 투자 성향 예시(${type}: ${Object.entries(ex).map(([g, v]) => `${g} ${v}%`).join(" · ")})로 채워 두었어요. 정답이 아니라 참고 비율이에요.</p>
+      <div class="grid2">${Object.keys(ex).map((g, i) => `<div><label class="lb" for="mix-${i}">${g}${traded && total ? ` <small class="hint num">지금 ${fmt(Math.round((G[g] / total) * 100))}%</small>` : ""}</label><div class="money"><input class="field num" id="mix-${i}" inputmode="numeric" maxlength="3" value="${mix[g]}"><span class="unit">%</span></div></div>`).join("")}</div>
+      ${traded && mixCompare() ? `<p class="mix-cmp" style="margin:0">${esc(mixCompare())}</p>` : ""}
+      <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" data-act="inv-mixsave">비율 저장</button>${own ? `<button class="btn ghost" data-act="inv-mixreset">성향 예시로 되돌리기</button>` : ""}</div>
+    </section>`;
+}
 
 // ── 화면 ──
 function lumiInvestLine() {
   if (!invData.game) return "시세를 불러오는 중이에요…";
   if (!inv.trades.some((t) => t.kind !== "bonus")) return "가상 1,000만 원이 들어왔어요! 대표 종목이나 검색으로 첫 종목을 골라 볼까요? 오늘 힌트도 있어요.";
   const best = Object.values(inv.hold).filter((h) => h.kind === "stock").map((h) => ({ h, r: (holdValue(h) / h.cost - 1) * 100 })).sort((a, b) => Math.abs(b.r) - Math.abs(a.r))[0];
-  if (best && Math.abs(best.r) >= 1) return `${esc(best.h.name)}${josa(best.h.name, "이", "가")} 산 뒤로 ${fmt(Math.abs(best.r), 1)}% ${best.r > 0 ? "올랐어요" : "내렸어요"}. 왜 그런지 오늘 힌트를 볼까요?`;
+  if (best && Math.abs(best.r) >= 1) return `${esc(best.h.name)}${josa(best.h.name, "이", "가")} 산 뒤로 ${fmt(Math.abs(best.r), 1)}% ${best.r > 0 ? "올랐어요" : "내렸어요"}. 왜 그런지 힌트를 볼까요?<br><button class="link-btn inv-why" data-act="inv-hints" data-k="${esc(best.h.id)}">${esc(best.h.name)} 왜 ${best.r > 0 ? "올랐는지" : "내렸는지"} 보기 ›</button>`;
   if (invGroups().현금 / invTotal() > 0.8) return "아직 현금이 많아요. 주식이 부담되면 채권이나 CMA에 조금 넣어 두는 방법도 있어요.";
   return `${seasonLabel(inv.season)}이 ${seasonLeft()}일 남았어요. ${idxName()}보다 잘하는 게 목표예요!`;
 }
@@ -5556,9 +5578,20 @@ function viewInvest() {
   const holds = Object.values(inv.hold).sort((a, b) => holdValue(b) - holdValue(a));
   const hints = invHints();
   const badges = invBadgeList();
+  const traded = inv.trades.some((t) => t.kind !== "bonus");
+  const portfolio = `<section class="card">
+      <div class="sec-title" style="margin:0"><h2>내 포트폴리오</h2><span>${holds.length ? `${holds.length}개 상품` : "아직 없어요"}</span></div>
+      ${holds.length ? `<div class="inv-holds">${holds.map(holdRow).join("")}</div>` : `<p class="hint" style="margin:0">아래 주식 시장에서 종목이나 채권·예금을 골라 담아 보세요.</p>`}
+      <div class="inv-mix">${donut(G, total)}
+        <div class="inv-leg">${Object.entries(G).map(([g, v]) => `<div><i style="background:${INV_COLORS[g]}"></i><span>${g}</span><b class="num">${fmt(Math.round((v / total) * 100))}%</b><small class="hint num">${invMan(v)}</small></div>`).join("")}</div>
+      </div>
+      ${traded ? `<button class="link-btn" data-act="nav" data-route="my" data-target="sec-mix" style="align-self:flex-start;padding-left:0">${esc(mixCompare() || "나눠 담기 비율")} 마이페이지에서 보기 ›</button>` : ""}
+    </section>`;
   return `${tabHead("모의투자")}
   <main class="scroll inv">
     <div class="lumi-says inv-says">${mascot(44, ...lumiMood())}<p class="bubble-onb">${lumiInvestLine()}</p></div>
+
+    ${traded ? portfolio : mixBlock()}
 
     <section class="card inv-top">
       <div class="sec-title" style="margin:0"><span class="hint">내 가상 자산</span><span class="badge b-flat">${seasonLabel(inv.season)} · D-${seasonLeft()}</span></div>
@@ -5566,8 +5599,6 @@ function viewInvest() {
       <p class="hint num" style="margin:0">현금 ${won(Math.round(inv.cash))} · 투자 ${won(Math.round(total - inv.cash))}${inv.bonusTotal ? ` · 보너스 +${won(inv.bonusTotal)}` : ""}${invData.game?.sample ? ` <span class="badge b-sample">예시 데이터</span>` : ""}</p>
       ${chartBlock()}
     </section>
-
-    ${!inv.trades.some((t) => t.kind !== "bonus") || ui.invMixOpen ? mixBlock() : `<button class="card inv-mixmini" data-act="inv-mix"><span><b>내 성향에 맞는 나눠 담기</b><small class="hint">${esc(mixCompare() || `${riskType(profile.avert)} 예시 비율과 지금 비교하기`)}</small></span><span class="plus" aria-hidden="true">+</span></button>`}
 
     <section class="card inv-hintbar">
       <button class="inv-hint-open" data-act="inv-hints">${mascot(30)}<span><b>루미의 오늘 힌트</b><small class="hint">${invData.hints ? `${hints.length}개 · 시장 소식과 나에게만 고른 정책 소식` : "만드는 중…"}</small></span><span class="plus" aria-hidden="true">+</span></button>
@@ -5580,13 +5611,7 @@ function viewInvest() {
       <div id="inv-results">${invMarketList()}</div>
     </section>
 
-    <section class="card">
-      <div class="sec-title" style="margin:0"><h2>내 포트폴리오</h2><span>${holds.length ? `${holds.length}개 상품` : "아직 없어요"}</span></div>
-      <div class="inv-mix">${donut(G, total)}
-        <div class="inv-leg">${Object.entries(G).map(([g, v]) => `<div><i style="background:${INV_COLORS[g]}"></i><span>${g}</span><b class="num">${fmt(Math.round((v / total) * 100))}%</b><small class="hint num">${invMan(v)}</small></div>`).join("")}</div>
-      </div>
-      ${holds.length ? `<div class="inv-holds">${holds.map(holdRow).join("")}</div>` : `<p class="hint" style="margin:0">아래 주식 시장에서 종목이나 채권·예금을 골라 담아 보세요.</p>`}
-    </section>
+    ${traded ? "" : portfolio}
 
     ${rankBlock()}
 
@@ -5602,16 +5627,54 @@ function viewInvest() {
   </main>`;
 }
 // 힌트 팝업
-function modalInvHints() {
-  const hints = invHints();
-  return `<div class="sec-title" style="margin:0"><h2>루미의 오늘 힌트</h2><span>나에게만 고른 ${hints.length}개</span></div>
-    <p class="hint" style="margin:0">정책 소식은 사람마다 다르게 골라요. 실제 정부 보도자료에서 왔고, 관련 없는 소식은 AI(제미나이)가 한 번 걸러 냈어요. 시장 소식은 실제 코스피·종목의 마지막 거래일 움직임이에요. 실제 주가가 꼭 그렇게 움직이지는 않아요.</p>
-    ${hints.length ? hints.map((h) => `<div class="inv-hint">
+function hintCard(h) {
+  return `<div class="inv-hint">
       <div class="r">${h.kind === "market" ? `<span class="badge b-flat">시장 소식</span>` : dirPill(h.dir)}<span class="hint">${daysText(h.days)}</span></div>
       <b>${esc(h.title)}</b><p>${esc(hintText(h))}</p>
       <div class="r"><span class="hint">${h.sources.length ? `근거 ${h.sources.map((s) => (s.url ? `<a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.source)}${h.kind === "news" ? " 보도자료" : ""}</a>` : esc(s.source))).join(" · ")}` : "예시 소식"}</span>
         <span class="inv-hs">${h.stocks.map((id) => `<button class="chip small" data-act="inv-open" data-k="stock:${esc(id)}">${esc(company(id)?.name || id)}</button>`).join("")}</span></div>
-    </div>`).join("") : `<p class="hint">${invData.hints ? "힌트를 불러오지 못했어요. 잠시 후 다시 열어 주세요." : "힌트를 만드는 중이에요…"}</p>`}
+    </div>`;
+}
+// 한 종목이 왜 올랐·내렸는지: 내 수익 vs 같은 기간 코스피, 그 종목·업종 힌트, 관련 뉴스 제목(네이버 뉴스, 제목·링크만)
+function stockWhy(id) {
+  const h = inv.hold[holdKey("stock", id)], c = company(id), name = h?.name || c?.name || id, Q = quote(id);
+  const ev = h && inv.px[id] != null ? evalLots(name, h.lots, inv.px[id], curIdx()) : null;
+  const pool = invData.hints?.pool || [];
+  const mine = pool.filter((x) => x.stocks.includes(id));
+  const sector = c?.sector ? pool.filter((x) => !mine.includes(x) && x.kind === "news" && x.sector && (x.sector === c.sector || c.sector.includes(x.sector) || x.sector.includes(c.sector))).slice(0, 2) : [];
+  const news = invData.why?.[name];
+  if (news === undefined) {
+    (invData.why ||= {})[name] = null;
+    getJson(`/api/news?q=${encodeURIComponent(name)}`).then((j) => { invData.why[name] = j.items || []; }).catch(() => { invData.why[name] = []; }).then(() => { if (ui.modal?.kind === "inv-hints") render(); });
+  }
+  let say = "";
+  if (ev && ev.kret != null) {
+    const gap = ev.ret - ev.kret;
+    say = (ev.ret >= 0) === (ev.kret >= 0) && Math.abs(gap) < 2
+      ? Math.abs(ev.kret) < 0.1 && Math.abs(ev.ret) < 0.1 ? `산 뒤로 ${idxName()}도 ${esc(name)}도 거의 그대로예요.`
+        : `같은 기간 ${idxName()}도 ${fmt(Math.abs(ev.kret), 1)}% ${ev.kret >= 0 ? "올라서" : "내려서"}, 시장 전체 흐름을 따라간 쪽에 가까워요.`
+      : `같은 기간 ${idxName()}는 ${ev.kret > 0 ? "+" : ""}${fmt(ev.kret, 1)}%인데 ${esc(name)}${josa(name, "은", "는")} ${ev.ret > 0 ? "+" : ""}${fmt(ev.ret, 1)}%예요. 시장보다 ${gap > 0 ? "더 올라서" : "더 내려서"}, 회사나 업종에 따로 소식이 있었을 수 있어요.`;
+  }
+  return `<div class="sec-title" style="margin:0"><h2>${esc(name)} 왜 움직였을까?</h2><span>참고용</span></div>
+    ${ev ? `<div class="ev-grid">
+      <span class="hint">산 뒤로 내 수익</span><b class="num ${tone(ev.ret)}">${ev.ret > 0 ? "+" : ""}${fmt(ev.ret, 2)}%</b>
+      <span class="hint">같은 기간 ${idxName()}</span><span class="num">${ev.kret == null ? "-" : `${ev.kret > 0 ? "+" : ""}${fmt(ev.kret, 2)}%`}</span>
+      ${Q ? `<span class="hint">마지막 거래일</span><span class="num">${fmt(Q.v)}원 (${pct(Q.pct)})</span>` : ""}
+    </div>` : ""}
+    ${say ? `<div class="lumi-says inv-says">${mascot(36)}<p class="bubble-onb">${say}</p></div>` : ""}
+    <h3 style="margin:4px 0 0;font-size:15px">루미의 힌트</h3>
+    ${mine.length || sector.length ? [...mine, ...sector].map(hintCard).join("") : `<p class="hint" style="margin:0">${invData.hints ? `오늘은 ${esc(name)} 힌트가 없어요. 아래 뉴스 제목에서 이유를 찾아봐요.` : "힌트를 만드는 중이에요…"}</p>`}
+    <h3 style="margin:4px 0 0;font-size:15px">${esc(name)} 최근 뉴스</h3>
+    <div class="nl">${!news ? `<p class="hint">불러오는 중…</p>` : news.length ? news.slice(0, 3).map((it) => newsLine(it, true)).join("") : `<p class="hint">관련 뉴스를 찾지 못했어요.</p>`}</div>
+    <p class="hint" style="margin:0">뉴스는 네이버 뉴스 검색의 제목·링크 그대로예요. 사라·팔라는 뜻이 아니에요.</p>
+    <div style="display:flex;gap:8px"><button class="btn ghost" style="flex:1" data-act="inv-open" data-k="stock:${esc(id)}">${esc(name)} 사고팔기</button><button class="btn" style="flex:1" data-act="modal-close">닫기</button></div>`;
+}
+function modalInvHints(m) {
+  if (m?.stock) return stockWhy(m.stock);
+  const hints = invHints();
+  return `<div class="sec-title" style="margin:0"><h2>루미의 오늘 힌트</h2><span>나에게만 고른 ${hints.length}개</span></div>
+    <p class="hint" style="margin:0">정책 소식은 사람마다 다르게 골라요. 실제 정부 보도자료에서 왔고, 관련 없는 소식은 AI(제미나이)가 한 번 걸러 냈어요. 시장 소식은 실제 코스피·종목의 마지막 거래일 움직임이에요. 실제 주가가 꼭 그렇게 움직이지는 않아요.</p>
+    ${hints.length ? hints.map(hintCard).join("") : `<p class="hint">${invData.hints ? "힌트를 불러오지 못했어요. 잠시 후 다시 열어 주세요." : "힌트를 만드는 중이에요…"}</p>`}
     <p class="hint" style="margin:0">사라·팔라는 뜻이 아니에요.</p>
     <button class="btn ghost" data-act="modal-close">닫기</button>`;
 }
@@ -5680,7 +5743,17 @@ document.addEventListener("click", (e) => {
   const act = el.dataset.act, m = ui.modal;
   switch (act) {
     case "inv-period": ui.invPeriod = el.dataset.v; render(); break;
-    case "inv-hints": openModal("inv-hints"); break;
+    case "inv-hints": openModal("inv-hints", el.dataset.k ? { stock: el.dataset.k } : {}); break;
+    case "inv-mixsave": {
+      const keys = Object.keys(INV_MIX.위험중립형);
+      const v = keys.map((g, i) => Number(document.getElementById(`mix-${i}`)?.value));
+      if (v.some((x) => !Number.isInteger(x) || x < 0 || x > 100)) { toast("0~100 사이 정수로 넣어 주세요"); break; }
+      const sum = v.reduce((a, b) => a + b, 0);
+      if (sum !== 100) { toast(`합이 100%가 되어야 해요 (지금 ${sum}%)`); break; }
+      profile.mix = Object.fromEntries(keys.map((g, i) => [g, v[i]])); saveProfile(); render(); toast("나눠 담기 비율을 저장했어요");
+      break;
+    }
+    case "inv-mixreset": delete profile.mix; saveProfile(); render(); toast("투자 성향 예시 비율로 되돌렸어요"); break;
     case "inv-eval-all": ui.invEvalAll = !ui.invEvalAll; render(); break;
     case "inv-open": {
       ui.modal = { kind: "inv-trade", route: routeKey(), k: el.dataset.k, side: "buy", qty: 1, reason: null };
@@ -5717,7 +5790,6 @@ document.addEventListener("click", (e) => {
     }
     case "inv-deposit": depositRate(el.dataset.id, Math.round((parseFloat(document.getElementById("inv-amt")?.value) || 0) * 10000)); break;
     case "inv-withdraw": withdrawRate(el.dataset.id); break;
-    case "inv-mix": ui.invMixOpen = !ui.invMixOpen; render(); break;
     case "inv-fill": fillMix(); break;
     case "inv-risktest": ui.rtFrom = "invest"; ui.rt = null; go("#risktest"); break;
   }
@@ -6153,7 +6225,7 @@ document.addEventListener("click", async (e) => {
       profile.avert = Number(el.dataset.v);
       profile.riskTest = { score: Number(el.dataset.s), type: riskType(profile.avert), date: new Date().toISOString().slice(0, 10) };
       saveProfile(); toast(`${profile.riskTest.type}으로 반영했어요`);
-      if (ui.rtFrom === "invest") { ui.rtFrom = null; ui.invMixOpen = true; go("#invest"); } else navTo("my", "sec-risk");
+      if (ui.rtFrom === "invest") { ui.rtFrom = null; go("#invest"); } else navTo("my", "sec-risk");
       break;
     }
     case "note-toggle": {
