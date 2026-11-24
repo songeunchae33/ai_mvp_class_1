@@ -62,6 +62,7 @@ export function meaty(n) {
 
 // 해외 뉴스(영어 제목)를 한국어로 옮긴다. 제미나이 무료 등급만 쓰고, 안 되면 영어 그대로. 같은 제목은 다시 묻지 않는다
 const koCache = new Map();
+export const translateState = { why: "" }; // 마지막 번역 실패 이유(확인용, 키 없음)
 export async function translateTitles(items) {
   const todo = [...new Set(items.filter((a) => a.lang === "en" && !koCache.has(a.title)).map((a) => a.title))].slice(0, 15);
   if (todo.length && process.env.GEMINI_API_KEY) {
@@ -78,7 +79,7 @@ export async function translateTitles(items) {
         if (todo[it.i] && /[가-힣]/.test(ko)) koCache.set(todo[it.i], ko.slice(0, 200));
       }
       if (koCache.size > 500) koCache.delete(koCache.keys().next().value);
-    } catch (e) { console.error("translate", e.message); }
+    } catch (e) { console.error("translate", e.message); translateState.why = String(e.message).slice(0, 160); }
   }
   return items.map((a) => (koCache.has(a.title) ? { ...a, title: koCache.get(a.title), orig: a.title, lang: "ko" } : a));
 }
