@@ -68,17 +68,24 @@ export async function translateTitles(items) {
   if (todo.length && process.env.GEMINI_API_KEY) {
     try {
       const { generate } = await import("./_ai.js");
-      const out = await generate({
+      // 제미나이 무료 등급은 사람이 몰리면 503(바빠요)을 자주 낸다 → 잠깐 쉬었다가 두 번 더
+      const ask = (n) => generate({
         system: "영어 뉴스 제목을 자연스러운 한국어 뉴스 제목으로 옮긴다. 뜻만 옮기고 덧붙이거나 줄이지 않는다. 사람·회사 이름은 한국에서 흔히 쓰는 표기로.",
         text: todo.map((t, i) => `[${i}] ${t}`).join("\n"),
         schema: { type: "object", properties: { items: { type: "array", items: { type: "object", properties: { i: { type: "integer" }, ko: { type: "string" } }, required: ["i", "ko"], additionalProperties: false } } }, required: ["items"], additionalProperties: false },
         schemaName: "titles", maxTokens: 1200, geminiOnly: true,
+      }).catch(async (e) => {
+        if (n >= 2 || !/(503|429|500)|UNAVAILABLE|high demand/i.test(e.message)) throw e;
+        await new Promise((r) => setTimeout(r, 1000 * (n + 1)));
+        return ask(n + 1);
       });
+      const out = await ask(0);
       for (const it of JSON.parse(out.text).items || []) {
         const ko = String(it.ko || "").trim();
         if (todo[it.i] && /[가-힣]/.test(ko)) koCache.set(todo[it.i], ko.slice(0, 200));
       }
       if (koCache.size > 500) koCache.delete(koCache.keys().next().value);
+      translateState.why = "";
     } catch (e) { console.error("translate", e.message); translateState.why = String(e.message).slice(0, 160); }
   }
   return items.map((a) => (koCache.has(a.title) ? { ...a, title: koCache.get(a.title), orig: a.title, lang: "ko" } : a));

@@ -81,7 +81,9 @@ export default async function handler(req, res) {
     }
 
     const globalKo = await translateTitles(global.slice(0, full ? 15 : 3)); // 영어 제목은 한국어로(안 되면 영어 그대로)
-    cache(res, 3600); // 사용량을 아끼려고(GDELT는 5초에 한 번 제한) 1시간 동안 같은 결과를 재사용
+    // 사용량을 아끼려고(GDELT는 5초에 한 번 제한) 1시간 동안 같은 결과를 재사용. 번역이 실패해 영어가 남았으면 2분만 쓰고 다시 번역
+    if (globalKo.some((a) => a.lang === "en")) res.setHeader("Cache-Control", "s-maxage=120");
+    else cache(res, 3600);
     res.status(200).json({ issues: strip(issues), forYou: strip(forYou), global: strip(globalKo), keywords: keywords([...pool, ...policy]), providers, ...(translateState.why ? { tr: translateState.why } : {}) });
   } catch (e) {
     console.error(e);
