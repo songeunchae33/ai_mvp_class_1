@@ -47,7 +47,7 @@ const FB_SCHEMA = {
   properties: {
     good: { type: "string" },
     worry: { type: "string" },
-    actions: { type: "array", minItems: 1, maxItems: 3, items: { type: "object", additionalProperties: false, required: ["title", "detail"], properties: { title: { type: "string" }, detail: { type: "string" } } } },
+    actions: { type: "array", minItems: 2, maxItems: 3, items: { type: "object", additionalProperties: false, required: ["title", "detail"], properties: { title: { type: "string" }, detail: { type: "string" } } } },
   },
 };
 

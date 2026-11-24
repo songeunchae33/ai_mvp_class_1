@@ -183,6 +183,37 @@
   .mp-story .worry { background: #FBE3E5; color: inherit; padding: 1px 2px; border-radius: 3px; }
   .mp-acts { margin: 0; padding-left: 20px; font-size: 14px; line-height: 1.7; display: flex; flex-direction: column; gap: 6px; }
   .mp-acts .hint { font-size: 12px; }
+  /* 머니 프로필 그림 카드: 연회색 면과 파랑 하나로 */
+  .mp-head { display: flex; gap: 12px; align-items: center; background: var(--soft); border-radius: 16px; padding: 12px 14px; }
+  .mp-head b { font-size: 16px; }
+  .mp-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+  .mp-tags span { font-size: 12px; background: #fff; border: 1px solid var(--line); border-radius: 999px; padding: 2px 8px; color: var(--sub); }
+  .mp-flow { margin-top: 10px; background: var(--soft); border-radius: 16px; padding: 12px 14px; }
+  .mp-row { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-size: 14px; flex-wrap: wrap; }
+  .mp-row b { font-size: 18px; }
+  .mp-row.hint { font-size: 12px; margin-top: 6px; }
+  .mp-bar { display: flex; height: 12px; border-radius: 999px; overflow: hidden; background: #E6EAF2; margin-top: 8px; gap: 2px; }
+  .mp-bar.sm { height: 8px; }
+  .mp-bar i { display: block; height: 100%; }
+  .mp-bar em { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--ink); }
+  .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 4px; vertical-align: 0; }
+  .mp-tiles { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; margin-top: 8px; }
+  .mp-tile { display: flex; flex-direction: column; gap: 4px; background: var(--soft); border-radius: 16px; padding: 12px 14px; min-width: 0; }
+  .mp-tile b { font-size: 18px; }
+  .mp-tile .hint { font-size: 12px; }
+  .mp-leg { display: flex; flex-wrap: wrap; gap: 8px; font-size: 11px; color: var(--sub); }
+  .mp-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .mp-chip { display: flex; align-items: center; gap: 8px; background: #fff; border: 1px solid var(--line); border-radius: 16px; padding: 6px 12px 6px 8px; }
+  .mp-chip b { display: block; font-size: 13px; }
+  .mp-chip small { font-size: 12px; color: var(--sub); }
+  .mp-worry { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; font-size: 14px; line-height: 1.6; }
+  .mp-worry li { padding: 10px 12px; border-radius: 12px; background: var(--soft); }
+  .mp-worry li.mp-big { background: #FBE9EA; }
+  .mp-worry li.ok { background: #EEF4FD; }
+  .mp-worry .pill-red { display: inline-block; font-size: 12px; font-weight: 700; color: #B3261E; background: #F7D4D6; border-radius: 999px; padding: 2px 6px; margin-right: 6px; }
+  .mp-rx { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; font-size: 14px; line-height: 1.6; }
+  .mp-rx li { display: flex; gap: 10px; align-items: flex-start; border: 1px solid var(--line); border-radius: 16px; padding: 12px 14px; }
+  .mp-no { flex-shrink: 0; width: 22px; height: 22px; border-radius: 6px; background: #3375D6; color: #fff; font-size: 13px; font-weight: 700; display: flex; align-items: center; justify-content: center; margin-top: 1px; }
   .diag-line { display: flex; gap: 10px; align-items: flex-start; font-size: 14px; line-height: 1.55; }
   .diag-line .badge { flex-shrink: 0; margin-top: 2px; }
   .legend { display: flex; gap: 12px; flex-wrap: wrap; font-size: 12px; color: var(--sub); }
@@ -4078,7 +4109,7 @@ function moneyProfileHtml({ p, a, income, incomeRec, spend, outs, total, over, b
   const goalsOpen = (p.goals || []).filter((g) => !goalCalc(g).done);
   // 자주 쓰는 곳: 30일에 4번 이상 결제한 곳
   const freq = {};
-  outs.forEach((x) => { const k = x.merchant || x.cat; freq[k] = freq[k] || { n: 0, v: 0 }; freq[k].n++; freq[k].v += x.amount; });
+  outs.forEach((x) => { const k = x.merchant || x.cat; freq[k] = freq[k] || { n: 0, v: 0, cat: x.cat }; freq[k].n++; freq[k].v += x.amount; });
   const habits = Object.entries(freq).filter(([, f]) => f.n >= 4).sort((x, y) => y[1].n - x[1].n).slice(0, 2);
   const ss = small.reduce((t, x) => t + x.amount, 0);
   const wonJ = (v, a1, a2) => { const w = won(v); return w + josa(w, a1, a2); };
@@ -4089,19 +4120,6 @@ function moneyProfileHtml({ p, a, income, incomeRec, spend, outs, total, over, b
   const smallSame = over.length && small.length && small.filter((x) => x.cat === over[0][0]).length >= small.length * 0.7;
   const smallIssue = small.length >= 5 && ss > spend * 0.15 && !smallSame;
 
-  // ① 머니 프로필
-  const rows = [
-    p.age && ["나이", `만 ${p.age}세`],
-    p.status && ["하는 일", esc(p.status)],
-    p.income && ["세전 연봉", INCOME[p.income]],
-    income && ["한 달 들어온 돈", `${won(income)}${incomeRec ? "" : " (연 소득으로 추정)"}`],
-    ["한 달 쓴 돈", won(spend)],
-    left !== null && ["한 달 남은 돈", `${won(left)} (${rate}%)`],
-    total > 0 && ["현재 자산", man(total), [a.cash && `예금·현금 ${man(a.cash)}`, a.invest && `투자 ${man(a.invest)}`, a.other && `기타 ${man(a.other)}`].filter(Boolean)],
-    debtSum > 0 && ["대출", man(debtSum)],
-    habits.length && ["자주 쓰는 소비", habits.map(([k, f]) => `${esc(k)} ${f.n}번 · ${won(f.v)}`).join(", ")],
-    goalsOpen.length && ["재무 목표", goalsOpen.slice(0, 2).map((g) => `${esc(g.name)} ${man(g.target)}${g.due ? ` (${String(g.due).slice(0, 4)}년 ${Number(String(g.due).slice(5, 7))}월까지)` : ""}`).join(", ")],
-  ].filter(Boolean);
 
   // ② 돈 고민: 잘하는 점은 담담하게, 가장 큰 걱정 하나는 표시
   const goods = [], worries = [], acts = [];
@@ -4139,18 +4157,60 @@ function moneyProfileHtml({ p, a, income, incomeRec, spend, outs, total, over, b
   if (!goalCovered && need && income && left < need) acts.push(`<b>목표 저축 다시 맞추기.</b> 매달 ${won(need - Math.max(0, left))}이 모자라요. 위에서 줄인 돈을 목표로 옮기거나 기한을 늘려 보세요.`);
   if (interest && income && interest / income >= 0.2) acts.push(`<b>금리가 높은 대출부터 갚기.</b> 이자가 줄면 매달 남는 돈이 바로 늘어요.`);
   if (smallIssue) acts.push(`<b>작은 결제 절반 줄이기.</b> 1만원 미만 ${small.length}건 중 절반만 줄여도 한 달 약 ${won(ss / 2)}이 남아요.`);
-  if (!acts.length) acts.push(`<b>지금 흐름 그대로 유지하기.</b>${left > 0 ? ` 남는 돈 ${won(left)} 중 일부를 월급날 목표 저축으로 먼저 옮겨 두면 더 쉽게 모여요.` : " 수입 기록을 넣으면 더 정확하게 알려드릴게요."}`);
+  // 걱정이 하나뿐이어도 처방은 2~3개: 자주 쓰는 소비 · 월급날 먼저 저축 · 수입 기록 순으로 채운다
+  const top = habits[0];
+  if (acts.length < 3 && top && !over.slice(0, 2).some(([c]) => c === top[1].cat)) {
+    const [k, f] = top, cut = Math.max(1, Math.round(f.n / 4)), avg = f.v / f.n;
+    acts.push(`<b>${esc(k)} 한 달 ${cut}번 덜 가기.</b> 30일에 ${f.n}번, 한 번에 평균 ${won(avg)}이라 ${cut}번만 줄여도 약 ${won(avg * cut)}이 남아요.`);
+  }
+  if (acts.length < 3 && left > 0) {
+    const first = Math.max(1, Math.floor(left / 2 / 1e4)) * 1e4;
+    acts.push(`<b>월급날 ${won(first)} 먼저 저축하기.</b> 남는 돈(${won(left)})의 절반쯤을 월급날 바로 옮겨 두면 쓰기 전에 모여요.`);
+  }
+  if (acts.length < 3 && !incomeRec) acts.push(`<b>들어온 돈도 가계부에 기록하기.</b> 월급·용돈을 넣으면 남는 돈과 저축 속도를 더 정확히 알려드려요.`);
+  if (acts.length < 2) acts.push(`<b>지금 흐름 그대로 유지하기.</b> 다음 달에도 이 정도로만 쓰면 충분해요.`);
 
-  const story = `${nick}님은 최근 30일 동안 ${wonJ(spend, "을", "를")} 썼어요. ${goods.join(" ")} `
-    + (worries.length ? `<mark class="worry">${worries[0]}</mark> ${worries.slice(1).join(" ")}` : "지금은 크게 걱정할 부분이 없어요.");
-
+  // ── 그림 카드 (어피티 머니 프로필처럼 한눈에) ──
+  const pct = (v, t) => (t > 0 ? Math.max(0, Math.min(100, Math.round((v / t) * 100))) : 0);
+  const tags = [p.age && `만 ${p.age}세`, p.status && esc(p.status), p.income && `연봉 ${INCOME[p.income]}`].filter(Boolean);
+  const flow = income ? `<div class="mp-flow">
+        <div class="mp-row"><span>한 달 들어온 돈</span><b class="num">${won(income)}</b></div>
+        <div class="mp-bar"><i style="width:${pct(Math.min(spend, income), income)}%;background:var(--sub)"></i><i style="width:${rate > 0 ? pct(left, income) : 0}%;background:var(--green)"></i></div>
+        <div class="mp-row hint"><span><i class="dot" style="background:var(--sub)"></i>쓴 돈 ${won(spend)}</span><span><i class="dot" style="background:var(--green)"></i>${left >= 0 ? `남긴 돈 ${won(left)} · ${rate}%` : `${won(-left)} 더 썼어요`}</span></div>
+        ${incomeRec ? "" : `<p class="hint" style="margin:4px 0 0">수입 기록이 없어서 연 소득으로 추정했어요.</p>`}
+      </div>` : `<div class="mp-flow"><div class="mp-row"><span>한 달 쓴 돈</span><b class="num">${won(spend)}</b></div><p class="hint" style="margin:4px 0 0">수입을 기록하면 남는 돈도 보여드려요.</p></div>`;
+  const assetCols = [[a.cash, "예금·현금", "#2F6FDA"], [a.invest, "투자", "#7FA6E6"], [a.other, "기타", "#C5D6F2"]].filter(([v]) => Number(v) > 0);
+  const tileAsset = total > 0 ? `<div class="mp-tile"><span class="hint">현재 자산</span><b class="num">${man(total)}</b>
+        <div class="mp-bar sm">${assetCols.map(([v, , col]) => `<i style="width:${pct(Number(v), total)}%;background:${col}"></i>`).join("")}</div>
+        <span class="mp-leg">${assetCols.map(([v, l, col]) => `<span><i class="dot" style="background:${col}"></i>${l}</span>`).join("")}</span>${debtSum > 0 ? `<span class="hint">대출 ${man(debtSum)}</span>` : ""}</div>`
+    : `<div class="mp-tile"><span class="hint">현재 자산</span><b style="font-size:15px">입력 전</b><span class="hint">'자산' 칸에서 넣으면 보여드려요</span></div>`;
+  const tileCash = months !== null ? `<div class="mp-tile"><span class="hint">비상금</span><b class="num ${months < 3 ? "up" : ""}">${fmt(months, 1)}개월 치</b>
+        <div class="mp-bar sm" style="position:relative"><i style="width:${pct(Math.min(months, 6), 6)}%;background:${months < 3 ? "#D6453D" : "var(--green)"}"></i><em style="left:50%"></em></div>
+        <span class="hint">가운데 선이 3개월 (권장)</span></div>`
+    : `<div class="mp-tile"><span class="hint">비상금</span><b style="font-size:15px">-</b><span class="hint">예금·현금을 넣으면 몇 달 버틸지 알려드려요</span></div>`;
+  const habitChips = habits.length ? `<div class="mp-chips">${habits.map(([k, f]) => { const it = mcItemOf({ merchant: k, cat: f.cat }); return `<span class="mp-chip"><img src="${mcSvgSrc(it.key)}" alt="" width="28" height="28"><span><b>${esc(k)}</b><small>30일에 ${f.n}번</small></span></span>`; }).join("")}</div>` : "";
+  const goalLine = goalsOpen.length ? `<p class="hint" style="margin:8px 0 0">목표: ${goalsOpen.slice(0, 2).map((g) => `${esc(g.name)} ${man(g.target)}`).join(" · ")}</p>` : "";
+  const worryList = worries.length
+    ? worries.map((w, i) => `<li class="${i ? "" : "mp-big"}">${i ? "" : `<span class="pill-red">가장 큰 고민</span>`}${w}</li>`).join("")
+    : `<li>지금은 크게 걱정할 부분이 없어요.</li>`;
+  const goodList = goods.map((g) => `<li class="ok">${g}</li>`).join("");
+  const teaser = worries[0] ? worries[0].replace(/<[^>]+>/g, "") : "지금은 크게 걱정할 부분이 없어요.";
+  if (!ui.mpOpen) return `<section class="card" id="sec-check">
+      <div class="sec-title"><h2>${nick}님의 머니 프로필</h2><span>최근 30일 기준</span></div>
+      <div class="ans" style="display:flex;gap:10px;align-items:center">${mascot(40, worries.length ? "reassure" : "happy")}<p style="margin:0;font-size:14px;line-height:1.6;flex:1">${esc(teaser)}</p></div>
+      <button class="btn ghost" data-act="mp-toggle" style="width:100%;margin-top:12px">머니 프로필 · 돈 고민 · 루미의 처방 보기</button>
+    </section>`;
   return `<section class="card" id="sec-check">
       <div class="sec-title"><h2>${nick}님의 머니 프로필</h2><span>최근 30일 기준</span></div>
-      <ul class="mp-list">${rows.map(([k, v, sub]) => `<li><b>${k}:</b> ${v}${sub?.length ? `<ul>${sub.map((x) => `<li>${x}</li>`).join("")}</ul>` : ""}</li>`).join("")}</ul>
+      <div class="mp-head">${mascot(52, worries.length ? "reassure" : "happy")}<div><b>${nick}님</b><div class="mp-tags">${tags.map((t) => `<span>${t}</span>`).join("") || `<span>마이페이지에서 나이·하는 일을 넣어 보세요</span>`}</div></div></div>
+      ${flow}
+      <div class="mp-tiles">${tileAsset}${tileCash}</div>
+      ${habitChips ? `<h3 class="mp-h">자주 쓰는 소비</h3>${habitChips}` : ""}${goalLine}
       <h3 class="mp-h">${nick}님의 돈 고민</h3>
-      <p class="mp-story">${story}</p>
+      <ul class="mp-worry">${worryList}${goodList}</ul>
       <h3 class="mp-h">루미의 처방</h3>
-      <ol class="mp-acts">${acts.slice(0, 3).map((x) => `<li>${x}</li>`).join("")}</ol>
+      <ol class="mp-rx">${acts.slice(0, 3).map((x, i) => `<li><span class="mp-no">${i + 1}</span><span>${x}</span></li>`).join("")}</ol>
+      <button class="btn ghost" data-act="mp-toggle" style="width:100%;margin-top:12px">접기</button>
     </section>`;
 }
 
@@ -6367,6 +6427,7 @@ document.addEventListener("click", async (e) => {
     case "mcard-save": moneyCardOut(false); break;
     case "mcard-share": moneyCardOut(true); break;
     case "insight-ask": askInsight(); break;
+    case "mp-toggle": ui.mpOpen = !ui.mpOpen; render(); if (ui.mpOpen) document.getElementById("sec-check")?.scrollIntoView({ block: "start" }); break;
     case "budget-save": {
       const B = {};
       document.querySelectorAll(".bud-form input[data-c]").forEach((inp) => { const v = parseInt(inp.value.replace(/[^0-9]/g, ""), 10); if (v > 0) B[inp.dataset.c] = v; });
