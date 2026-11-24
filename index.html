@@ -724,6 +724,29 @@
 
   /* 하단 탭 */
   .scroll { padding-bottom: 104px !important; }
+  body.tut-pad .scroll { padding-bottom: 260px !important; }
+  /* 첫 튜토리얼: 루미 안내 카드 · 아래 탭 고르기 */
+  .tut-coach { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(74px + env(safe-area-inset-bottom)); width: calc(100% - 24px); max-width: 416px; z-index: 16;
+    background: var(--card); border: 2px solid var(--green); border-radius: 20px; padding: 12px 14px; box-shadow: 0 10px 28px rgba(38,50,74,0.18); display: flex; flex-direction: column; gap: 8px; }
+  .tut-coach p { margin: 0; font-size: calc(14px * var(--fs, 1)); line-height: 1.6; }
+  .tut-coach .btn { width: 100%; white-space: normal; height: auto; min-height: 48px; padding-top: 10px; padding-bottom: 10px; line-height: 1.4; }
+  body.tut-pad .toast { bottom: auto; top: 76px; }
+  .tut-top { display: flex; align-items: center; gap: 10px; }
+  .tut-step { display: block; font-size: calc(12px * var(--fs, 1)); font-weight: 700; color: var(--green); }
+  .tut-dots { display: flex; gap: 4px; margin-top: 5px; }
+  .tut-dots i { width: 22px; height: 5px; border-radius: 3px; background: var(--line); }
+  .tut-dots i.on { background: var(--green); } .tut-dots i.cur { background: var(--mint); outline: 1.5px solid var(--green); }
+  .tabbar button.tut-pulse { color: var(--green); animation: tutPulse 1.2s ease-in-out infinite; }
+  @keyframes tutPulse { 50% { transform: translateY(-3px); } }
+  @media (prefers-reduced-motion: reduce) { .tabbar button.tut-pulse { animation: none; } }
+  .tut-full { position: fixed; inset: 0; z-index: 40; background: rgba(38,50,74,0.45); display: flex; align-items: flex-end; justify-content: center; }
+  .tut-card { width: 100%; max-width: 440px; max-height: 92vh; overflow-y: auto; background: var(--bg); border-radius: 24px 24px 0 0; padding: 20px 16px calc(20px + env(safe-area-inset-bottom)); display: flex; flex-direction: column; gap: 10px; }
+  .tut-pick { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 60px; padding: 10px 14px; border-radius: 16px; border: 1.5px solid var(--line); background: var(--card); color: var(--sub); font-size: inherit; cursor: pointer; }
+  .tut-pick b { display: block; font-size: calc(15px * var(--fs, 1)); color: var(--ink); } .tut-pick small { font-size: calc(12px * var(--fs, 1)); color: var(--sub); }
+  .tut-pick.on { border-color: var(--green); color: var(--green); }
+  .tut-pick.fixed { cursor: default; opacity: 0.75; }
+  .tut-sw { font-size: calc(13px * var(--fs, 1)); font-weight: 700; padding: 4px 10px; border-radius: 999px; background: var(--soft); }
+  .tut-pick.on .tut-sw { background: var(--mint); }
   .tabbar { position: fixed; left: 50%; transform: translateX(-50%); bottom: 0; width: 100%; max-width: 440px; z-index: 15;
     display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); background: #FFFFFF; border-top: 1px solid var(--line);
     padding: 6px 8px calc(8px + env(safe-area-inset-bottom)); }
@@ -2061,8 +2084,9 @@ function moneySeg() {
 }
 function tabBar(r) {
   const cur = ["money", "assets"].includes(r) ? "ledger" : ["news", "letters"].includes(r) ? "learn" : ["schedule", "benefits", "layout", "watch"].includes(r) ? "home" : r;
-  return `<nav class="tabbar" aria-label="주요 메뉴">${TABS.map(([id, label, icon]) =>
-    `<button class="${cur === id ? "on" : ""}" data-act="tab" data-t="${id}" ${cur === id ? 'aria-current="page"' : ""}>${icon}<span>${label}</span></button>`).join("")}</nav>`;
+  const T = shownTabs(), tn = tutNext()?.tab; // 기타 → 아래 탭 고르기에서 없앤 탭은 빼고, 튜토리얼 중이면 갈 탭을 반짝
+  return `<nav class="tabbar" aria-label="주요 메뉴" style="grid-template-columns:repeat(${T.length}, minmax(0, 1fr))">${T.map(([id, label, icon]) =>
+    `<button class="${cur === id ? "on" : ""}${tn === id && cur !== id ? " tut-pulse" : ""}" data-act="tab" data-t="${id}" ${cur === id ? 'aria-current="page"' : ""}>${icon}<span>${label}</span></button>`).join("")}</nav>`;
 }
 
 // 일정 한 줄 (홈·일정 화면 공용)
@@ -2310,6 +2334,7 @@ function levelOf(x) { return Math.floor(x / LEVEL_XP) + 1; }
 function titleOf(lv) { let t = TITLES[0][1]; for (const [n, name] of TITLES) if (lv >= n) t = name; return t; }
 // 날마다 퀴즈 점수: 푼 횟수와 맞힌 횟수를 모두 센다(같은 문제를 다시 풀어도 그날 점수에 들어감). 최근 30일만
 function scoreAdd(ok) {
+  if (route() !== "home") tutDone("learn"); // 경제 공부에서 푼 문제만 튜토리얼로 셈 (홈의 오늘의 퀴즈는 빼고)
   const d = dayKey(Date.now()), S = (learnState.scores = learnState.scores || {});
   const [o, n] = S[d] || [0, 0];
   S[d] = [o + (ok ? 1 : 0), n + 1];
@@ -2688,8 +2713,8 @@ function drawerMenu() {
     { title: "경제 공부", route: "learn", items: [["경제 개념 · 퀴즈", "learn", ""], ["푼 문제", "solved", ""], ["복습할 문제", "review", ""], ["관심 종목", "watch", ""]] },
     { title: "내 돈", route: "ledger", items: [["가계부 기록하기", "ledger", "m-capture"], ["지출 통계 · 달력", "ledger", "m-summary"], ["자산 · 대출 입력", "assets", "sec-assets"], ["목표 저축", "assets", "sec-goals"], ["투자 점검", "assets", "sec-invcheck"], ["소비 분석 · 머니 프로필", "assets", "sec-analysis"]] },
     { title: "모의투자", route: "invest", items: [["내 가상 자산 · 주식 시장", "invest", ""]] },
-    { title: "내 정보 · 설정", route: "my", items: [["기본 정보", "my", "sec-basic"], ["투자 성향 진단", "risktest", ""], ["기타 설정", "etc", ""], ["내 정보 전부 지우기", "etc", "sec-privacy"]] },
-  ];
+    { title: "내 정보 · 설정", route: "my", items: [["기본 정보", "my", "sec-basic"], ["투자 성향 진단", "risktest", ""], ["기타 설정", "etc", ""], ["아래 탭 고르기", "etc", "sec-tabs"], ["내 정보 전부 지우기", "etc", "sec-privacy"]] },
+  ].filter((g) => !tabsOff().includes(g.route)); // 없앤 탭의 묶음은 목차에서도 뺀다
 }
 // 목차 검색: 목차 항목 + 검색창 바로 가기(SPOTS)에서 이름·찾는 말로
 function drawerFind(q) {
@@ -3071,6 +3096,7 @@ function addTx(list) {
   }
   ledger.tx.sort((a, b) => b.date.localeCompare(a.date));
   saveLedger();
+  if (n) tutDone("ledger");
   return n;
 }
 function ymd(d) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; }
@@ -5408,7 +5434,9 @@ function rewardAd() {
 }
 
 async function askAi(q) {
-  if (!aiLeft()) {
+  const tutFree = tutNext()?.id === "home"; // 튜토리얼 첫 질문은 주 3번 한도에서 빼지 않음
+  if (tutFree) tutDone("home");
+  if (!tutFree && !aiLeft()) {
     ui.sheet = { q, a: outOfFb(), limited: true };
     ui.q = ""; ui.searchOpen = false; render(); return;
   }
@@ -5417,7 +5445,7 @@ async function askAi(q) {
   render();
   try {
     const j = await getJson("/api/ask", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ question: q, ...summaryForAi(), lang: ui.lang || "ko" }) });
-    aiCount();
+    if (!tutFree) aiCount();
     ui.sheet = { q, a: j.answer || "답을 만들지 못했어요." };
     if (j.answer) lastSet("sheet", { day: ymd(today0()), q, a: j.answer });
   } catch (err) {
@@ -5757,6 +5785,7 @@ function viewEtc() {
       <button class="btn ${ui.lumiStill ? "" : "ghost"}" data-act="lumi-move">${ui.lumiStill ? "움직이게 하기" : "멈추기"}</button>
     </section>
     ${pushCard()}
+    ${tabPickCard()}
     ${S.privacy}
     <section class="card" id="sec-info">
       <div class="sec-title"><h2>앱 정보</h2><span>v0.5</span></div>
@@ -6106,6 +6135,7 @@ function withdrawRate(id) {
   afterTrade(`${h.name}에서 ${won(v)}을 뺐어요 (이자 ${won(v - principal)})`);
 }
 function afterTrade(msg, keepModal) {
+  tutDone("invest");
   if (!keepModal) ui.modal = null;
   invTick();
   checkInvBadges();
@@ -6808,6 +6838,76 @@ document.addEventListener("input", (e) => {
   if (el.id === "inv-why" && ui.modal?.reason) ui.modal.reason.text = el.value;
 });
 
+// ───────────────────────── 첫 튜토리얼 · 아래 탭 고르기 ─────────────────────────
+// 첫 설문을 마치면 루미와 함께 탭마다 핵심 기능을 하나씩 직접 써 본다(건너뛰기 없음, 순서는 자유).
+// 네 개를 다 쓰면 홈은 남기고 경제 공부·내 돈·모의투자 중 무엇을 아래 탭에 둘지 고른다(기타에서 다시 바꿈).
+const TUT = [
+  { id: "home", tab: "home", label: "홈", title: "루미에게 물어보기",
+    say: "여기는 <b>홈</b>이에요. 오늘 경제 소식이 나에게 어떤 의미인지 모아 보여줘요. 궁금한 건 맨 위 검색창에 적어 <b>저에게 물어볼 수</b> 있어요. 아래 버튼으로 한 번 물어봐 주세요!",
+    btn: ["ask", "금리가 오르면 나한테 뭐가 달라져?", "‘금리가 오르면 나한테 뭐가 달라져?’ 물어보기"] },
+  { id: "learn", tab: "learn", label: "경제 공부", title: "퀴즈 한 문제 풀기",
+    say: "<b>경제 공부</b> 탭에서는 퀴즈로 경제를 익혀요. 처음엔 공부 방법을 고르고, <b>문제 하나만</b> 풀어 보세요. 틀려도 괜찮아요!" },
+  { id: "ledger", tab: "ledger", label: "내 돈", title: "가계부 한 줄 기록하기",
+    say: "<b>내 돈</b> 탭은 가계부와 자산관리예요. 오늘 쓴 돈을 <b>하나만 기록</b>해 보세요. 연습으로 적은 건 나중에 지워도 돼요.",
+    btn: ["nav", "ledger|m-quick", "직접 입력 열기"] },
+  { id: "invest", tab: "invest", label: "모의투자", title: "가상 돈으로 한 번 사기",
+    say: "<b>모의투자</b>는 실제 종목·실제 가격으로 가상 1,000만 원을 굴려요. 주식 1주를 사거나 채권·예금을 담아 보세요. 진짜 돈은 안 들어요!" },
+];
+const OPT_TABS = ["learn", "ledger", "invest"];
+function tutOn() { return !!(profile?.tut && !profile.tut.end); }
+function tutNext() { return tutOn() ? TUT.find((s) => !profile.tut.done?.[s.id]) || null : null; }
+function tutDone(id) {
+  if (!tutOn() || profile.tut.done?.[id]) return;
+  profile.tut.done = { ...(profile.tut.done || {}), [id]: Date.now() };
+  saveProfile();
+  const n = tutNext();
+  if (n) setTimeout(() => toast(`잘했어요! 다음은 ‘${n.label}’ 탭이에요`), 2300); // 마지막엔 바로 탭 고르기 화면이 뜸
+}
+function tabsOff() { return (profile?.tabsOff || []).filter((t) => OPT_TABS.includes(t)); }
+function shownTabs() { return TABS.filter(([id]) => !tabsOff().includes(id)); }
+function tabGroup(r) { return ["money", "assets", "ledger"].includes(r) ? "ledger" : ["learn", "solved", "review", "quiz", "news", "letters"].includes(r) ? "learn" : r === "invest" ? "invest" : "home"; }
+// 화면 아래 루미 안내 카드 (팝업·답변 창·목차가 열려 있으면 숨김)
+function viewTutCoach(r) {
+  const s = tutNext();
+  if (!s || ui.modal || ui.sheet || ui.drawer) return "";
+  const n = TUT.filter((x) => profile.tut.done?.[x.id]).length;
+  const here = tabGroup(r) === s.tab;
+  const btn = !here ? `<button class="btn" data-act="tab" data-t="${s.tab}">‘${s.label}’ 탭으로 가기</button>`
+    : s.btn ? `<button class="btn" data-act="${s.btn[0]}" ${s.btn[0] === "ask" ? `data-q="${esc(s.btn[1])}"` : `data-route="${s.btn[1].split("|")[0]}" data-target="${s.btn[1].split("|")[1]}"`}>${esc(s.btn[2])}</button>` : "";
+  return `<aside class="tut-coach" aria-label="루미와 써 보기 ${n + 1}/4">
+    <div class="tut-top">${mascot(44, here ? "happy" : "wave")}<div style="flex:1;min-width:0"><span class="tut-step">루미와 써 보기 ${n + 1} / ${TUT.length} · ${esc(s.title)}</span>
+      <div class="tut-dots">${TUT.map((x) => `<i class="${profile.tut.done?.[x.id] ? "on" : x === s ? "cur" : ""}"></i>`).join("")}</div></div>
+      <button class="link-btn" data-act="tut-fold" aria-expanded="${!ui.tutFold}" style="color:var(--sub)">${ui.tutFold ? "펼치기" : "접기"}</button></div>
+    ${ui.tutFold ? "" : `<p>${s.say}</p>${btn}`}
+  </aside>`;
+}
+// 네 가지를 다 써 본 뒤: 아래 탭 고르기 (홈은 늘 있음)
+function tabPickBody(off) {
+  const row = ([id, label, icon]) => {
+    const keep = !off.includes(id);
+    return `<button class="tut-pick ${keep ? "on" : ""}" data-act="tut-tab" data-t="${id}" aria-pressed="${keep}">${icon}<span style="flex:1;text-align:left"><b>${label}</b><small>${{ learn: "퀴즈·개념 공부·뉴스", ledger: "가계부·자산관리", invest: "가상 돈 모의투자·순위" }[id]}</small></span><span class="tut-sw">${keep ? "유지" : "없앰"}</span></button>`;
+  };
+  return `<div class="tut-pick on fixed">${TABS[0][2]}<span style="flex:1;text-align:left"><b>홈</b><small>늘 있어요</small></span><span class="tut-sw">유지</span></div>
+    ${TABS.filter(([id]) => OPT_TABS.includes(id)).map(row).join("")}`;
+}
+function viewTabPick() {
+  const off = ui.tabDraft || (ui.tabDraft = [...tabsOff()]);
+  return `<div class="tut-full" role="dialog" aria-modal="true" aria-label="아래 탭 고르기"><div class="tut-card">
+    ${lumiSays(`${esc(profile.nickname || "")}님, 네 탭을 모두 써 봤어요! 👏<br>이제 <b>나에게 필요한 탭만</b> 골라요. 홈은 늘 있고, 없앤 탭은 <b>기타 → 아래 탭 고르기</b>에서 언제든 다시 켤 수 있어요.`, "happy", "up")}
+    <h1 style="margin:4px 0 0">아래 탭에 무엇을 둘까요?</h1>
+    ${tabPickBody(off)}
+    <button class="btn" data-act="tut-finish" style="width:100%">이대로 시작하기</button>
+  </div></div>`;
+}
+function tabPickCard() {
+  const off = tabsOff();
+  return `<section class="card form" id="sec-tabs">
+      <div class="sec-title"><h2>아래 탭 고르기</h2><span>홈은 늘 있어요</span></div>
+      ${tabPickBody(off)}
+      <button class="link-btn" data-act="tut-restart" style="align-self:flex-start;padding-left:0">루미와 써 보기(튜토리얼) 다시 하기</button>
+    </section>`;
+}
+
 // ───────────────────────── 라우팅 / 그리기 ─────────────────────────
 function route() {
   if (!profile) return "onboard";
@@ -6823,7 +6923,10 @@ function render() {
     + (r !== "onboard" && !LEARN_POP.includes(r) ? tabBar(r) : "")
     + (ui.drawer && r !== "onboard" ? viewDrawer() : "")
     + viewModal()
-    + (ui.openAd && r !== "onboard" ? viewOpenAd() : "");
+    + (ui.openAd && r !== "onboard" ? viewOpenAd() : "")
+    + (r !== "onboard" ? viewTutCoach(r) : "")
+    + (r !== "onboard" && tutOn() && !tutNext() ? viewTabPick() : "");
+  document.body.classList.toggle("tut-pad", r !== "onboard" && !!tutNext());
   document.body.style.overflow = ui.modal ? "hidden" : "";
   window.scrollTo(0, y);
   if (focusId) document.getElementById(focusId)?.focus();
@@ -7325,10 +7428,27 @@ document.addEventListener("click", async (e) => {
         profile = null; ui.onb = { step: 0, draft: null }; location.hash = ""; render();
       }
       break;
+    case "tut-fold": ui.tutFold = !ui.tutFold; render(); break;
+    case "tut-tab": {
+      const id = el.dataset.t, inPick = tutOn() && !tutNext();
+      const off = inPick ? ui.tabDraft || (ui.tabDraft = [...tabsOff()]) : [...tabsOff()];
+      const i = off.indexOf(id);
+      if (i >= 0) off.splice(i, 1); else off.push(id);
+      if (!inPick) { profile.tabsOff = off; saveProfile(); toast(off.includes(id) ? "아래 탭에서 뺐어요" : "아래 탭에 다시 넣었어요"); }
+      render(); break;
+    }
+    case "tut-finish":
+      profile.tabsOff = [...(ui.tabDraft || [])]; ui.tabDraft = null;
+      profile.tut = { ...profile.tut, end: Date.now() }; saveProfile();
+      go("#home"); toast("준비 끝! 이제 마음껏 써 보세요");
+      break;
+    case "tut-restart":
+      profile.tut = { done: {} }; ui.tutFold = false; saveProfile(); go("#home");
+      break;
     case "onb-back": ui.onb.step--; ui.search = { q: "", results: [], sample: false }; render(); break;
     case "onb-next":
       if (ui.onb.step < 5) { ui.onb.step++; ui.search = { q: "", results: [], sample: false }; render(); window.scrollTo(0, 0); }
-      else { profile = ui.onb.draft; saveProfile(); ui.onb = { step: 0, draft: null }; location.hash = ""; render(); loadAll(); }
+      else { profile = ui.onb.draft; profile.tut = { done: {} }; saveProfile(); ui.onb = { step: 0, draft: null }; location.hash = ""; render(); loadAll(); }
       break;
   }
 });
