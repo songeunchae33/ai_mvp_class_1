@@ -1162,11 +1162,12 @@
   .inv-lock { display: flex; gap: 10px; align-items: center; background: var(--soft); border-radius: 12px; padding: 12px; }
   .inv-lock p { margin: 0; font-size: 13px; line-height: 20px; color: var(--sub); }
   .rk-list { display: flex; flex-direction: column; gap: 6px; }
-  .rk { display: grid; grid-template-columns: 22px minmax(0, 72px) 1fr 56px; align-items: center; gap: 8px; font-size: 13px; padding: 6px 8px; border-radius: 10px; }
+  .rk { display: grid; grid-template-columns: 22px minmax(0, 72px) 1fr 78px; align-items: center; gap: 8px; font-size: 13px; padding: 6px 8px; border-radius: 10px; }
   .rk.me { background: var(--mint); color: var(--green); font-weight: 700; }
   .rk .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .rk .bar { height: 8px; background: var(--soft); border-radius: 999px; overflow: hidden; } .rk .bar i { display: block; height: 100%; background: var(--green); border-radius: 999px; }
   .rk > :last-child { text-align: right; } .rk-gap { text-align: center; color: var(--sub); font-size: 12px; }
+  .rk .rk-ret { display: flex; flex-direction: column; align-items: flex-end; line-height: 1.25; } .rk .rk-ret small { font-size: 11px; color: var(--sub); font-weight: 400; }
   .inv-sbox { margin: 0; background: var(--soft); border-radius: 12px; }
   .inv-sbox input { background: transparent; }
   #inv-results { display: flex; flex-direction: column; margin-top: 6px; }
@@ -6234,6 +6235,13 @@ function lumiInvestLine() {
   if (invGroups().현금 / invTotal() > 0.8) return "아직 현금이 많아요. 주식이 부담되면 채권이나 CMA에 조금 넣어 두는 방법도 있어요.";
   return `${seasonLabel(inv.season)}이 ${seasonLeft()}일 남았어요. ${idxName()}보다 잘하는 게 목표예요!`;
 }
+// 순위의 수익: 소수 둘째 자리 % + 번 돈(100원 단위). 예금 이자처럼 작은 차이도 보이게 (순서는 원래부터 1원 단위 총액)
+function rkGain(x) { return Math.round((x.total - INV_START) / 100) * 100 || 0; }
+function rkRetPct(x) { return ((x.total / INV_START) - 1) * 100; }
+function rkRet(x) {
+  const g = rkGain(x), r = rkRetPct(x);
+  return `<span class="num rk-ret ${g > 0 ? "up" : g < 0 ? "down" : ""}">${r > 0 ? "+" : ""}${fmt(r, 2)}%<small>${g > 0 ? "+" : ""}${fmt(g)}원</small></span>`;
+}
 function rankBlock() {
   if (!sync.on) return `<section class="card inv-rank"><div class="sec-title" style="margin:0"><h2>순위</h2><span>${seasonLabel(inv.season)}</span></div>
       <div class="inv-lock">${mascot(36, "wave")}<p>구글로 로그인하면 같은 시즌 사람들과 순위를 겨뤄요. 로그인하지 않아도 게임과 배지는 그대로 할 수 있어요.</p></div>
@@ -6243,7 +6251,7 @@ function rankBlock() {
   if (R.error) return `<section class="card inv-rank"><div class="sec-title" style="margin:0"><h2>순위</h2><span>${seasonLabel(inv.season)}</span></div><p class="hint" style="margin:0">순위표를 아직 불러오지 못했어요. 잠시 후 다시 열어 주세요.</p></section>`;
   const top = R.list.slice(0, 5), mx = Math.max(...R.list.map((x) => x.total), 1), mn = Math.min(...R.list.map((x) => x.total), INV_START) * 0.98;
   const row = (x, i) => `<div class="rk ${i === R.me ? "me" : ""}"><b class="num">${i + 1}</b><button class="nm rk-nm" data-act="inv-player" data-i="${i}" aria-label="${esc(x.nick || "익명")}님 투자 비중 보기">${esc(x.nick || "익명")}${i === R.me ? " (나)" : ""} ›</button>
-      <span class="bar"><i style="width:${Math.max(6, Math.round(((x.total - mn) / (mx - mn || 1)) * 100))}%"></i></span><span class="num ${x.ret >= 0 ? "up" : "down"}">${x.ret > 0 ? "+" : ""}${fmt(x.ret, 1)}%</span></div>`;
+      <span class="bar"><i style="width:${Math.max(6, Math.round(((x.total - mn) / (mx - mn || 1)) * 100))}%"></i></span>${rkRet(x)}</div>`;
   return `<section class="card inv-rank"><div class="sec-title" style="margin:0"><h2>순위</h2><span>${seasonLabel(inv.season)} · ${R.n}명</span></div>
     <p style="margin:0">로그인한 ${R.n}명 중 <b style="color:var(--green)">${R.me + 1}위</b>예요</p>
     <p class="hint" style="margin:0">${R.list[R.me]?.pending ? "내 순위는 서버가 확인하는 중이에요(최대 10분)." : "순위는 서버가 모두의 거래를 공식 종가로 다시 계산한 값이에요."}${R.list[R.me]?.bad ? ` 확인되지 않은 거래 ${R.list[R.me].bad}건은 빼고 계산했어요.` : ""}</p>
@@ -6423,7 +6431,7 @@ function modalInvPlayer(m) {
   const sum = mix ? MIX_PARTS.reduce((s, [k]) => s + (Number(mix[k]) || 0), 0) : 0;
   const parts = mix && sum ? MIX_PARTS.filter(([k]) => mix[k] > 0) : [];
   const stockPct = mix ? (Number(mix.kr) || 0) + (Number(mix.us) || 0) : 0;
-  return `<div class="sec-title" style="margin:0"><h2>${esc(x.nick || "익명")}${me ? " (나)" : ""}</h2><span>${m.i + 1}위 · <b class="num ${x.ret >= 0 ? "up" : "down"}">${x.ret > 0 ? "+" : ""}${fmt(x.ret, 1)}%</b></span></div>
+  return `<div class="sec-title" style="margin:0"><h2>${esc(x.nick || "익명")}${me ? " (나)" : ""}</h2><span>${m.i + 1}위 · <b class="num ${rkGain(x) >= 0 ? "up" : "down"}">${rkRetPct(x) > 0 ? "+" : ""}${fmt(rkRetPct(x), 2)}% (${rkGain(x) > 0 ? "+" : ""}${fmt(rkGain(x))}원)</b></span></div>
     ${parts.length ? `<div class="mix-bar" role="img" aria-label="투자 비중">${parts.map(([k, , c]) => `<i style="width:${(mix[k] / sum) * 100}%;background:${c}"></i>`).join("")}</div>
     <div class="rows">${parts.map(([k, name, c]) => `<div class="row" style="min-height:36px"><span><i class="tx-dot" style="display:inline-block;margin-right:6px;background:${c}"></i>${name}</span><b class="num">${mix[k]}%</b></div>`).join("")}</div>
     <p style="margin:0;font-size:14px">${stockPct >= 70 ? "주식에 많이 담은 공격적인 포트폴리오예요." : stockPct >= 40 ? "주식과 안전한 상품을 섞은 포트폴리오예요." : stockPct > 0 ? "안전한 쪽에 더 많이 담은 포트폴리오예요." : "아직 주식은 담지 않았어요."}</p>`
