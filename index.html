@@ -276,7 +276,7 @@
   .score-card .sc-row { display: flex; align-items: center; gap: 14px; font-size: 14px; line-height: 1.5; }
   .score-card .sc-big { font-size: 40px; line-height: 1; color: var(--green); }
   .score-card .sc-big small { font-size: 16px; margin-left: 2px; color: var(--ink); }
-  .score-card .sc-week { display: flex; align-items: flex-end; gap: 6px; height: 76px; }
+  .score-card .sc-week { display: flex; align-items: flex-end; gap: 6px; height: 92px; margin-bottom: 4px; }
   .score-card .sc-week > div { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 3px; height: 100%; }
   .score-card .sc-week i { display: block; width: 100%; max-width: 26px; border-radius: 6px 6px 2px 2px; background: var(--green); opacity: .45; }
   .score-card .sc-week .on i { opacity: 1; }
@@ -6425,7 +6425,7 @@ function modalInvPlayer(m) {
   const stockPct = mix ? (Number(mix.kr) || 0) + (Number(mix.us) || 0) : 0;
   return `<div class="sec-title" style="margin:0"><h2>${esc(x.nick || "익명")}${me ? " (나)" : ""}</h2><span>${m.i + 1}위 · <b class="num ${x.ret >= 0 ? "up" : "down"}">${x.ret > 0 ? "+" : ""}${fmt(x.ret, 1)}%</b></span></div>
     ${parts.length ? `<div class="mix-bar" role="img" aria-label="투자 비중">${parts.map(([k, , c]) => `<i style="width:${(mix[k] / sum) * 100}%;background:${c}"></i>`).join("")}</div>
-    <div class="rows">${parts.map(([k, name, c]) => `<div class="row" style="min-height:36px"><span><i class="tx-dot" style="background:${c}"></i> ${name}</span><b class="num">${mix[k]}%</b></div>`).join("")}</div>
+    <div class="rows">${parts.map(([k, name, c]) => `<div class="row" style="min-height:36px"><span><i class="tx-dot" style="display:inline-block;margin-right:6px;background:${c}"></i>${name}</span><b class="num">${mix[k]}%</b></div>`).join("")}</div>
     <p style="margin:0;font-size:14px">${stockPct >= 70 ? "주식에 많이 담은 공격적인 포트폴리오예요." : stockPct >= 40 ? "주식과 안전한 상품을 섞은 포트폴리오예요." : stockPct > 0 ? "안전한 쪽에 더 많이 담은 포트폴리오예요." : "아직 주식은 담지 않았어요."}</p>`
       : `<p class="hint" style="margin:0">${mix ? "아직 아무것도 사지 않고 현금으로 들고 있어요." : "투자 비중은 다음 순위 계산 때(최대 10분) 보여드려요."}</p>`}
     <p class="hint" style="margin:0">개인정보라 어떤 종목을 샀는지는 보여주지 않아요. ${me ? "내 비중은 지금 값이에요." : "서버가 공식 종가로 계산한 비중이에요."}</p>

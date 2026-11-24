@@ -434,9 +434,13 @@ async function settle(force) {
       } else bad++;
     }
     let total = cash + lots.reduce((s, l) => s + l.amt * (1 + (RATES_SV[l.id] / 100) * Math.max(0, now - l.at) / YEAR), 0);
-    for (const [id, q] of Object.entries(qty)) if (q > 0) { const r = S[id]; total += q * (r?.length ? r[r.length - 1][2] : 0); }
+    // 투자 비중: 국내 주식·미국 주식·채권·예금·CMA·현금 %만 쓴다 (종목 이름은 순위표에 절대 쓰지 않음)
+    const part = { kr: 0, us: 0, bond: 0, dep: 0, cash };
+    for (const l of lots) part[l.id === "ktb3" || l.id === "corp3" ? "bond" : "dep"] += l.amt * (1 + (RATES_SV[l.id] / 100) * Math.max(0, now - l.at) / YEAR);
+    for (const [id, q] of Object.entries(qty)) if (q > 0) { const r = S[id], v = q * (r?.length ? r[r.length - 1][2] : 0); total += v; part[id.startsWith(US_PREFIX) ? "us" : "kr"] += v; }
     total = Math.round(total);
-    await fsSet(`invest/${season}/players/${p.id}`, { nick: String(p.nick || "익명").slice(0, 12), total, ret: Math.round((total / 1e7 - 1) * 10000) / 100, at: now, verified: true, bad });
+    const mix = Object.fromEntries(Object.entries(part).map(([k, v]) => [k, total > 0 ? Math.round((v / total) * 100) : 0]));
+    await fsSet(`invest/${season}/players/${p.id}`, { nick: String(p.nick || "익명").slice(0, 12), total, ret: Math.round((total / 1e7 - 1) * 10000) / 100, at: now, verified: true, bad, mix });
   }
   await fsSet(`invest/${season}`, { settledAt: now, players: players.length });
   return { season, players: players.length };
