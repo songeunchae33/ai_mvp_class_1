@@ -5,7 +5,7 @@
 // GET /api/news?q=FOMC                     → { items: 해당 키워드 뉴스 3 }
 // 둘 다 &full=1 을 붙이면 '뉴스 더보기' 화면용으로 더 많이 돌려준다
 import { cache } from "./_util.js";
-import { PREF_QUERY, naver, dedupe, keywords, searchUrl, newsReady, byTrust, globalNews, newsdata } from "./_news.js";
+import { PREF_QUERY, naver, dedupe, keywords, searchUrl, newsReady, byTrust, globalNews, newsdata, meaty, translateTitles } from "./_news.js";
 import { pressReleases, isEcon } from "./_policy.js";
 
 // 화면에는 제목·링크만 보낸다
@@ -54,7 +54,7 @@ export default async function handler(req, res) {
 
   try {
     const dayAgo = Date.now() - 36 * 3600e3;
-    const pool = dedupe([...nv1, ...nv2, ...nd]);
+    const pool = dedupe([...nv1, ...nv2, ...nd]).filter(meaty);
     const fresh = pool.filter((n) => new Date(n.at).getTime() > dayAgo);
     // 오늘의 이슈: 언론(신뢰 순) · 정책브리핑 · NewsData를 번갈아 골라 한 출처에 쏠리지 않게
     const lanes = [byTrust(dedupe(fresh.length >= 3 ? fresh : pool).filter((n) => !nd.includes(n))), policy, byTrust(nd)].filter((l) => l.length);
@@ -72,7 +72,7 @@ export default async function handler(req, res) {
     const want = full ? 20 : 3;
     for (let round = 0; round < (full ? 6 : 3) && forYou.length < want; round++) {
       perQuery.forEach((list, i) => {
-        const pick = byTrust(dedupe(list)).filter((n) => !taken.has(n.url))[0];
+        const pick = byTrust(dedupe(list)).filter((n) => !taken.has(n.url) && meaty(n))[0];
         if (pick && forYou.length < want) {
           taken.add(pick.url);
           forYou.push({ ...pick, tag: queries[i].tag });
@@ -80,8 +80,9 @@ export default async function handler(req, res) {
       });
     }
 
+    const globalKo = await translateTitles(global.slice(0, full ? 15 : 3)); // 영어 제목은 한국어로(안 되면 영어 그대로)
     cache(res, 3600); // 사용량을 아끼려고(GDELT는 5초에 한 번 제한) 1시간 동안 같은 결과를 재사용
-    res.status(200).json({ issues: strip(issues), forYou: strip(forYou), global: strip(global.slice(0, full ? 15 : 3)), keywords: keywords([...pool, ...policy]), providers });
+    res.status(200).json({ issues: strip(issues), forYou: strip(forYou), global: strip(globalKo), keywords: keywords([...pool, ...policy]), providers });
   } catch (e) {
     console.error(e);
     res.status(200).json({ ...sampleHome(interests), error: "뉴스를 불러오지 못했어요", why: String(e.message).slice(0, 80) });

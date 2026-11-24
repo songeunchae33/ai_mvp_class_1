@@ -32,10 +32,55 @@ const SOURCES = {
 };
 
 export function clean(s) {
-  return String(s || "")
+  return hanjaKo(String(s || "")
     .replace(/<[^>]+>/g, "")
     .replace(/&quot;/g, '"').replace(/&#39;|&apos;/g, "'").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&")
-    .trim();
+    .trim());
+}
+
+// 제목에 자주 쓰는 한자를 한글로 (李대통령 → 이대통령, 美 연준 → 미 연준). 金은 金값·金리처럼 돈 이야기면 '금', 아니면 '김'
+const HANJA = {
+  李: "이", 尹: "윤", 文: "문", 朴: "박", 盧: "노", 崔: "최", 鄭: "정", 韓: "한", 美: "미", 中: "중", 日: "일", 北: "북", 南: "남",
+  與: "여", 野: "야", 英: "영", 佛: "프", 獨: "독", 露: "러", 印: "인", 伊: "이", 靑: "청", 檢: "검", 警: "경", 軍: "군", 前: "전",
+  現: "현", 新: "신", 株: "주", 銀: "은", 車: "차", 稅: "세", 對: "대", 反: "반", 親: "친", 非: "비", 故: "고", 黨: "당", 法: "법",
+  女: "여", 男: "남", 核: "핵", 亞: "아", 歐: "구", 億: "억", 兆: "조", 萬: "만", 社: "사", 證: "증", 港: "항", 高: "고", 低: "저",
+  大: "대", 小: "소", 上: "상", 下: "하", 年: "년", 月: "월", 重: "중", 輕: "경", 號: "호", 外: "외", 內: "내", 全: "전", 半: "반",
+  總: "총", 長: "장", 官: "관", 國: "국", 民: "민", 政: "정", 府: "부", 會: "회", 議: "의", 院: "원", 線: "선", 市: "시", 道: "도",
+};
+export function hanjaKo(s) {
+  return String(s || "")
+    .replace(/金(?=\s?(값|리|융|시세|가격|투자|선물|ETF|펀드|거래|시장|보유|매입))/g, "금").replace(/金/g, "김")
+    .replace(/[一-鿿]/g, (c) => HANJA[c] || c);
+}
+
+// 제목이 회사 이름뿐인 공지성 기사(「[인사] 삼성전자」 「[부고] …」 「[포토]」)는 홈 뉴스에서 뺀다
+export function meaty(n) {
+  const t = String(n?.title || "");
+  if (/^\s*[\[【(]\s*(인사|부고|부음|포토|사진|화보|게시판|알림|모집|공고)\s*[\]】)]/.test(t)) return false;
+  return t.replace(/\[[^\]]*\]|【[^】]*】/g, "").trim().length >= 10;
+}
+
+// 해외 뉴스(영어 제목)를 한국어로 옮긴다. 제미나이 무료 등급만 쓰고, 안 되면 영어 그대로. 같은 제목은 다시 묻지 않는다
+const koCache = new Map();
+export async function translateTitles(items) {
+  const todo = [...new Set(items.filter((a) => a.lang === "en" && !koCache.has(a.title)).map((a) => a.title))].slice(0, 15);
+  if (todo.length && process.env.GEMINI_API_KEY) {
+    try {
+      const { generate } = await import("./_ai.js");
+      const out = await generate({
+        system: "영어 뉴스 제목을 자연스러운 한국어 뉴스 제목으로 옮긴다. 뜻만 옮기고 덧붙이거나 줄이지 않는다. 사람·회사 이름은 한국에서 흔히 쓰는 표기로.",
+        text: todo.map((t, i) => `[${i}] ${t}`).join("\n"),
+        schema: { type: "object", properties: { items: { type: "array", items: { type: "object", properties: { i: { type: "integer" }, ko: { type: "string" } }, required: ["i", "ko"], additionalProperties: false } } }, required: ["items"], additionalProperties: false },
+        schemaName: "titles", maxTokens: 1200, geminiOnly: true,
+      });
+      for (const it of JSON.parse(out.text).items || []) {
+        const ko = String(it.ko || "").trim();
+        if (todo[it.i] && /[가-힣]/.test(ko)) koCache.set(todo[it.i], ko.slice(0, 200));
+      }
+      if (koCache.size > 500) koCache.delete(koCache.keys().next().value);
+    } catch (e) { console.error("translate", e.message); }
+  }
+  return items.map((a) => (koCache.has(a.title) ? { ...a, title: koCache.get(a.title), orig: a.title, lang: "ko" } : a));
 }
 
 function source(url) {

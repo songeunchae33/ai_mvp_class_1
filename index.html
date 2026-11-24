@@ -224,6 +224,10 @@
   .nl .t1 { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 500; }
   .nl .src { font-size: 11px; color: var(--sub); flex-shrink: 0; }
   .nl a:hover .t1 { color: var(--green); }
+  /* 홈 뉴스: 긴 제목은 옆으로 밀어서 끝까지 본다(오른쪽 끝은 살짝 흐리게 해서 더 있다는 표시) */
+  .nl .t1.swipe { text-overflow: clip; overflow-x: auto; scrollbar-width: none; touch-action: pan-x pan-y; padding-right: 14px;
+    -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 18px), transparent); mask-image: linear-gradient(90deg, #000 calc(100% - 18px), transparent); }
+  .nl .t1.swipe::-webkit-scrollbar { display: none; }
   .plus { min-width: 44px; min-height: 36px; border-radius: 12px; border: 1px solid var(--line); background: var(--soft); font-size: 13px; font-weight: 700; cursor: pointer; padding: 0 10px; }
   .tabs { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; padding: 2px 0 6px; }
   .tabs::-webkit-scrollbar { display: none; }
@@ -1723,9 +1727,11 @@ function shortTitle(t) {
   }
   return s;
 }
-function newsLine(it) {
-  return `<a href="${esc(it.url)}" target="_blank" rel="noopener" title="${esc(it.title)}">
-    ${it.tag ? `<span class="badge b-green">${esc(it.tag)}</span>` : ""}<span class="t1">${esc(shortTitle(it.title))}</span><span class="src">${esc(it.source || "")}</span></a>`;
+// swipe: 홈 뉴스는 제목을 자르지 않고 한 줄에 다 넣어, 옆으로 밀면 끝까지 보인다
+function newsLine(it, swipe) {
+  const t = swipe === true ? it.title : shortTitle(it.title);
+  return `<a href="${esc(it.url)}" target="_blank" rel="noopener" title="${esc(it.orig || it.title)}">
+    ${it.tag ? `<span class="badge b-green">${esc(it.tag)}</span>` : ""}<span class="t1${swipe === true ? " swipe" : ""}">${esc(t)}</span><span class="src">${esc(it.source || "")}</span></a>`;
 }
 function newsList(items, numbered) { // 뉴스 더보기 화면: 제목 전체
   return (items || []).map((it, i) => `<a href="${esc(it.url)}" target="_blank" rel="noopener">
@@ -2278,7 +2284,7 @@ function homeBlocks() {
   const newsBlock = `<section class="card" id="h-news">
       <div class="sec-title"><h2>뉴스</h2><div style="display:flex;gap:6px;align-items:center">${n?.sample ? `<span class="badge b-sample">예시</span>` : ""}<button class="plus" data-act="news-more">+ 더보기</button></div></div>
       <button class="brief-line" data-act="news-brief">${mascot(22)}<span class="bl-t"><b>쉽게 풀이</b> ${briefReady() ? esc(data.brief.mood) : "오늘 경제 정책을 쉬운 말로 풀어드려요"}</span><span aria-hidden="true">›</span></button>
-      <div class="nl">${n ? top.map(newsLine).join("") : `<p class="hint">불러오는 중…</p>`}</div>
+      <div class="nl">${n ? top.map((it) => newsLine(it, true)).join("") : `<p class="hint">불러오는 중…</p>`}</div>
       ${kws.length || letters.length ? `<div class="strip" style="gap:6px;margin-top:8px;align-items:center">
         ${kws.map((k) => `<button class="chip small" style="flex-shrink:0" data-act="kw" data-k="${esc(k)}">#${esc(k)}</button>`).join("")}
         ${letters.length ? `<span aria-hidden="true" style="flex-shrink:0;width:1px;height:20px;background:var(--line)"></span>` : ""}
@@ -4351,31 +4357,9 @@ function viewIslands(catId) {
 // ───────────────────────── 화면: 우리 지역 혜택 ─────────────────────────
 const SIDO = ["서울특별시", "부산광역시", "대구광역시", "인천광역시", "광주광역시", "대전광역시", "울산광역시", "세종특별자치시", "경기도", "강원특별자치도", "충청북도", "충청남도", "전북특별자치도", "전라남도", "경상북도", "경상남도", "제주특별자치도"];
 const STATUSES = ["대학생", "대학원생", "취준생", "직장인", "자영업", "기타"];
-// 내 위치로 동네 찾기 버튼 (홈 맞춤 질문·우리 지역 혜택·마이페이지 공용)
-const LOCATE_ROW = `<div class="loc-row"><button class="btn ghost" data-act="locate">내 위치로 찾기</button><span class="hint">위치는 동네 이름을 찾는 데만 쓰고 저장하지 않아요</span></div>`;
-// 버튼을 눌렀을 때만 위치를 묻는다. 좌표는 약 100m로 뭉개 서버에 보내고 버린다(시·도, 시·군·구 이름만 저장)
-async function locateRegion(btn) {
-  if (ui.locating || !profile) return;
-  if (!navigator.geolocation) { toast("이 기기에서는 위치를 쓸 수 없어요. 직접 골라 주세요"); return; }
-  ui.locating = true;
-  if (btn) { btn.disabled = true; btn.textContent = "찾는 중…"; }
-  const done = (msg) => { ui.locating = false; render(); if (msg) toast(msg); };
-  let pos;
-  try { pos = await new Promise((ok, no) => navigator.geolocation.getCurrentPosition(ok, no, { enableHighAccuracy: false, timeout: 10000, maximumAge: 600000 })); }
-  catch (e) { return done(e?.code === 1 ? "위치를 허용하지 않았어요. 직접 골라 주세요" : "위치를 찾지 못했어요. 직접 골라 주세요"); }
-  try {
-    const r = await getJson(`/api/region?lat=${pos.coords.latitude.toFixed(3)}&lng=${pos.coords.longitude.toFixed(3)}`);
-    if (r.available === false) return done("아직 위치 찾기를 쓸 수 없어요. 직접 골라 주세요");
-    if (!r.sido) return done(`${r.error || "동네 이름을 찾지 못했어요"}. 직접 골라 주세요`);
-    profile.region = { sido: r.sido, sigungu: r.sigungu || "" };
-    saveProfile();
-    data.benefitsApi = null; loadBenefits();
-    done(`사는 곳: ${r.sido}${r.sigungu ? " " + r.sigungu : ""} · 혜택을 찾고 있어요`);
-  } catch { done("동네 이름을 찾지 못했어요. 직접 골라 주세요"); }
-}
 function regionFields(p) {
   const r = p.region || {};
-  return `${LOCATE_ROW}<div class="grid2">
+  return `<div class="grid2">
       <div><label class="lb" for="f-sido">사는 곳 (시·도)</label><select class="field" id="f-sido" data-field="sido"><option value="">선택</option>${SIDO.map((s) => `<option ${r.sido === s ? "selected" : ""}>${s}</option>`).join("")}</select></div>
       <div><label class="lb" for="f-sigungu">시·군·구</label><input class="field" id="f-sigungu" data-field="sigungu" placeholder="예: 강남구" maxlength="10" value="${esc(r.sigungu || "")}"></div>
       <div><label class="lb" for="f-status">지금 나는</label><select class="field" id="f-status" data-field="status"><option value="">선택</option>${STATUSES.map((s) => `<option ${p.status === s ? "selected" : ""}>${s}</option>`).join("")}</select></div>
@@ -4476,7 +4460,7 @@ const SPOTS = [
   ["구독 중인 뉴스레터", "letters", "sec-letters", ["뉴스레터", "구독", "머니레터", "뉴닉"]],
   ["관심 종목 (추가·보유 수량)", "watch", "sec-watch", ["관심 종목", "종목", "보유 수량", "수량", "주식"]],
   ["나를 위한 일정", "schedule", "", ["일정", "세일", "금통위", "fomc", "스케줄"]],
-  ["우리 지역 혜택 · 내 위치로 찾기", "benefits", "sec-region", ["혜택", "지원금", "청년", "위치", "내 위치", "동네", "장학", "정기예금", "예금 금리"]],
+  ["우리 지역 혜택", "benefits", "sec-region", ["혜택", "지원금", "청년", "동네", "장학", "정기예금", "예금 금리"]],
   ["홈 화면 꾸미기 (순서·숨기기)", "layout", "sec-layout", ["꾸미기", "순서", "숨기기", "숨기", "배치", "홈 편집"]],
   ["루미 움직임 켜기·끄기", "etc", "sec-lumi", ["루미 움직임", "움직임", "애니메이션", "멈추기"]],
   ["내 정보 전부 지우기", "etc", "sec-privacy", ["지우기", "삭제", "초기화", "탈퇴", "개인정보", "데이터"]],
@@ -4683,7 +4667,7 @@ function moreQuestion(k) {
     <div class="inline"><button class="btn ghost" data-act="no-debt" style="flex:1">없어요</button><button class="btn" data-act="go-my" data-focus="debts" style="flex:1">있어요, 입력할게요</button></div>${skip}`;
   if (k === "region") return `${head}<p class="q">어느 지역에 사세요? 지자체 혜택을 찾아드려요</p>
     <div class="inline"><label for="q-sido" class="sr">시·도</label><select class="field" id="q-sido" style="flex:1.2"><option value="">시·도</option>${SIDO.map((x) => `<option>${x}</option>`).join("")}</select>
-      <label for="q-sgg" class="sr">시·군·구</label><input class="field" id="q-sgg" placeholder="시·군·구" maxlength="10" style="flex:1"><button class="btn" data-act="set-region">저장</button></div>${LOCATE_ROW}${skip}`;
+      <label for="q-sgg" class="sr">시·군·구</label><input class="field" id="q-sgg" placeholder="시·군·구" maxlength="10" style="flex:1"><button class="btn" data-act="set-region">저장</button></div>${skip}`;
   if (k === "status") return `${head}<p class="q">지금 어떤 상황이에요?</p>
     <div class="chips">${STATUSES.map((x) => `<button class="chip" data-act="set-status" data-v="${x}">${x}</button>`).join("")}</div>${skip}`;
   if (k === "income") return `${head}<p class="q">연 소득은 어느 구간인가요? (혜택 추천에 써요)</p>
