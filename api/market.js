@@ -334,7 +334,7 @@ async function holdOf(req, uid) {
   const me = await whoIs(req);
   if (!me) return { status: 401, body: { error: "로그인이 필요해요" } };
   const season = `${kstYmd(0).slice(0, 4)}-${kstYmd(0).slice(4, 6)}`;
-  const mine = await fsReq(`invest/${season}/trades/${me}`);
+  const mine = await fsReq(`investMeta/${me}`);
   if (fromFs(mine?.fields?.share) !== true) return { status: 403, body: { error: "내 투자 정보 공유에 동의하면 볼 수 있어요", need: "share" } };
   const doc = await fsReq(`privHold/${season}_${uid}`);
   if (!doc) return { status: 404, body: { error: "이 사람은 종목을 공유하지 않았어요" } };
@@ -424,6 +424,9 @@ async function settle(force) {
   const last = fromFs(meta?.fields?.settledAt) || 0;
   if (!force && Date.now() - last < 10 * 60e3) return { season, skipped: true };
   const players = await fsList(`invest/${season}/trades`);
+  // 공유 동의·가입일 (investMeta/{uid}, 서버만 씀)
+  const metas = players.length ? await fsGetMany(players.map((p) => `investMeta/${p.id}`), ["share", "joined"]).catch(() => ({})) : {};
+  for (const p of players) { const mt = metas[`investMeta/${p.id}`]; if (mt) { p.share = mt.share; p.joined = mt.joined; } }
   const logs = {}, names = new Set();
   for (const p of players) {
     try { logs[p.id] = JSON.parse(p.log || "[]"); } catch { logs[p.id] = []; }
@@ -529,6 +532,18 @@ export default async function handler(req, res) {
       if (process.env.VAPID_PUBLIC && process.env.VAPID_PRIVATE) { try { out.push = await pushAll(); } catch (e) { out.push = { error: e.message.slice(0, 80) }; } }
     }
     return res.status(200).json(out);
+  }
+  // 내 투자 정보 공유 켜기·끄기 (+ 가입일). 로그인 표로 본인 확인 뒤 저장하고, 순위를 바로 다시 계산한다
+  if (req.query.game === "share") {
+    if (req.method !== "POST" || !adminReady()) return res.status(400).json({ error: "잘못된 요청이에요" });
+    try {
+      const me = await whoIs(req);
+      if (!me) return res.status(401).json({ error: "로그인이 필요해요" });
+      const share = req.body?.share === true, joined = /^\d{4}-\d{2}-\d{2}$/.test(String(req.body?.joined || "")) ? req.body.joined : null;
+      await fsSet(`investMeta/${me}`, { share, joined, at: Date.now() });
+      await settle(true).catch((e) => console.error("settle after share", e.message));
+      return res.status(200).json({ ok: true, share });
+    } catch (e) { console.error(e); return res.status(200).json({ error: "공유 설정을 저장하지 못했어요" }); }
   }
   if (req.query.game === "hold") {
     if (!adminReady()) return res.status(200).json({ error: "아직 준비 중이에요" });
