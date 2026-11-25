@@ -214,11 +214,39 @@ async function gdeltKo(retry = true) {
   });
 }
 
+// 주요 언론사 경제 RSS (언론사가 제목·링크를 퍼 가라고 공개한 목록, 무료·키 없음). 제목·링크만 쓰고 본문·요약은 안 쓴다.
+// 주소가 바뀌거나 막힌 곳은 조용히 빼고 나머지로 (한 곳이 실패해도 괜찮게)
+const RSS_KO = [
+  ["연합뉴스", "https://www.yna.co.kr/rss/economy.xml"],
+  ["한국경제", "https://www.hankyung.com/feed/economy"],
+  ["한국경제", "https://www.hankyung.com/feed/finance"],
+  ["매일경제", "https://www.mk.co.kr/rss/30100041/"],
+  ["동아일보", "https://rss.donga.com/economy.xml"],
+  ["경향신문", "https://www.khan.co.kr/rss/rssdata/economy_news.xml"],
+  ["한겨레", "https://www.hani.co.kr/rss/economy/"],
+  ["SBS", "https://news.sbs.co.kr/news/SectionRssFeed.do?sectionId=02"],
+  ["조선일보", "https://www.chosun.com/arc/outboundfeeds/rss/category/economy/?outputType=xml"],
+];
+async function rssOne([name, url]) {
+  const r = await fetch(url, { signal: AbortSignal.timeout(6000), headers: { "User-Agent": "Mozilla/5.0 (news reader)" } });
+  if (!r.ok) throw new Error(`${name} ${r.status}`);
+  const xml = await r.text();
+  const pick = (b, tag) => (b.match(new RegExp(String.raw`<${tag}[^>]*>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?</${tag}>`)) || [])[1] || "";
+  return [...xml.matchAll(/<item[\s>]([\s\S]*?)<\/item>/g)].map((m) => {
+    const at = Date.parse(pick(m[1], "pubDate") || pick(m[1], "dc:date"));
+    return { title: clean(pick(m[1], "title")), url: pick(m[1], "link").trim(), source: name, at: new Date(Number.isFinite(at) ? at : Date.now()).toISOString() };
+  }).filter((a) => a.title && /^https?:/.test(a.url) && /[가-힣]/.test(a.title)).slice(0, 40);
+}
+export async function rssKo() {
+  const all = await Promise.all(RSS_KO.map((f) => rssOne(f).catch((e) => { console.error("rss", e.message); return []; })));
+  return all.flat();
+}
+
 // ── 국내 경제 최신 뉴스 하루치 모아 두기 (Firestore newsPool/kr) ──
-// 1시간에 한 번만 새로 받아(NewsData 3번 + GDELT 한국어 1번) 최근 24시간치와 합친다 → NewsData 하루 약 72번.
+// 1시간에 한 번만 새로 받아(NewsData 3번 + GDELT 한국어 1번 + 언론사 경제 RSS 9곳) 최근 24시간치와 합친다 → NewsData 하루 약 72번.
 // 한 번에 10개만 보면 아침에 쏟아진 큰 화제(예: 증안펀드)가 점심엔 사라지므로, 하루치 제목 전체로 화제 점수를 매기기 위함.
 // 제목·링크·출처·시간만 저장한다(본문 없음).
-const POOL_DOC = "newsPool/kr", POOL_EVERY = 3600e3, POOL_KEEP = 24 * 3600e3, POOL_MAX = 400;
+const POOL_DOC = "newsPool/kr", POOL_EVERY = 3600e3, POOL_KEEP = 24 * 3600e3, POOL_MAX = 800;
 let poolMem = null; // { at: 이 서버가 읽은 시각, fetchedAt, items }
 export async function newsPool() {
   if (poolMem && Date.now() - poolMem.at < 5 * 60e3 && Date.now() - poolMem.fetchedAt < POOL_EVERY) return poolMem.items;
@@ -236,6 +264,7 @@ export async function newsPool() {
       }).catch((e) => console.error("newsdata pool", e.message)),
       fetchJson(ndUrl(MARKET_Q), {}, 8000).then((j) => got.push(...ndItems(j))).catch((e) => console.error("newsdata market", e.message)),
       gdeltKo().then((l) => got.push(...l)).catch((e) => console.error("gdelt ko", e.message)),
+      rssKo().then((l) => got.push(...l)), // ④ 주요 언론사 경제 RSS
     ]);
     if (got.length) {
       const now = Date.now(), byUrl = new Map(items.map((it) => [it.url, it]));

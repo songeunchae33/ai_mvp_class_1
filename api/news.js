@@ -5,10 +5,9 @@
 // GET /api/news?q=FOMC                     → { items: 해당 키워드 뉴스 3 }
 // 둘 다 &full=1 을 붙이면 '뉴스 더보기' 화면용으로 더 많이 돌려준다
 import { cache } from "./_util.js";
-import { PREF_QUERY, dedupe, keywords, searchUrl, newsReady, byTrust, globalNews, newsdata, meaty, translateTitles, translateState } from "./_news.js";
-import { pressReleases, isEcon, byHot, hotScores, topicDf, sameStory } from "./_policy.js";
+import { PREF_QUERY, dedupe, keywords, searchUrl, newsReady, byTrust, globalNews, newsdata, meaty, translateTitles, translateState, tier } from "./_news.js";
+import { pressReleases, isEcon, stories } from "./_policy.js";
 
-const hotTop = (it, corpus) => { const all = [it, ...corpus.filter((c) => c !== it)]; return hotScores(all)[0]; };
 // 화면에는 제목·링크만 보낸다
 const strip = (list) => list;
 
@@ -65,25 +64,9 @@ export default async function handler(req, res) {
 
   try {
     const pool = dedupe(nd).filter(meaty);
-    // 오늘의 이슈: 여러 언론·부처가 같이 다루는 화제부터(byHot), 같은 화제 점수면 믿을 만한 출처 먼저.
-    // 언론 · 정책브리핑을 번갈아 골라 한 출처에 쏠리지 않게 하되, 화제 점수가 더 높은 쪽이 첫 줄
-    const corpus = [...pool, ...policy];
-    const lanes = [byHot(byTrust(pool), corpus), byHot(policy, corpus)].filter((l) => l.length);
-    if (lanes.length === 2) { const [a, b] = lanes.map((l) => hotTop(l[0], corpus)); if (b > a) lanes.reverse(); }
-    const issues = [], wantI = full ? 15 : 3, df = topicDf(corpus);
-    // 같은 이야기(중심 낱말이 같거나 화제 낱말 2개 이상 겹침)는 하나만. 한 줄씩 번갈아 고르되 같은 이야기면 그 줄의 다음 기사로
-    const pos = lanes.map(() => 0);
-    for (let guard = 0; issues.length < wantI && guard < 400; guard++) {
-      let moved = false;
-      for (let li = 0; li < lanes.length && issues.length < wantI; li++) {
-        while (pos[li] < lanes[li].length) {
-          const it = lanes[li][pos[li]++];
-          if (issues.some((x) => sameStory(x, it, df))) continue;
-          issues.push(it); moved = true; break;
-        }
-      }
-      if (!moved) break;
-    }
+    // 오늘의 이슈: 언론 기사(하루치)·정부 보도자료를 '이야기'로 묶어, 다룬 언론사·부처가 많은 이야기부터 하나씩 (api/_policy.js stories)
+    const wantI = full ? 15 : 3;
+    const issues = stories([...pool, ...policy], { trust: tier }).slice(0, wantI).map((st) => ({ ...st.rep, outlets: st.outlets }));
 
     // 관심 종목·선호마다 최신 뉴스 1개씩, 모자라면 앞쪽 관심사에서 더 (NewsData 낱말 검색, 하나씩 불러서 서버가 3시간 기억)
     const queries = interests.map((i) => ({ tag: i, q: PREF_QUERY[i] || i }));

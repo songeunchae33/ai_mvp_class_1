@@ -92,7 +92,16 @@ const STOP = new Set(["정부", "관련", "위해", "위한", "대한", "통해"
   "본격", "시행", "운영", "계획", "결과", "현장", "방안", "회의", "기자", "속보", "단독", "종합", "포토", "사진", "영상", "뉴스", "기업", "한국", "국내", "우리", "주요", "대통령"]);
 // 같은 뜻 다른 이름은 하나로 (증안펀드 = 증시안정펀드 = 증권시장안정펀드)
 const SAME = [[/증권시장안정펀드|증시안정펀드|증안펀드/g, "증시안정펀드"], [/코스피지수/g, "코스피"], [/기준 ?금리/g, "기준금리"]];
+const twMemo = new Map();
 export function topicWords(title) {
+  const key = String(title || "");
+  if (twMemo.has(key)) return twMemo.get(key);
+  const r = topicWords0(key);
+  if (twMemo.size > 5000) twMemo.clear();
+  twMemo.set(key, r);
+  return r;
+}
+function topicWords0(title) {
   let t = String(title || "");
   for (const [re, to] of SAME) t = t.replace(re, ` ${to} `);
   const out = new Set();
@@ -136,4 +145,33 @@ export function byHot(items, corpus = items) {
   const all = [...items, ...corpus.filter((c) => !items.includes(c))];
   const sc = hotScores(all);
   return items.map((it, i) => ({ it, i, s: sc[i] })).sort((a, b) => b.s - a.s || a.i - b.i).map((x) => x.it);
+}
+
+// ── 화제성 검수: 기사를 '이야기'로 묶고, 그 이야기를 다룬 언론사·부처 수로 순위를 매긴다 ──
+// 1) 같은 이야기(sameStory)끼리 묶음 2) 점수 = 다룬 곳 수 × 3 + 시장 낱말·핵심 부처 + 최근(6시간 안) − 기계식 기사(목표가·특징주·시황 표 등)
+// 3) 한 곳만 다룬 이야기는 두 곳 이상 다룬 이야기 뒤로 4) 대표 기사는 공식 기관·주요 언론·최신 순으로 고른다
+const JUNK = /목표가|목표주가|투자의견|\[특징주\]|특징주|\[마감시황\]|\[표\]|\[게시판\]|\[인사\]|\[부고\]|\[포토\]|\[e공시\]|\[공시\]|fnRASSI|\[이 시각|\[오늘의|운세|날씨|\[광고\]|\[AD\]/;
+export function isJunk(it) {
+  const t = String(it.title || "");
+  const hangul = (t.match(/[가-힣]/g) || []).length, latinCh = (t.match(/[A-Za-z]/g) || []).length;
+  return JUNK.test(t) || latinCh > hangul; // 영어가 더 많은 제목(해외 증권사 목표가 기사 등)도 기계식으로 본다
+}
+export function stories(items, { trust = () => 1, now = Date.now() } = {}) {
+  const df = topicDf(items), hot = hotScores(items);
+  const order = items.map((it, i) => ({ it, h: hot[i] })).sort((a, b) => b.h - a.h);
+  const S = [];
+  for (const { it, h } of order) {
+    const st = S.find((x) => sameStory(x.rep0, it, df));
+    if (st) { st.items.push(it); st.h = Math.max(st.h, h); } else S.push({ rep0: it, items: [it], h });
+  }
+  for (const st of S) {
+    const outlets = new Set(st.items.map(srcKey));
+    const newest = Math.max(...st.items.map((x) => Date.parse(x.at) || 0));
+    const junk = st.items.every(isJunk);
+    st.outlets = outlets.size;
+    st.score = outlets.size * 3 + Math.min(st.h, 12) + (now - newest < 6 * 3600e3 ? 2 : 0) - (junk ? 20 : 0);
+    // 대표 기사: 기계식이 아닌 것 → 출처 등급(공식 0·주요 언론 1·그 밖 2) → 최신
+    st.rep = [...st.items].sort((a, b) => isJunk(a) - isJunk(b) || trust(a) - trust(b) || (Date.parse(b.at) || 0) - (Date.parse(a.at) || 0))[0];
+  }
+  return S.sort((a, b) => (b.outlets >= 2) - (a.outlets >= 2) || b.score - a.score);
 }
