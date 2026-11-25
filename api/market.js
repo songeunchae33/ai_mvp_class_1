@@ -79,6 +79,21 @@ async function ecos(stat, item) {
   return { v, vs, pct: p ? Math.round((vs / p) * 10000) / 100 : 0, date: today.TIME };
 }
 
+// 한국거래소(KRX) 정보데이터시스템 OPEN API (https://openapi.krx.co.kr). 지수 일별시세: idx/kospi_dd_trd · idx/kosdaq_dd_trd
+// 서비스마다 사이트에서 '이용 신청'을 해야 한다. 키는 머리글 AUTH_KEY로 보낸다(주소에 넣지 않음). 최근 7일을 한꺼번에 물어 가장 최근 거래일을 쓴다.
+async function krxIndex(svc, name) {
+  const days = [...Array(7).keys()].map((i) => kstYmd(i));
+  const rows = await Promise.all(days.map((d) =>
+    fetchJson(`https://data-dbg.krx.co.kr/svc/apis/idx/${svc}?basDd=${d}`, { headers: { AUTH_KEY: process.env.KRX_KEY } }, 5000)
+      .then((j) => (j.OutBlock_1 || []).find((r) => r.IDX_NM === name))
+      .catch(() => null)));
+  const it = rows.find((r) => r && num(r.CLSPRC_IDX) != null);
+  if (!it) throw new Error("krx 빈 결과");
+  return { v: num(it.CLSPRC_IDX), vs: num(it.CMPPREVDD_IDX) ?? 0, pct: num(it.FLUC_RT) ?? 0, date: String(it.BAS_DD) };
+}
+// 같은 값을 여러 곳에서 받으면 날짜가 가장 최근인 것을 쓴다 (한 곳이 늦게 올라와도 화면이 멈추지 않게)
+function newest(...xs) { return xs.filter((x) => x?.v != null).sort((a, b) => (String(a.date) < String(b.date) ? 1 : -1))[0] || null; }
+
 // 수출입은행은 영업일 오전 11시쯤 그날 환율을 올린다. 주말·공휴일·발표 전이면 빈 배열이라 며칠 거슬러 올라간다.
 async function usd() {
   const key = process.env.KOREAEXIM_KEY;
@@ -610,24 +625,24 @@ export default async function handler(req, res) {
     .filter(Boolean)
     .slice(0, 10);
 
-  const out = { sample: !hasData || !(hasEcos || hasExim) };
-  out.src = { usd: hasEcos ? "ecos" : "exim", index: hasEcos ? "ecos" : "fsc" }; // 화면의 출처 표시용
+  const hasKrx = !!process.env.KRX_KEY;
+  const out = { sample: !(hasData || hasKrx) || !(hasEcos || hasExim) };
+  out.src = {};
   const tasks = [];
-
-  if (hasEcos) {
-    tasks.push(
-      ecos("802Y001", "0001000").then((v) => (out.kospi = v)).catch((e) => { console.error("kospi", e.message); out.note = String(e.message).slice(0, 80); }),
-      ecos("802Y001", "0089000").then((v) => (out.kosdaq = v)).catch((e) => console.error("kosdaq", e.message)),
-      ecos("731Y001", "0000001").then((v) => (out.usd = v)).catch((e) => console.error("usd", e.message))
-    );
-  } else if (hasData) {
-    tasks.push(
-      index("코스피").then((v) => (out.kospi = v)).catch((e) => { console.error("kospi", e.message); out.note = String(e.message).slice(0, 80); }),
-      index("코스닥").then((v) => (out.kosdaq = v)).catch((e) => console.error("kosdaq", e.message))
-    );
-  }
+  // 지수: 한국거래소(KRX) · 한국은행 ECOS · 금융위원회 중 날짜가 가장 최근인 값. 금융위원회·ECOS는 하루 늦게 올라와 아침엔 그저께 종가일 때가 있다
+  const pick = (k, krx, other, otherSrc) => tasks.push(
+    Promise.all([krx ? krx.catch((e) => (console.error(k, "krx", e.message), null)) : null, other ? other.catch((e) => (console.error(k, e.message), (out.note ||= String(e.message).slice(0, 80)), null)) : null])
+      .then(([a, b]) => { const v = newest(a, b); if (v) { out[k] = v; if (k === "kospi") out.src.index = v === a ? "krx" : otherSrc; } }));
+  const other = (name, code) => (hasEcos ? ecos("802Y001", code) : hasData ? index(name) : null);
+  const otherSrc = hasEcos ? "ecos" : "fsc";
+  pick("kospi", hasKrx ? krxIndex("kospi_dd_trd", "코스피") : null, other("코스피", "0001000"), otherSrc);
+  pick("kosdaq", hasKrx ? krxIndex("kosdaq_dd_trd", "코스닥") : null, other("코스닥", "0089000"), otherSrc);
+  // 환율: 수출입은행은 영업일 오전 11시쯤 그날 값을 올리고, ECOS는 더 늦다. 둘 다 있으면 날짜가 최근인 쪽
+  tasks.push(Promise.all([
+    hasExim ? usd().catch((e) => (console.error("usd exim", e.message), null)) : null,
+    hasEcos ? ecos("731Y001", "0000001").catch((e) => (console.error("usd ecos", e.message), null)) : null,
+  ]).then(([a, b]) => { const v = newest(a, b); if (v) { out.usd = v; out.src.usd = v === a ? "exim" : "ecos"; } }));
   if (hasData) tasks.push(Promise.all(names.map((n) => stock(n).catch(() => ({ name: n, missing: true })))).then((v) => (out.stocks = v)));
-  if (!hasEcos && hasExim) tasks.push(usd().then((v) => (out.usd = v)).catch((e) => console.error("usd", e.message)));
   await Promise.all(tasks);
 
   // 빠진 값은 예시로 채우고 sample 표시

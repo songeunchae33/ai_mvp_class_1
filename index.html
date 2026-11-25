@@ -2666,7 +2666,7 @@ function homeBlocks() {
     market: `<section id="h-market">
       <div class="mkt line bleed">${tiles}${addTile}</div>
       <div class="hint" style="margin:6px 4px 0;display:flex;gap:6px;align-items:center;flex-wrap:wrap">
-        ${m ? `주가 ${ymdLabel(m.kospi?.date)} 종가 · 환율 ${ymdLabel(m.usd?.date)} 고시 · 출처 ${m.src?.index === "ecos" ? "한국은행 ECOS" : "금융위원회"}(지수)·${m.src?.usd === "ecos" ? "한국은행 ECOS" : "한국수출입은행"}(환율)·금융위원회(종목)` : ""}
+        ${m ? `주가 ${ymdLabel(m.kospi?.date)} 종가 · 환율 ${ymdLabel(m.usd?.date)} 고시 · 출처 ${{ krx: "한국거래소", ecos: "한국은행 ECOS" }[m.src?.index] || "금융위원회"}(지수)·${m.src?.usd === "ecos" ? "한국은행 ECOS" : "한국수출입은행"}(환율)·금융위원회(종목)` : ""}
         ${m?.sample ? `<span class="badge b-sample">예시 데이터</span>` : ""}
       </div>
     </section>`,
