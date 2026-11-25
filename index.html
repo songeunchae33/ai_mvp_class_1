@@ -1694,6 +1694,18 @@ function tone(v) { return v > 0 ? "up" : v < 0 ? "down" : "flat"; }
 function arrow(v) { return v > 0 ? "▲" : v < 0 ? "▼" : "-"; }
 function pct(v) { return v === null || v === undefined ? "-" : `${arrow(v)} ${fmt(Math.abs(v), 2)}%`; }
 function ymdLabel(s) { return s ? `${Number(s.slice(4, 6))}월 ${Number(s.slice(6, 8))}일` : ""; }
+// 국내 종가는 금융위원회·한국은행이 다음 영업일 낮에 올린다. 가장 최근 종가 날짜를 보고 '다음 종가가 언제 들어오는지' 한 줄 (주말만 빼고, 공휴일은 모름)
+function nextCloseNote(s) {
+  if (!/^\d{8}$/.test(String(s || ""))) return "";
+  const day = (y) => new Date(Date.UTC(+y.slice(0, 4), +y.slice(4, 6) - 1, +y.slice(6, 8)));
+  const nextWd = (d) => { const t = new Date(d); do t.setUTCDate(t.getUTCDate() + 1); while ([0, 6].includes(t.getUTCDay())); return t; };
+  const kst = new Date(Date.now() + 9 * 3600e3), today = Date.UTC(kst.getUTCFullYear(), kst.getUTCMonth(), kst.getUTCDate());
+  const n = nextWd(day(s)), p = nextWd(n), lab = `${n.getUTCMonth() + 1}월 ${n.getUTCDate()}일`;
+  if (today > p.getTime()) return "새 종가를 기다리는 중이에요";
+  if (today < n.getTime()) return "";
+  const when = today === p.getTime() ? "오늘" : p.getTime() - today === 864e5 ? "내일" : `${p.getUTCMonth() + 1}월 ${p.getUTCDate()}일(${"일월화수목금토"[p.getUTCDay()]})`;
+  return `${lab} 종가는 ${when} 오후에 올라와요`;
+}
 function josa(word, a, b) { // 받침 있으면 a, 없으면 b
   const c = String(word).charCodeAt(String(word).length - 1);
   if (c < 0xac00 || c > 0xd7a3) return b;
@@ -2666,7 +2678,7 @@ function homeBlocks() {
     market: `<section id="h-market">
       <div class="mkt line bleed">${tiles}${addTile}</div>
       <div class="hint" style="margin:6px 4px 0;display:flex;gap:6px;align-items:center;flex-wrap:wrap">
-        ${m ? `주가 ${ymdLabel(m.kospi?.date)} 종가 · 환율 ${ymdLabel(m.usd?.date)} 고시 · 출처 ${m.src?.index === "ecos" ? "한국은행 ECOS" : "금융위원회"}(지수)·${m.src?.usd === "ecos" ? "한국은행 ECOS" : "한국수출입은행"}(환율)·금융위원회(종목)` : ""}
+        ${m ? `주가 ${ymdLabel(m.kospi?.date)} 종가${nextCloseNote(m.kospi?.date) ? ` (${nextCloseNote(m.kospi?.date)})` : ""} · 환율 ${ymdLabel(m.usd?.date)} 고시 · 출처 ${m.src?.index === "ecos" ? "한국은행 ECOS" : "금융위원회"}(지수)·${m.src?.usd === "ecos" ? "한국은행 ECOS" : "한국수출입은행"}(환율)·금융위원회(종목)` : ""}
         ${m?.sample ? `<span class="badge b-sample">예시 데이터</span>` : ""}
       </div>
     </section>`,
@@ -6491,7 +6503,7 @@ function invMarketList() {
   const more = q ? (invData.search || []).filter((r) => !G.companies.some((c) => c.id === (r.id || r.name))).slice(0, 8)
     .map((r) => `<button class="inv-sr" data-act="inv-open" data-k="stock:${esc(r.id || r.name)}"><span><b>${esc(r.name)}</b><small class="hint">${esc(r.market || "")}</small></span><span class="inv-px"><small class="hint">눌러서 가격 보기 ›</small></span></button>`).join("") : "";
   const rr = rates.map((p) => `<button class="inv-sr" data-act="inv-open" data-k="rate:${p.id}"><span><b>${esc(p.name)}</b><small class="hint">${p.group}</small></span><span class="inv-px"><b class="num">연 ${fmt(p.rate, 1)}%</b><small class="hint">게임 금리</small></span></button>`).join("");
-  return `${tabs}${usWait}${shown.length ? `<p class="hint inv-sub">${q ? "찾은 종목" : us ? "미국 대표 종목 · 원화로 바꾼 값" : "대표 종목"} · ${ymdLabel(quote(shown[0].id)?.date)} 종가${!q && us ? " (뉴욕)" : ""}</p>${shown.map(row).join("")}` : ""}${more}
+  return `${tabs}${usWait}${shown.length ? `<p class="hint inv-sub">${q ? "찾은 종목" : us ? "미국 대표 종목 · 원화로 바꾼 값" : "대표 종목"} · ${ymdLabel(quote(shown[0].id)?.date)} 종가${!q && us ? " (뉴욕)" : !us && nextCloseNote(quote(shown[0].id)?.date) ? ` · ${nextCloseNote(quote(shown[0].id)?.date)}` : ""}</p>${shown.map(row).join("")}` : ""}${more}
     ${q && ui.invSearching ? `<p class="hint">찾는 중…</p>` : ""}
     ${rr ? `<p class="hint inv-sub">채권 · 예금 · CMA</p>${rr}` : ""}${!shown.length && !more && !rr && !ui.invSearching ? `<p class="hint">찾는 종목이 없어요. 이름을 조금 다르게 적어 보세요.</p>` : ""}`;
 }
