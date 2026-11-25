@@ -18,10 +18,10 @@ const PREF_WORDS = {
   여행: ["관광", "여행", "항공", "환율", "숙박"], 부동산: ["부동산", "주택", "전세", "월세", "청약", "임대"],
   저축: ["예금", "적금", "저축", "금리", "연금"], 쇼핑: ["소비", "할인", "물가", "유통", "카드"],
   음식: ["외식", "식품", "농산물", "물가"], 취미: ["문화", "공연", "체육", "관광"], 자기계발: ["교육", "훈련", "자격", "취업", "장학"],
-  비상금: ["예금", "적금", "금리"], "첫 투자": ["주식", "투자", "자본시장", "ETF"], "내 집 마련": ["주택", "전세", "청약", "임대", "부동산"],
+  비상금: ["예금", "적금", "금리"], "첫 투자": ["주식", "투자", "자본시장", "ETF", "증시", "코스피", "코스닥", "증시안정펀드"], "내 집 마련": ["주택", "전세", "청약", "임대", "부동산"],
   "대출 갚기": ["대출", "금리", "학자금", "가계부채"], "여행 자금": ["관광", "여행", "환율"], "취업·이직": ["취업", "일자리", "고용", "채용", "청년"],
   "노후·연금": ["연금", "노후", "퇴직"], 반도체: ["반도체"], "2차전지": ["배터리", "이차전지"], AI: ["인공지능", "AI", "디지털"],
-  바이오: ["바이오", "의약품", "제약"], 자동차: ["자동차", "전기차"], "게임·엔터": ["게임", "콘텐츠", "한류"], "은행·금융": ["금융", "은행"],
+  바이오: ["바이오", "의약품", "제약"], 자동차: ["자동차", "전기차"], "게임·엔터": ["게임", "콘텐츠", "한류"], "은행·금융": ["금융", "은행", "증시", "금리"],
 };
 // 관심사와 겹치는 단어 수 (많을수록 먼저 풀이한다)
 export function interestScore(p, interests) {
@@ -174,4 +174,32 @@ export function stories(items, { trust = () => 1, now = Date.now() } = {}) {
     st.rep = [...st.items].sort((a, b) => isJunk(a) - isJunk(b) || trust(a) - trust(b) || (Date.parse(b.at) || 0) - (Date.parse(a.at) || 0))[0];
   }
   return S.sort((a, b) => (b.outlets >= 2) - (a.outlets >= 2) || b.score - a.score);
+}
+
+// ── 나를 위한 뉴스: 관심사마다 하루치 '이야기'(stories) 중 그 관심사 낱말이 든 가장 큰 이야기를 고른다 ──
+// 관심 종목(이름)이 있거나 투자 관련 관심사가 있으면, 증시 전체를 흔드는 이야기(증안펀드·코스피 급락 등)를 '내 투자' 칸으로 맨 앞에
+const MARKET_WORDS = ["증시안정펀드", "증시", "코스피", "코스닥", "공매도", "밸류업", "외국인 매도", "금융위원회"];
+export function normTitle(t) { let x = String(t || ""); for (const [re, to] of SAME) x = x.replace(re, to); return x; }
+export function interestWords(i) { return PREF_WORDS[i] || [i, ...(i.length >= 4 ? [i.slice(0, 2)] : [])].filter((w) => w.length >= 2); }
+export function forYouStories(S, interests, want, taken = new Set()) {
+  const known = new Set(Object.keys(PREF_WORDS));
+  const investy = interests.some((i) => !known.has(i) || ["첫 투자", "노후·연금", "은행·금융"].includes(i));
+  const Q = [...(investy ? [{ tag: "내 투자", words: MARKET_WORDS, minOutlets: 2 }] : []), ...interests.map((i) => ({ tag: i, words: interestWords(i), minOutlets: 1 }))];
+  const hit = (it, words) => { const t = normTitle(it.title); return words.some((w) => t.includes(w)); };
+  const used = new Set(), out = [];
+  for (let round = 0; round < 6 && out.length < want; round++) {
+    for (const q of Q) {
+      if (out.length >= want) break;
+      // 관심사 이름·첫 두 낱말(핵심)이 제목에 직접 든 이야기를 먼저, 그다음 큰 이야기 순 (예: 여행 → '해외여행' 기사가 '환율' 기사보다 먼저)
+      const core = [q.tag, ...q.words.slice(0, 2)];
+      const cands = S.filter((x) => !used.has(x) && x.outlets >= q.minOutlets && x.items.some((it) => hit(it, q.words) && !taken.has(it.url)));
+      const st = cands.find((x) => x.items.some((it) => hit(it, core))) || cands[0];
+      if (!st) continue;
+      used.add(st);
+      const it = st.items.filter((x) => hit(x, q.words) && !taken.has(x.url)).sort((a, b) => (st.rep === b) - (st.rep === a))[0];
+      taken.add(it.url);
+      out.push({ ...it, tag: q.tag, outlets: st.outlets });
+    }
+  }
+  return out;
 }

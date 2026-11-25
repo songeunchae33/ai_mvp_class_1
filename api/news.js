@@ -5,8 +5,8 @@
 // GET /api/news?q=FOMC                     → { items: 해당 키워드 뉴스 3 }
 // 둘 다 &full=1 을 붙이면 '뉴스 더보기' 화면용으로 더 많이 돌려준다
 import { cache } from "./_util.js";
-import { PREF_QUERY, dedupe, keywords, searchUrl, newsReady, byTrust, globalNews, newsdata, meaty, translateTitles, translateState, tier } from "./_news.js";
-import { pressReleases, isEcon, stories } from "./_policy.js";
+import { PREF_QUERY, dedupe, keywords, searchUrl, newsReady, byTrust, globalNews, newsdata, meaty, translateTitles, translateState, tier, poolState } from "./_news.js";
+import { pressReleases, isEcon, stories, forYouStories } from "./_policy.js";
 
 // 화면에는 제목·링크만 보낸다
 const strip = (list) => list;
@@ -49,6 +49,19 @@ export default async function handler(req, res) {
     }
   }
 
+  // 점검용: /api/news?check=1 → 하루치 모아 두기가 언제 새로 받았는지, 통로별 개수, 지금 화제 순위 10개 (휴대폰 브라우저로 열어 확인)
+  if (req.query.check === "1") {
+    res.setHeader("Cache-Control", "no-store");
+    const [nd, policy] = await Promise.all([ready ? newsdata().catch((e) => ({ error: e.message })) : [], process.env.DATA_GO_KR_KEY ? policyNews().catch(() => []) : []]);
+    const pool = Array.isArray(nd) ? dedupe(nd).filter(meaty) : [];
+    const ST = stories([...pool, ...policy], { trust: tier });
+    const kst = (t) => (t ? new Date(t + 9 * 3600e3).toISOString().slice(0, 16).replace("T", " ") + " (한국)" : null);
+    const ps = poolState();
+    return res.status(200).json({
+      지금: kst(Date.now()), 하루치_새로받은시각: kst(ps.mem?.fetchedAt), 모아둔기사: pool.length, 보도자료: policy.length, 이번에받은통로별: ps.last?.bySrc || "이 서버에서는 아직 새로 받지 않았어요(다른 서버가 받았거나 1시간 안)",
+      화제순위: ST.slice(0, 10).map((st, i) => `${i + 1}. [${st.outlets}곳] ${st.rep.title} (${st.rep.source})`), 오류: Array.isArray(nd) ? undefined : nd.error,
+    });
+  }
   const interests = String(req.query.interests || "")
     .split(",").map((s) => s.trim()).filter(Boolean).slice(0, 6);
 
@@ -66,33 +79,24 @@ export default async function handler(req, res) {
     const pool = dedupe(nd).filter(meaty);
     // 오늘의 이슈: 언론 기사(하루치)·정부 보도자료를 '이야기'로 묶어, 다룬 언론사·부처가 많은 이야기부터 하나씩 (api/_policy.js stories)
     const wantI = full ? 15 : 3;
-    const issues = stories([...pool, ...policy], { trust: tier }).slice(0, wantI).map((st) => ({ ...st.rep, outlets: st.outlets }));
+    const ST = stories([...pool, ...policy], { trust: tier });
+    const issues = ST.slice(0, wantI).map((st) => ({ ...st.rep, outlets: st.outlets }));
 
-    // 관심 종목·선호마다 최신 뉴스 1개씩, 모자라면 앞쪽 관심사에서 더 (NewsData 낱말 검색, 하나씩 불러서 서버가 3시간 기억)
-    const queries = interests.map((i) => ({ tag: i, q: PREF_QUERY[i] || i }));
-    const others = dedupe([...pool, ...policy]);
-    const perQuery = [];
-    for (const { tag, q } of queries) {
-      const found = ready ? await newsdata(q).catch((e) => { console.error("interest", q, e.message); return []; }) : [];
-      perQuery.push(found.length ? found : byWords(others, tag, q));
-    }
-    const taken = new Set(issues.map((i) => i.url));
-    const forYou = [];
+    // 나를 위한 뉴스: 하루치 이야기(언론사 RSS·GDELT·NewsData·보도자료) 중 관심사 낱말이 든 큰 이야기부터 (api/_policy.js forYouStories).
+    // 오늘의 이슈와 같은 기사여도 괜찮다(홈 화면이 네 줄 화제를 겹치지 않게 다시 고름). 못 찾은 관심사만 NewsData 낱말 검색으로 채운다
     const want = full ? 20 : 3;
-    for (let round = 0; round < (full ? 6 : 3) && forYou.length < want; round++) {
-      perQuery.forEach((list, i) => {
-        const pick = byTrust(dedupe(list)).filter((n) => !taken.has(n.url) && meaty(n))[0];
-        if (pick && forYou.length < want) {
-          taken.add(pick.url);
-          forYou.push({ ...pick, tag: queries[i].tag });
-        }
-      });
+    const forYou = forYouStories(ST, interests, want);
+    const missing = interests.filter((i) => !forYou.some((x) => x.tag === i));
+    if (forYou.length < want && ready) for (const tag of missing.slice(0, 3)) {
+      const found = await newsdata(PREF_QUERY[tag] || tag).catch((e) => { console.error("interest", tag, e.message); return []; });
+      const pick = byTrust(dedupe(found)).filter((n) => meaty(n) && !forYou.some((x) => x.url === n.url))[0];
+      if (pick && forYou.length < want) forYou.push({ ...pick, tag });
     }
 
     const globalKo = await translateTitles(global.slice(0, full ? 15 : 3)); // 영어 제목은 한국어로(안 되면 영어 그대로)
     // 1시간 동안 같은 결과를 재사용. 영어가 남았거나 관심사가 있는데 나를 위한 뉴스를 못 찾았으면 2분만 쓰고 다시
     if (globalKo.some((a) => a.lang === "en") || (interests.length && !forYou.length)) res.setHeader("Cache-Control", "s-maxage=120");
-    else cache(res, 3600);
+    else cache(res, 900); // 15분마다 다시 계산(하루치 모아 두기는 1시간마다 새로 받음)
     res.status(200).json({ issues: strip(issues), forYou: strip(forYou), global: strip(globalKo), keywords: keywords([...pool, ...policy]), providers, ...(translateState.why ? { tr: translateState.why } : {}) });
   } catch (e) {
     console.error(e);

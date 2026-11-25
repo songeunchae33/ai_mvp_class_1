@@ -247,7 +247,8 @@ export async function rssKo() {
 // 한 번에 10개만 보면 아침에 쏟아진 큰 화제(예: 증안펀드)가 점심엔 사라지므로, 하루치 제목 전체로 화제 점수를 매기기 위함.
 // 제목·링크·출처·시간만 저장한다(본문 없음).
 const POOL_DOC = "newsPool/kr", POOL_EVERY = 3600e3, POOL_KEEP = 24 * 3600e3, POOL_MAX = 800;
-let poolMem = null; // { at: 이 서버가 읽은 시각, fetchedAt, items }
+let poolMem = null, poolInfo = null;
+export function poolState() { return { mem: poolMem ? { fetchedAt: poolMem.fetchedAt, n: poolMem.items.length } : null, last: poolInfo }; } // { at: 이 서버가 읽은 시각, fetchedAt, items }
 export async function newsPool() {
   if (poolMem && Date.now() - poolMem.at < 5 * 60e3 && Date.now() - poolMem.fetchedAt < POOL_EVERY) return poolMem.items;
   const doc = await fsReq(POOL_DOC);
@@ -259,12 +260,12 @@ export async function newsPool() {
     // ① NewsData 경제 최신 2쪽 ② NewsData 시장 전체 낱말 검색 1번 ③ GDELT 한국어 경제 기사(무료·키 없음, 여러 언론사) → 한 시간에 NewsData 3번(하루 약 72번)
     await Promise.all([
       fetchJson(ndUrl(""), {}, 8000).then(async (j1) => {
-        got.push(...ndItems(j1));
-        if (j1.nextPage) got.push(...ndItems(await fetchJson(ndUrl("", j1.nextPage), {}, 8000).catch(() => ({}))));
+        got.push(...ndItems(j1).map((x) => ({ ...x, via: "NewsData" })));
+        if (j1.nextPage) got.push(...ndItems(await fetchJson(ndUrl("", j1.nextPage), {}, 8000).catch(() => ({}))).map((x) => ({ ...x, via: "NewsData" })));
       }).catch((e) => console.error("newsdata pool", e.message)),
-      fetchJson(ndUrl(MARKET_Q), {}, 8000).then((j) => got.push(...ndItems(j))).catch((e) => console.error("newsdata market", e.message)),
-      gdeltKo().then((l) => got.push(...l)).catch((e) => console.error("gdelt ko", e.message)),
-      rssKo().then((l) => got.push(...l)), // ④ 주요 언론사 경제 RSS
+      fetchJson(ndUrl(MARKET_Q), {}, 8000).then((j) => got.push(...ndItems(j).map((x) => ({ ...x, via: "NewsData 시장" })))).catch((e) => console.error("newsdata market", e.message)),
+      gdeltKo().then((l) => got.push(...l.map((x) => ({ ...x, via: "GDELT" })))).catch((e) => console.error("gdelt ko", e.message)),
+      rssKo().then((l) => got.push(...l.map((x) => ({ ...x, via: "RSS " + x.source })))), // ④ 주요 언론사 경제 RSS
     ]);
     if (got.length) {
       const now = Date.now(), byUrl = new Map(items.map((it) => [it.url, it]));
@@ -272,7 +273,9 @@ export async function newsPool() {
       items = [...byUrl.values()].filter((it) => now - (it.seen || Date.parse(it.at) || 0) < POOL_KEEP)
         .sort((a, b) => (a.at < b.at ? 1 : -1)).slice(0, POOL_MAX);
       fetchedAt = now;
-      await fsSet(POOL_DOC, { items: JSON.stringify(items), fetchedAt, n: items.length }).catch((e) => console.error("pool save", e.message));
+      const bySrc = {}; for (const it of got) bySrc[it.via || "기타"] = (bySrc[it.via || "기타"] || 0) + 1;
+      poolInfo = { fetchedAt: now, got: got.length, bySrc };
+      await fsSet(POOL_DOC, { items: JSON.stringify(items), fetchedAt, n: items.length, info: JSON.stringify(poolInfo) }).catch((e) => console.error("pool save", e.message));
     } else if (!items.length) throw new Error("newsdata 빈 결과");
   }
   poolMem = { at: Date.now(), fetchedAt, items };

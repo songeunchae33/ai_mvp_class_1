@@ -1777,7 +1777,7 @@ function keepForYou(kind, interests, j) {
   try { all = JSON.parse(localStorage.getItem(FORYOU_KEY) || "{}") || {}; } catch {}
   const saved = all[kind], day = ymd(today0()), fresh = j.forYou || [];
   const same = saved && saved.interests === interests && saved.items?.length;
-  if (same && (saved.day === day ? saved.items.length >= fresh.length : !fresh.length)) return { ...j, forYou: saved.items };
+  if (same && !fresh.length) return { ...j, forYou: saved.items }; // 새로 받은 게 없을 때만 마지막 목록 (예전엔 하루 내내 아침 목록을 고정했음)
   if (fresh.length) { all[kind] = { day, interests, items: fresh }; try { localStorage.setItem(FORYOU_KEY, JSON.stringify(all)); } catch {} }
   return j;
 }
