@@ -178,18 +178,22 @@ export function stories(items, { trust = () => 1, now = Date.now() } = {}) {
 
 // ── 나를 위한 뉴스: 관심사마다 하루치 '이야기'(stories) 중 그 관심사 낱말이 든 가장 큰 이야기를 고른다 ──
 // 관심 종목(이름)이 있거나 투자 관련 관심사가 있으면, 증시 전체를 흔드는 이야기(증안펀드·코스피 급락 등)를 '내 투자' 칸으로 맨 앞에
+const GOV_WORDS = ["정부", "부총리", "대통령", "금융위원회", "금융위", "기획재정부", "기재부", "재정경제부", "한국은행", "한은", "금통위", "F4", "대책", "정책", "증시안정펀드", "투입", "시행", "발표", "법안", "개정"];
 const MARKET_WORDS = ["증시안정펀드", "증시", "코스피", "코스닥", "공매도", "밸류업", "외국인 매도", "금융위원회"];
 export function normTitle(t) { let x = String(t || ""); for (const [re, to] of SAME) x = x.replace(re, to); return x; }
 export function interestWords(i) { return PREF_WORDS[i] || [i, ...(i.length >= 4 ? [i.slice(0, 2)] : [])].filter((w) => w.length >= 2); }
 export function forYouStories(S, interests, want, taken = new Set()) {
   const known = new Set(Object.keys(PREF_WORDS));
   const investy = interests.some((i) => !known.has(i) || ["첫 투자", "노후·연금", "은행·금융"].includes(i));
-  const Q = [...(investy ? [{ tag: "내 투자", words: MARKET_WORDS, minOutlets: 2 }] : []), ...interests.map((i) => ({ tag: i, words: interestWords(i), minOutlets: 1 }))];
+  // 「오늘 꼭 알기」: 관심사와 상관없이 모두에게. 세 곳 이상이 다룬 정부 정책·대책 이야기(예: 증안펀드 투입)를 맨 앞에 한 번
+  const Q = [{ tag: "오늘 꼭 알기", words: GOV_WORDS, minOutlets: 3, once: true },
+    ...(investy ? [{ tag: "내 투자", words: MARKET_WORDS, minOutlets: 2, once: true }] : []), ...interests.map((i) => ({ tag: i, words: interestWords(i), minOutlets: 1 }))];
   const hit = (it, words) => { const t = normTitle(it.title); return words.some((w) => t.includes(w)); };
   const used = new Set(), out = [];
   for (let round = 0; round < 6 && out.length < want; round++) {
     for (const q of Q) {
       if (out.length >= want) break;
+      if (q.once && round > 0) continue;
       // 관심사 이름·첫 두 낱말(핵심)이 제목에 직접 든 이야기를 먼저, 그다음 큰 이야기 순 (예: 여행 → '해외여행' 기사가 '환율' 기사보다 먼저)
       const core = [q.tag, ...q.words.slice(0, 2)];
       const cands = S.filter((x) => !used.has(x) && x.outlets >= q.minOutlets && x.items.some((it) => hit(it, q.words) && !taken.has(it.url)));

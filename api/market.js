@@ -411,8 +411,10 @@ async function settle(force) {
           const row = rows.find((r) => r[0] >= fillDay(t.id, sat));
           fair = !!row && row[2] === t.price;
         } else if (fair && t.at < ORDER_RULE_FROM) {
-          // 예전 규칙: 미국 종목은 날짜가 뉴욕 기준이고 종가가 하루 늦게 모일 수 있어서 마지막 3일 안에서 찾는다
-          fair = rows.filter((r) => r[0] <= d).slice(String(t.id).startsWith(US_PREFIX) ? -3 : -2).some((r) => r[2] === t.price);
+          // 예전 규칙(그때 앱에 보이던 최근 종가로 바로 체결): 국내 종가는 다음 영업일 낮에 올라와서, 거래한 날(d) 아침엔 그저께 종가가 보였다.
+          // → 거래일 '전' 종가 3개(어제·그저께·주말·휴일 낀 경우) 중 하나면 인정. 미국은 날짜가 뉴욕 기준이라 거래일까지 4개
+          const us = String(t.id).startsWith(US_PREFIX);
+          fair = rows.filter((r) => (us ? r[0] <= d : r[0] < d)).slice(us ? -4 : -3).some((r) => r[2] === t.price);
         } else fair = false; // 서버에 주문 기록이 없는 새 거래는 인정하지 않음
         if (!fair) { bad++; continue; }
         if (t.side === "buy") { if (t.qty * t.price > cash + 1) { bad++; continue; } cash -= t.qty * t.price; qty[t.id] = (qty[t.id] || 0) + t.qty; }
