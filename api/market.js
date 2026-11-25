@@ -350,6 +350,31 @@ const usFs = { get: fsGetMany, set: fsSet };
 const fsDel = (path) => fsReq(path, { method: "DELETE" });
 const kstDay = (at) => new Date(at + 9 * 3600e3).toISOString().slice(0, 10).replace(/-/g, "");
 
+// 주문 체결일: 주문한 뒤 처음 끝나는 장의 날짜 (국내 15:30 한국, 미국 16:00 뉴욕, 주말 건너뜀). 휴대폰 index.html fillDay와 같은 규칙
+function fillDay(id, at) {
+  const us = String(id).startsWith(US_PREFIX);
+  const p = Object.fromEntries(new Intl.DateTimeFormat("en-US", { timeZone: us ? "America/New_York" : "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(new Date(at)).map((x) => [x.type, x.value]));
+  const d = new Date(Date.UTC(+p.year, +p.month - 1, +p.day));
+  if ([0, 6].includes(d.getUTCDay()) || +p.hour * 60 + +p.minute >= (us ? 960 : 930)) { do d.setUTCDate(d.getUTCDate() + 1); while ([0, 6].includes(d.getUTCDay())); }
+  return d.toISOString().slice(0, 10).replace(/-/g, "");
+}
+// 이 시각 전의 거래는 예전 규칙(그때 보이던 최근 종가로 바로 체결)으로 검사한다. 그 뒤로는 주문 체결만 인정
+const ORDER_RULE_FROM = Date.parse("2026-11-25T06:00:00Z");
+// 주문 받기: 로그인 표로 본인 확인 뒤, 서버 시각을 invOrders/{시즌}_{uid}에 남긴다(휴대폰이 시각을 꾸밀 수 없게)
+async function takeOrder(req) {
+  const me = await whoIs(req);
+  if (!me) return { status: 401, body: { error: "로그인이 필요해요" } };
+  const oid = String(req.body?.oid || ""), id = String(req.body?.id || "").slice(0, 40);
+  if (!/^[a-z0-9]{6,20}$/.test(oid) || !id) return { status: 400, body: { error: "잘못된 주문이에요" } };
+  const today = kstYmd(0), season = `${today.slice(0, 4)}-${today.slice(4, 6)}`, path = `invOrders/${season}_${me}`;
+  const doc = await fsReq(path);
+  let o = {}; try { o = JSON.parse(fromFs(doc?.fields?.o) || "{}"); } catch {}
+  if (Object.keys(o).length >= 400) return { status: 429, body: { error: "이번 시즌 주문이 너무 많아요" } };
+  const at = o[oid] || Date.now();
+  if (!o[oid]) { o[oid] = at; await fsSet(path, { o: JSON.stringify(o), at }); }
+  return { status: 200, body: { ok: true, at, day: fillDay(id, at) } };
+}
+
 // 순위 다시 계산: 시즌의 모든 거래 기록을 공식 종가로 따라가며 검증
 async function settle(force) {
   const today = kstYmd(0), season = `${today.slice(0, 4)}-${today.slice(4, 6)}`;
@@ -360,6 +385,9 @@ async function settle(force) {
   // 공유 동의·가입일 (investMeta/{uid}, 서버만 씀)
   const metas = players.length ? await fsGetMany(players.map((p) => `investMeta/${p.id}`), ["share", "joined"]).catch(() => ({})) : {};
   for (const p of players) { const mt = metas[`investMeta/${p.id}`]; if (mt) { p.share = mt.share; p.joined = mt.joined; } }
+  // 서버가 받은 주문 시각 (주문 체결 검사용)
+  const ords = players.length ? await fsGetMany(players.map((p) => `invOrders/${season}_${p.id}`), ["o"]).catch(() => ({})) : {};
+  for (const p of players) { try { p.orders = JSON.parse(ords[`invOrders/${season}_${p.id}`]?.o || "{}"); } catch { p.orders = {}; } }
   const logs = {}, names = new Set();
   for (const p of players) {
     try { logs[p.id] = JSON.parse(p.log || "[]"); } catch { logs[p.id] = []; }
@@ -377,9 +405,15 @@ async function settle(force) {
     const qty = {}, lots = [];
     for (const t of (logs[p.id] || []).filter((x) => x && x.at <= now + 60e3).sort((a, b) => a.at - b.at)) {
       if (t.kind === "stock") {
-        const rows = S[t.id], d = kstDay(t.at);
-        // 미국 종목은 날짜가 뉴욕 기준이고 종가가 하루 늦게 모일 수 있어서 마지막 3일 안에서 찾는다
-        const fair = rows && Number.isInteger(t.qty) && t.qty > 0 && rows.filter((r) => r[0] <= d).slice(String(t.id).startsWith(US_PREFIX) ? -3 : -2).some((r) => r[2] === t.price);
+        const rows = S[t.id], d = kstDay(t.at), sat = t.oid ? p.orders?.[t.oid] : null;
+        let fair = !!rows && Number.isInteger(t.qty) && t.qty > 0;
+        if (fair && sat) { // 주문 체결: 서버가 받은 주문 시각 뒤 처음 끝난 장의 종가와 같아야 한다
+          const row = rows.find((r) => r[0] >= fillDay(t.id, sat));
+          fair = !!row && row[2] === t.price;
+        } else if (fair && t.at < ORDER_RULE_FROM) {
+          // 예전 규칙: 미국 종목은 날짜가 뉴욕 기준이고 종가가 하루 늦게 모일 수 있어서 마지막 3일 안에서 찾는다
+          fair = rows.filter((r) => r[0] <= d).slice(String(t.id).startsWith(US_PREFIX) ? -3 : -2).some((r) => r[2] === t.price);
+        } else fair = false; // 서버에 주문 기록이 없는 새 거래는 인정하지 않음
         if (!fair) { bad++; continue; }
         if (t.side === "buy") { if (t.qty * t.price > cash + 1) { bad++; continue; } cash -= t.qty * t.price; qty[t.id] = (qty[t.id] || 0) + t.qty; }
         else { if ((qty[t.id] || 0) < t.qty) { bad++; continue; } cash += t.qty * t.price; qty[t.id] -= t.qty; }
@@ -477,6 +511,12 @@ export default async function handler(req, res) {
       await settle(true).catch((e) => console.error("settle after share", e.message));
       return res.status(200).json({ ok: true, share });
     } catch (e) { console.error(e); return res.status(200).json({ error: "공유 설정을 저장하지 못했어요" }); }
+  }
+  if (req.query.game === "order") {
+    if (req.method !== "POST") return res.status(400).json({ error: "잘못된 요청이에요" });
+    res.setHeader("Cache-Control", "no-store");
+    if (!adminReady()) return res.status(200).json({ ok: true, at: Date.now(), local: true }); // 순위 저장소가 없으면 서버 시각만
+    try { const r = await takeOrder(req); return res.status(r.status).json(r.body); } catch (e) { console.error(e); return res.status(200).json({ error: "주문을 받지 못했어요" }); }
   }
   if (req.query.game === "hold") {
     if (!adminReady()) return res.status(200).json({ error: "아직 준비 중이에요" });

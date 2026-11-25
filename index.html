@@ -5947,9 +5947,9 @@ const INV_START = 10000000;
 function seasonKey(d = new Date()) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`; }
 function seasonLabel(k) { return `${Number(k.slice(5))}월 시즌`; }
 function seasonLeft() { const d = new Date(); return new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate() - d.getDate(); }
-function invNewSeason() { return { season: seasonKey(), cash: INV_START, hold: {}, trades: [], evals: [], bonus: { day: "", amt: 0 }, bonusTotal: 0, idx0: null, bomb: null }; }
+function invNewSeason() { return { season: seasonKey(), cash: INV_START, hold: {}, trades: [], orders: [], evals: [], bonus: { day: "", amt: 0 }, bonusTotal: 0, idx0: null, bomb: null }; }
 function loadInv() {
-  try { const v = JSON.parse(localStorage.getItem(INV_KEY)); if (v && v.season) return { seasons: [], badges: {}, px: {}, good: 0, ...v }; } catch {}
+  try { const v = JSON.parse(localStorage.getItem(INV_KEY)); if (v && v.season) return { seasons: [], badges: {}, px: {}, good: 0, orders: [], ...v }; } catch {}
   return { ...invNewSeason(), seasons: [], badges: {}, px: {}, good: 0, seed: Math.random().toString(36).slice(2, 10) };
 }
 let inv = loadInv();
@@ -6005,11 +6005,12 @@ function holdValue(h, at) {
   const p = invPrice(h.id);
   return p != null ? h.qty * p : h.cost;
 }
-function invTotal() { return inv.cash + Object.values(inv.hold).reduce((s, h) => s + holdValue(h), 0); }
+function invReserved() { return (inv.orders || []).reduce((s, o) => s + (o.side === "buy" ? o.reserve || 0 : 0), 0); } // 사기 주문에 묶어 둔 돈
+function invTotal() { return inv.cash + invReserved() + Object.values(inv.hold).reduce((s, h) => s + holdValue(h), 0); }
 function invBase() { return INV_START + (inv.bonusTotal || 0); }
 function invRet() { return (invTotal() / invBase() - 1) * 100; }
 function invGroups() {
-  const g = { 주식: 0, 채권: 0, "예금·CMA": 0, 현금: inv.cash };
+  const g = { 주식: 0, 채권: 0, "예금·CMA": 0, 현금: inv.cash + invReserved() };
   for (const h of Object.values(inv.hold)) g[h.kind === "stock" ? "주식" : rateById(h.id)?.group || "예금·CMA"] += holdValue(h);
   return g;
 }
@@ -6044,7 +6045,7 @@ async function loadInvest() {
   invData.loading = true;
   try {
     const core = new Set((invData.game?.companies || []).filter((c) => c.core).map((c) => c.id));
-    const extra = [...new Set([...Object.values(inv.hold).filter((h) => h.kind === "stock").map((h) => h.id), ...invData.extra])].filter((n) => !core.has(n)).slice(0, 10);
+    const extra = [...new Set([...Object.values(inv.hold).filter((h) => h.kind === "stock").map((h) => h.id), ...(inv.orders || []).map((o) => o.sid), ...invData.extra])].filter((n) => !core.has(n)).slice(0, 10);
     const g = await getJson(`/api/market?game=1${extra.length ? `&extra=${encodeURIComponent(extra.join(","))}` : ""}`);
     invData.game = g;
     for (const c of g.companies) { const q = quote(c.id); if (q) inv.px[c.id] = q.v; }
@@ -6055,6 +6056,7 @@ async function loadInvest() {
     if (inv.idx0 == null && g.index?.length) inv.idx0 = g.index[0][1];
     inv.lastIdx = curIdx();
     if (g.us?.index?.length) inv.lastUsIdx = usIdx();
+    fillOrders();
     invTick();
     saveInvQuiet();
   } catch { invData.error = true; }
@@ -6091,37 +6093,109 @@ function rollSeason() {
 
 // ── 사고팔기 ──
 function holdKey(kind, id) { return `${kind}:${id}`; }
-function buyStock(id, qty, reason) {
-  const p = invPrice(id), name = company(id)?.name || id;
-  if (!(p > 0) || !(qty > 0)) return toast("수량을 확인해 주세요");
-  const amt = p * qty;
-  if (amt > inv.cash) return toast(`현금이 모자라요. 최대 ${fmt(Math.floor(inv.cash / p))}주까지 살 수 있어요`);
-  const k = holdKey("stock", id);
-  const h = inv.hold[k] || (inv.hold[k] = { kind: "stock", id, name, qty: 0, cost: 0, lots: [] });
-  const lot = { at: Date.now(), qty, price: p, idx: idxFor(id), reason };
-  h.qty += qty; h.cost += amt; h.lots.push(lot);
-  inv.cash -= amt;
-  inv.trades.unshift({ at: lot.at, kind: "stock", side: "buy", id, name, qty, price: p, reason });
-  afterTrade(`${name} ${fmt(qty)}주를 ${won(amt)}에 샀어요`);
+// ── 주문: 누른 순간 체결하지 않고, 주문한 뒤 처음 끝나는 장의 종가로 체결한다 (늦게 올라오는 종가로 미리 아는 값에 사고파는 것 막기)
+// 국내는 장 마감 15:30(한국), 미국은 16:00(뉴욕). 그 전에 주문하면 그날 종가, 뒤나 주말이면 다음 거래일 종가. 공휴일이면 그다음 거래일 종가.
+// 로그인했으면 주문 시각은 서버가 받은 시각(/api/market?game=order)으로 정한다 → 순위 계산도 그 시각으로 검사
+function fillDay(id, at) {
+  const us = isUS(id);
+  const p = Object.fromEntries(new Intl.DateTimeFormat("en-US", { timeZone: us ? "America/New_York" : "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(new Date(at)).map((x) => [x.type, x.value]));
+  const d = new Date(Date.UTC(+p.year, +p.month - 1, +p.day));
+  if ([0, 6].includes(d.getUTCDay()) || +p.hour * 60 + +p.minute >= (us ? 960 : 930)) { do d.setUTCDate(d.getUTCDate() + 1); while ([0, 6].includes(d.getUTCDay())); }
+  return d.toISOString().slice(0, 10).replace(/-/g, "");
 }
-function sellStock(id, qty) {
-  const k = holdKey("stock", id), h = inv.hold[k], p = invPrice(id);
-  if (!h || !(qty > 0) || qty > h.qty || !(p > 0)) return toast("수량을 확인해 주세요");
-  let left = qty; const sold = []; // 먼저 산 것부터 판다
-  while (left > 0 && h.lots.length) {
-    const l = h.lots[0], n = Math.min(l.qty, left);
-    sold.push({ ...l, qty: n }); l.qty -= n; left -= n;
-    if (!l.qty) h.lots.shift();
+function closeAt(id, d) { return Date.UTC(+d.slice(0, 4), +d.slice(4, 6) - 1, +d.slice(6, 8), isUS(id) ? 21 : 6, isUS(id) ? 0 : 30); } // 그날 장 마감 시각(대략)
+function fillRow(id, day) { return (invData.game?.series?.[id] || []).find((r) => r[0] >= day) || null; }
+function idxOn(id, d) { const I = isUS(id) ? invData.game?.us?.index : invData.game?.index; return seriesAt(I, d)?.[1] ?? idxFor(id); }
+function sellingQty(id) { return (inv.orders || []).filter((o) => o.side === "sell" && o.sid === id).reduce((s, o) => s + o.qty, 0); }
+function orderWhen(day) { // "오늘 장 마감(11월 25일) 종가" 같은 말
+  const kst = new Date(Date.now() + 9 * 3600e3), today = kst.toISOString().slice(0, 10).replace(/-/g, "");
+  return `${day === today ? "오늘 " : ""}${ymdLabel(day)} 종가`;
+}
+async function placeOrder(side, id, qty, reason) {
+  const name = company(id)?.name || id, P = invPrice(id);
+  if (!(qty > 0) || !(P > 0)) return toast("수량을 확인해 주세요");
+  if (side === "buy" && qty * P > inv.cash) return toast(`현금이 모자라요. 최대 ${fmt(Math.floor(inv.cash / P))}주까지 주문할 수 있어요`);
+  if (side === "sell" && qty > (inv.hold[holdKey("stock", id)]?.qty || 0) - sellingQty(id)) return toast("팔 수 있는 수량을 확인해 주세요");
+  const oid = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  let at = Date.now();
+  if (sync.on) { // 로그인했으면 서버가 주문 시각을 정한다
+    try {
+      const u = await invUser();
+      if (u) {
+        const j = await getJson("/api/market?game=order", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${await u.getIdToken()}` }, body: JSON.stringify({ oid, id }) });
+        if (!j.at) throw new Error(j.error || "주문 실패");
+        at = j.at;
+      }
+    } catch (e) { return toast(e.body?.error || "주문을 넣지 못했어요. 잠시 후 다시 해 주세요"); }
   }
-  h.qty -= qty; h.cost -= sold.reduce((s, l) => s + l.qty * l.price, 0);
-  inv.cash += p * qty;
-  const ev = evalLots(h.name, sold, p, idxFor(id), false, idxLabel(id));
-  inv.evals.unshift(ev);
-  if (ev.good) inv.good = (inv.good || 0) + 1;
-  if (!h.qty) delete inv.hold[k];
-  inv.trades.unshift({ at: Date.now(), kind: "stock", side: "sell", id, name: h.name, qty, price: p });
-  ui.modal = { kind: "inv-eval", route: "invest", id: ev.id };
-  afterTrade(`${h.name} ${fmt(qty)}주를 팔았어요`, true);
+  const day = fillDay(id, at), reserve = side === "buy" ? qty * P : 0;
+  inv.cash -= reserve;
+  inv.orders = [...(inv.orders || []), { oid, at, side, sid: id, name, qty, reason: side === "buy" ? reason : null, day, reserve }];
+  afterTrade(`${name} ${fmt(qty)}주 ${side === "buy" ? "사기" : "팔기"} 주문을 넣었어요. ${orderWhen(day)}로 체결돼요`);
+  fillOrders(true); // 이미 그 종가가 있으면(드문 경우) 바로
+}
+function cancelOrder(oid) {
+  const o = (inv.orders || []).find((x) => x.oid === oid);
+  if (!o) return;
+  inv.cash += o.reserve || 0;
+  inv.orders = inv.orders.filter((x) => x.oid !== oid);
+  saveInv(); render(); toast(`${o.name} ${o.side === "buy" ? "사기" : "팔기"} 주문을 취소했어요`);
+}
+// 체결: 주문한 종목의 시세에 체결일(또는 그 뒤 첫 거래일) 종가가 들어와 있으면 그 값으로
+function fillOrders(quiet) {
+  if (!invData.game || !(inv.orders || []).length) return;
+  const done = [], msgs = [];
+  let lastEval = null;
+  for (const o of [...inv.orders].sort((a, b) => a.at - b.at)) {
+    const row = fillRow(o.sid, o.day);
+    if (!row) continue;
+    const price = row[2], at = Math.max(o.at, closeAt(o.sid, row[0]));
+    done.push(o.oid);
+    if (o.side === "buy") {
+      const avail = inv.cash + (o.reserve || 0), q = Math.min(o.qty, Math.floor(avail / price));
+      inv.cash = avail;
+      if (q <= 0) { msgs.push(`${o.name} 사기 주문은 현금이 모자라 취소됐어요`); continue; }
+      const k = holdKey("stock", o.sid);
+      const h = inv.hold[k] || (inv.hold[k] = { kind: "stock", id: o.sid, name: o.name, qty: 0, cost: 0, lots: [] });
+      h.qty += q; h.cost += q * price; h.lots.push({ at, qty: q, price, idx: idxOn(o.sid, row[0]), reason: o.reason || { type: "none" } });
+      inv.cash -= q * price;
+      inv.trades.push({ at, oat: o.at, oid: o.oid, d: row[0], kind: "stock", side: "buy", id: o.sid, name: o.name, qty: q, price, reason: o.reason });
+      msgs.push(`${o.name} ${fmt(q)}주가 ${ymdLabel(row[0])} 종가 ${won(price)}에 체결됐어요${q < o.qty ? " (현금이 모자라 일부만)" : ""}`);
+    } else {
+      const k = holdKey("stock", o.sid), h = inv.hold[k], q = Math.min(o.qty, h?.qty || 0);
+      if (q <= 0) continue;
+      let left = q; const sold = []; // 먼저 산 것부터 판다
+      while (left > 0 && h.lots.length) {
+        const l = h.lots[0], n = Math.min(l.qty, left);
+        sold.push({ ...l, qty: n }); l.qty -= n; left -= n;
+        if (!l.qty) h.lots.shift();
+      }
+      h.qty -= q; h.cost -= sold.reduce((s2, l) => s2 + l.qty * l.price, 0);
+      inv.cash += q * price;
+      const ev = evalLots(h.name, sold, price, idxOn(o.sid, row[0]), false, idxLabel(o.sid));
+      inv.evals.unshift(ev); lastEval = ev;
+      if (ev.good) inv.good = (inv.good || 0) + 1;
+      if (!h.qty) delete inv.hold[k];
+      inv.trades.push({ at, oat: o.at, oid: o.oid, d: row[0], kind: "stock", side: "sell", id: o.sid, name: h.name, qty: q, price });
+      msgs.push(`${h.name} ${fmt(q)}주가 ${ymdLabel(row[0])} 종가 ${won(price)}에 팔렸어요`);
+    }
+  }
+  if (!done.length) return;
+  inv.orders = inv.orders.filter((o) => !done.includes(o.oid));
+  inv.trades.sort((a, b) => b.at - a.at); // 최근 것이 앞
+  if (lastEval && !ui.modal && route() === "invest") ui.modal = { kind: "inv-eval", route: "invest", id: lastEval.id };
+  checkInvBadges(); saveInv();
+  if (!quiet || msgs.length) { toast(msgs.join(" · ")); pushRank(); }
+  if (route() === "invest") render();
+}
+// 체결 기다리는 주문 (내 포트폴리오 위)
+function ordersBlock() {
+  const O = inv.orders || [];
+  if (!O.length) return "";
+  return `<section class="card"><div class="sec-title" style="margin:0"><h2>체결 기다리는 주문</h2><span>${O.length}개</span></div>
+    ${O.map((o) => `<div class="r" style="padding:8px 0;border-bottom:1px solid var(--line)"><span><b>${esc(o.name)}</b> ${fmt(o.qty)}주 ${o.side === "buy" ? "사기" : "팔기"}<br><small class="hint">${orderWhen(o.day)}로 체결 · 그 종가는 다음 거래일 오후에 들어와요</small></span>
+      <button class="chip small" data-act="inv-cancel" data-id="${o.oid}">취소</button></div>`).join("")}
+    <p class="hint" style="margin:6px 0 0">주문한 뒤 처음 끝나는 장의 종가로 체결돼요. 미리 아는 가격으로 사고팔 수 없게 하려는 규칙이에요.</p></section>`;
 }
 function depositRate(id, amt) {
   const pr = rateById(id);
@@ -6220,7 +6294,7 @@ async function pushRank() {
     const u = await invUser();
     if (!u) return;
     const log = inv.trades.filter((t) => t.kind === "stock" || t.kind === "rate")
-      .map(({ at, kind, side, id, qty, price, amt }) => ({ at, kind, side, id, qty, price, amt }));
+      .map(({ at, oid, kind, side, id, qty, price, amt }) => ({ at, oid, kind, side, id, qty, price, amt }));
     await fb.F.setDoc(fb.F.doc(fb.db, "invest", inv.season, "trades", u.uid), { nick: String(profile?.nickname || "익명").slice(0, 12), log: JSON.stringify(log), at: Date.now() });
   } catch {}
 }
@@ -6562,6 +6636,7 @@ function viewInvest() {
   <main class="scroll inv">
     <div class="lumi-says inv-says">${mascot(44, ...lumiMood())}<p class="bubble-onb">${lumiInvestLine()}</p></div>
 
+    ${ordersBlock()}
     ${traded ? portfolio : mixBlock()}
 
     <section class="card inv-top">
@@ -6594,7 +6669,7 @@ function viewInvest() {
     <section class="card"><div class="sec-title" style="margin:0"><h2>모의투자 배지</h2><span>${badges.filter((b) => b.ok).length}/${badges.length}</span></div>
       <div class="inv-badges">${badges.map((b) => `<div class="${b.ok ? "ok" : ""}" title="${esc(b.desc)}"><span>${b.icon}</span><b>${b.name}</b><small>${esc(b.desc)}</small></div>`).join("")}</div></section>
 
-    <p class="foot">가상 돈으로 하는 게임이에요. 주식 가격은 실제 전일 종가(금융위원회·한국거래소 자료)이고, 가장 최근 종가로 언제든 바로 사고팔아요. 코스피도 실제 값이에요. ${RATE_NOTE} 힌트와 평가는 투자 권유가 아닌 공부용 참고예요.</p>
+    <p class="foot">가상 돈으로 하는 게임이에요. 주식 가격은 실제 종가(금융위원회 자료)이고, 사고팔기는 주문한 뒤 처음 끝나는 장의 종가로 체결돼요(국내 15:30·미국 16:00 뉴욕 기준). 코스피도 실제 값이에요. ${RATE_NOTE} 힌트와 평가는 투자 권유가 아닌 공부용 참고예요.</p>
   </main>`;
 }
 // 힌트 팝업
@@ -6724,7 +6799,8 @@ function modalInvTrade(m) {
     if (invData.game && !invData.extra.includes(id)) { invData.extra.push(id); loadInvest(); }
     return `<div class="sec-title" style="margin:0"><h2>${esc(isUS(id) ? id.slice(3) : id)}</h2>${close}</div><p class="hint">${invData.game && invData.extra.includes(id) && !invData.loading ? "이 종목의 가격을 찾지 못했어요. 검색에서 정확한 이름을 골라 주세요." : "가격을 불러오는 중이에요…"}</p>`;
   }
-  const qty = Math.max(1, m.qty || 1), max = side === "buy" ? Math.floor(inv.cash / Q.v) : h?.qty || 0;
+  const qty = Math.max(1, m.qty || 1), max = side === "buy" ? Math.floor(inv.cash / Q.v) : Math.max(0, (h?.qty || 0) - sellingQty(id));
+  const fd = fillDay(id, Date.now());
   const rel = invHints().filter((x) => x.dir).sort((a, b) => b.stocks.includes(id) - a.stocks.includes(id)).slice(0, 3);
   const rs = m.reason || {};
   const chip = (type, label, extra = "") => `<button class="chip ${rs.type === type && (type !== "hint" || rs.hintId === extra) ? "on" : ""}" data-act="inv-reason" data-t="${type}" data-h="${extra}">${label}</button>`;
@@ -6735,7 +6811,7 @@ function modalInvTrade(m) {
       ${c.us && usdQuote(id) ? (() => { const D = usdQuote(id); return `<div class="r"><span class="hint">${ymdLabel(D.date)} 뉴욕 시가 · 종가</span><span class="num">${usd$(D.o)} · ${usd$(D.v)}</span></div>
       <div class="r"><span class="hint">환율 (유럽중앙은행 기준)</span><span class="num">1달러 = ${fmt(Math.round(Q.v / D.v * 100) / 100, 2)}원</span></div>`; })() : ""}
       <div class="r"><span class="hint">${ymdLabel(Q.date)} 시가${c.us ? " (원화)" : ""}</span><span class="num">${fmt(Q.o)}원</span></div>
-      <div class="r"><span class="hint">${ymdLabel(Q.date)} 종가${c.us ? " (원화)" : ""} · 이 값으로 바로 ${side === "buy" ? "사요" : "팔아요"}</span><b class="num">${fmt(Q.v)}원</b></div>
+      <div class="r"><span class="hint">${ymdLabel(Q.date)} 종가${c.us ? " (원화)" : ""} · 참고 값</span><b class="num">${fmt(Q.v)}원</b></div>
       <div class="r"><span class="hint">전날보다</span><span class="num ${tone(Q.pct)}">${pct(Q.pct)}</span></div>
       ${invData.game.sample ? `<span class="badge b-sample">예시 데이터</span>` : ""}
       ${companyChart(id)}
@@ -6743,11 +6819,12 @@ function modalInvTrade(m) {
     <div class="r"><b>수량</b><span class="inv-step"><button class="icon-btn" data-act="inv-qty" data-d="-1" aria-label="하나 빼기">−</button>
       <input class="field num" id="inv-qty" inputmode="numeric" value="${qty}" aria-label="수량"><button class="icon-btn" data-act="inv-qty" data-d="1" aria-label="하나 더하기">+</button>
       <button class="chip small" data-act="inv-max">최대 ${fmt(max)}</button></span></div>
-    <div class="r"><span class="hint">${side === "buy" ? "필요한 돈 · 남는 현금" : "받는 돈"}</span><span class="num" id="inv-cost">${side === "buy" ? `${won(qty * Q.v)} · ${won(Math.max(0, inv.cash - qty * Q.v))}` : won(qty * Q.v)}</span></div>
+    <p class="hint" style="margin:0;padding:10px 12px;border-radius:12px;background:var(--soft)">지금 주문하면 <b>${orderWhen(fd)}</b>로 체결돼요. 그 종가는 다음 거래일 오후에 들어오고, 체결 전에는 취소할 수 있어요. 아래 금액은 위 참고 값으로 계산한 예상이에요.</p>
+    <div class="r"><span class="hint">${side === "buy" ? "예상 필요한 돈 · 남는 현금" : "예상 받는 돈"}</span><span class="num" id="inv-cost">${side === "buy" ? `${won(qty * Q.v)} · ${won(Math.max(0, inv.cash - qty * Q.v))}` : won(qty * Q.v)}</span></div>
     ${side === "buy" ? `<div><b>왜 사나요?</b> <span class="hint">안 골라도 돼요</span>
       <div class="chips" style="margin-top:8px">${rel.map((x) => chip("hint", (x.kind === "rumor" ? "소문: " : "") + esc(x.title.length > 18 ? x.title.slice(0, 17) + "…" : x.title), x.id)).join("")}${chip("mine", "내 판단")}${chip("etc", "기타")}</div>
       ${rs.type === "mine" || rs.type === "etc" ? `<input class="field" id="inv-why" maxlength="40" style="margin-top:8px" placeholder="${rs.type === "etc" ? "이유를 직접 적어 주세요 (예: 이 회사 제품을 자주 써요)" : "어떻게 판단했는지 한 줄 (안 적어도 돼요)"}" value="${esc(rs.text || "")}">` : ""}</div>` : ""}
-    <button class="btn" data-act="inv-do">${fmt(qty)}주 ${side === "buy" ? "사기" : "팔기"}</button>`;
+    <button class="btn" data-act="inv-do">${fmt(qty)}주 ${side === "buy" ? "사기" : "팔기"} 주문</button>`;
 }
 function modalInvEval(m) {
   const e = inv.evals.find((x) => x.id === m.id);
@@ -6790,7 +6867,7 @@ document.addEventListener("click", (e) => {
     case "inv-qty": m.qty = Math.max(1, (parseInt(document.getElementById("inv-qty")?.value, 10) || 1) + Number(el.dataset.d)); render(); break;
     case "inv-max": {
       const id = m.k.slice(6), P = invPrice(id);
-      const mx = m.side === "sell" ? inv.hold[holdKey("stock", id)]?.qty || 1 : Math.floor(inv.cash / (P || 1));
+      const mx = m.side === "sell" ? (inv.hold[holdKey("stock", id)]?.qty || 0) - sellingQty(id) || 1 : Math.floor(inv.cash / (P || 1));
       m.qty = Math.max(1, mx); render(); break;
     }
     case "inv-reason": {
@@ -6803,7 +6880,7 @@ document.addEventListener("click", (e) => {
     }
     case "inv-do": {
       const id = m.k.slice(6), qty = parseInt(document.getElementById("inv-qty")?.value, 10) || 0;
-      if (m.side === "sell") { sellStock(id, qty); break; }
+      if (m.side === "sell") { placeOrder("sell", id, qty); break; }
       let reason = { type: "none" };
       if (m.reason?.type === "hint") { const h = hintById(m.reason.hintId); if (h) reason = { type: "hint", hintId: h.id, title: h.title, dir: h.dir, days: h.days, rumor: h.kind === "rumor" }; }
       else if (m.reason) {
@@ -6811,9 +6888,10 @@ document.addEventListener("click", (e) => {
         if (m.reason.type === "etc" && !text) { toast("기타 이유를 적어 주세요"); break; }
         reason = { type: m.reason.type, text };
       }
-      buyStock(id, qty, reason);
+      placeOrder("buy", id, qty, reason);
       break;
     }
+    case "inv-cancel": cancelOrder(el.dataset.id); break;
     case "inv-deposit": depositRate(el.dataset.id, Math.round((parseFloat(document.getElementById("inv-amt")?.value) || 0) * 10000)); break;
     case "inv-withdraw": withdrawRate(el.dataset.id); break;
     case "inv-fill": fillMix(); break;
@@ -6845,7 +6923,7 @@ document.addEventListener("input", (e) => {
     const box = document.getElementById("inv-cost");
     if (box && P) box.textContent = m.side === "buy" ? `${won(q * P)} · ${won(Math.max(0, inv.cash - q * P))}` : won(q * P);
     const btn = document.querySelector('[data-act="inv-do"]');
-    if (btn) btn.textContent = `${fmt(q)}주 ${m.side === "buy" ? "사기" : "팔기"}`;
+    if (btn) btn.textContent = `${fmt(q)}주 ${m.side === "buy" ? "사기" : "팔기"} 주문`;
   }
   if (el.id === "inv-why" && ui.modal?.reason) ui.modal.reason.text = el.value;
 });
