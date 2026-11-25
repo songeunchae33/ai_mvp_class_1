@@ -196,11 +196,29 @@ export async function newsdata(q) {
   }
 }
 
+// 시장 전체를 흔드는 소식(정부 대책·증시·금리·환율)을 따로 한 번 더 찾는다. '경제 최신'만 보면 한 곳이 찍어내는 기사에 묻힐 수 있어서
+const MARKET_Q = "증시 OR 코스피 OR 금리 OR 환율 OR 정부 대책";
+// GDELT 한국어 기사 (https://api.gdeltproject.org, 무료 공개 데이터, 제목·링크만). 여러 언론사를 넓게 봐서 큰 화제를 놓치지 않게
+async function gdeltKo(retry = true) {
+  const q = "(증시 OR 코스피 OR 금리 OR 환율 OR 경제 OR 금융) sourcelang:korean";
+  const r = await fetch(`https://api.gdeltproject.org/api/v2/doc/doc?query=${encodeURIComponent(q)}&mode=artlist&maxrecords=75&format=json&timespan=1d&sort=hybridrel`, { signal: AbortSignal.timeout(6000) });
+  const t = (await r.text()).trim();
+  if (!t.startsWith("{")) { // 5초에 한 번 제한(해외 뉴스와 겹칠 때) → 6초 쉬고 한 번 더
+    if (retry) { await new Promise((ok) => setTimeout(ok, 6000)); return gdeltKo(false); }
+    throw new Error(`gdelt ko ${t.slice(0, 60)}`);
+  }
+  return (JSON.parse(t).articles || []).filter((a) => a.title && a.url && /[가-힣]/.test(a.title)).map((a) => {
+    const d = String(a.seendate || "");
+    const at = d.length >= 15 ? `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6, 8)}T${d.slice(9, 11)}:${d.slice(11, 13)}:00Z` : new Date().toISOString();
+    return { title: clean(a.title), url: a.url, source: source(a.url) || String(a.domain || ""), at };
+  });
+}
+
 // ── 국내 경제 최신 뉴스 하루치 모아 두기 (Firestore newsPool/kr) ──
-// 1시간에 한 번만 2쪽(기사 약 20개, NewsData 2번)을 새로 받아 최근 24시간치와 합친다 → 하루 약 48번.
+// 1시간에 한 번만 새로 받아(NewsData 3번 + GDELT 한국어 1번) 최근 24시간치와 합친다 → NewsData 하루 약 72번.
 // 한 번에 10개만 보면 아침에 쏟아진 큰 화제(예: 증안펀드)가 점심엔 사라지므로, 하루치 제목 전체로 화제 점수를 매기기 위함.
 // 제목·링크·출처·시간만 저장한다(본문 없음).
-const POOL_DOC = "newsPool/kr", POOL_EVERY = 3600e3, POOL_KEEP = 24 * 3600e3, POOL_MAX = 250;
+const POOL_DOC = "newsPool/kr", POOL_EVERY = 3600e3, POOL_KEEP = 24 * 3600e3, POOL_MAX = 400;
 let poolMem = null; // { at: 이 서버가 읽은 시각, fetchedAt, items }
 export async function newsPool() {
   if (poolMem && Date.now() - poolMem.at < 5 * 60e3 && Date.now() - poolMem.fetchedAt < POOL_EVERY) return poolMem.items;
@@ -210,11 +228,15 @@ export async function newsPool() {
   let fetchedAt = Number(f.fetchedAt) || 0;
   if (Date.now() - fetchedAt >= POOL_EVERY || !items.length) {
     const got = [];
-    try {
-      const j1 = await fetchJson(ndUrl(""), {}, 8000);
-      got.push(...ndItems(j1));
-      if (j1.nextPage) got.push(...ndItems(await fetchJson(ndUrl("", j1.nextPage), {}, 8000).catch(() => ({}))));
-    } catch (e) { console.error("newsdata pool", e.message); }
+    // ① NewsData 경제 최신 2쪽 ② NewsData 시장 전체 낱말 검색 1번 ③ GDELT 한국어 경제 기사(무료·키 없음, 여러 언론사) → 한 시간에 NewsData 3번(하루 약 72번)
+    await Promise.all([
+      fetchJson(ndUrl(""), {}, 8000).then(async (j1) => {
+        got.push(...ndItems(j1));
+        if (j1.nextPage) got.push(...ndItems(await fetchJson(ndUrl("", j1.nextPage), {}, 8000).catch(() => ({}))));
+      }).catch((e) => console.error("newsdata pool", e.message)),
+      fetchJson(ndUrl(MARKET_Q), {}, 8000).then((j) => got.push(...ndItems(j))).catch((e) => console.error("newsdata market", e.message)),
+      gdeltKo().then((l) => got.push(...l)).catch((e) => console.error("gdelt ko", e.message)),
+    ]);
     if (got.length) {
       const now = Date.now(), byUrl = new Map(items.map((it) => [it.url, it]));
       for (const it of got) if (!byUrl.has(it.url)) byUrl.set(it.url, { ...it, seen: now });

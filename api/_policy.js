@@ -106,16 +106,30 @@ export function topicWords(title) {
 // 시장·경제 전체를 흔드는 낱말과 핵심 경제 부처는 조금 더 무겁게
 const BIG = ["증시안정펀드", "증시", "코스피", "코스닥", "기준금리", "금리", "환율", "외환", "폭락", "급락", "급등", "긴급", "대책", "관세", "물가", "부동산", "공매도", "밸류업"];
 const CORE_ORG = ["금융위원회", "기획재정부", "재정경제부", "한국은행", "금융감독원"];
-export function hotScores(items) {
+// 출처(언론사·부처)별로 한 번만 센다: 한 곳이 같은 형식으로 여러 개 찍어낸 기사(예: 해외 증권사 목표가 기사)가 큰 화제로 잡히지 않게
+const srcKey = (it) => String(it.source || it.org || "").trim() || String(it.url || "").replace(/^https?:\/\/(www\.)?/, "").split("/")[0];
+const latin = (w) => /^[A-Za-z0-9]+$/.test(w);
+export function topicDf(items) {
   const df = new Map();
-  const words = items.map((it) => topicWords(it.title));
-  words.forEach((ws) => ws.forEach((w) => df.set(w, (df.get(w) || 0) + 1)));
-  return items.map((it, i) => {
-    let s = words[i].reduce((a, w) => a + Math.max(0, (df.get(w) || 0) - 1), 0);
-    s += BIG.filter((w) => it.title.includes(w)).length * 2;
+  items.forEach((it) => { const k = srcKey(it); for (const w of topicWords(it.title)) { const set = df.get(w) || new Set(); set.add(k); df.set(w, set); } });
+  return new Map([...df].map(([w, set]) => [w, set.size]));
+}
+export function hotScores(items) {
+  const df = topicDf(items);
+  return items.map((it) => {
+    let s = topicWords(it.title).reduce((a, w) => a + Math.max(0, (df.get(w) || 0) - 1) * (latin(w) ? 0.5 : 1), 0);
+    s += BIG.filter((w) => it.title.replace(/증권시장안정펀드|증안펀드/g, "증시안정펀드").includes(w)).length * 3;
     if (CORE_ORG.some((o) => String(it.source || it.org || "").includes(o))) s += 2;
     return s;
   });
+}
+// 같은 중심 낱말의 기사는 하나만: 이미 고른 기사와 중심 낱말이 같거나, 화제 낱말이 2개 이상 겹치면 같은 이야기로 보고 건너뛴다
+export function centralWord(it, df) {
+  return topicWords(it.title).filter((w) => !latin(w) || w.length >= 3).sort((a, b) => (df.get(b) || 0) - (df.get(a) || 0) || b.length - a.length)[0] || "";
+}
+export function sameStory(a, b, df) {
+  const A = new Set(topicWords(a.title)), shared = topicWords(b.title).filter((w) => A.has(w) && (df.get(w) || 0) >= 2);
+  return centralWord(a, df) === centralWord(b, df) || shared.length >= 2;
 }
 // 화제 점수가 높은 순(같으면 원래 순서). corpus는 점수를 셀 때 같이 볼 기사들(언론+보도자료 전체)
 export function byHot(items, corpus = items) {

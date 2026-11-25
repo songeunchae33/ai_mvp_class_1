@@ -6,7 +6,7 @@
 // 둘 다 &full=1 을 붙이면 '뉴스 더보기' 화면용으로 더 많이 돌려준다
 import { cache } from "./_util.js";
 import { PREF_QUERY, dedupe, keywords, searchUrl, newsReady, byTrust, globalNews, newsdata, meaty, translateTitles, translateState } from "./_news.js";
-import { pressReleases, isEcon, byHot, hotScores } from "./_policy.js";
+import { pressReleases, isEcon, byHot, hotScores, topicDf, sameStory } from "./_policy.js";
 
 const hotTop = (it, corpus) => { const all = [it, ...corpus.filter((c) => c !== it)]; return hotScores(all)[0]; };
 // 화면에는 제목·링크만 보낸다
@@ -70,10 +70,19 @@ export default async function handler(req, res) {
     const corpus = [...pool, ...policy];
     const lanes = [byHot(byTrust(pool), corpus), byHot(policy, corpus)].filter((l) => l.length);
     if (lanes.length === 2) { const [a, b] = lanes.map((l) => hotTop(l[0], corpus)); if (b > a) lanes.reverse(); }
-    const issues = [], seenT = new Set(), wantI = full ? 15 : 3;
-    for (let i = 0; issues.length < wantI && lanes.some((l) => l.length > i); i++) for (const l of lanes) {
-      const it = l[i], k = it?.title.replace(/[^가-힣A-Za-z0-9]/g, "").slice(0, 14);
-      if (it && !seenT.has(k) && issues.length < wantI) { seenT.add(k); issues.push(it); }
+    const issues = [], wantI = full ? 15 : 3, df = topicDf(corpus);
+    // 같은 이야기(중심 낱말이 같거나 화제 낱말 2개 이상 겹침)는 하나만. 한 줄씩 번갈아 고르되 같은 이야기면 그 줄의 다음 기사로
+    const pos = lanes.map(() => 0);
+    for (let guard = 0; issues.length < wantI && guard < 400; guard++) {
+      let moved = false;
+      for (let li = 0; li < lanes.length && issues.length < wantI; li++) {
+        while (pos[li] < lanes[li].length) {
+          const it = lanes[li][pos[li]++];
+          if (issues.some((x) => sameStory(x, it, df))) continue;
+          issues.push(it); moved = true; break;
+        }
+      }
+      if (!moved) break;
     }
 
     // 관심 종목·선호마다 최신 뉴스 1개씩, 모자라면 앞쪽 관심사에서 더 (NewsData 낱말 검색, 하나씩 불러서 서버가 3시간 기억)
