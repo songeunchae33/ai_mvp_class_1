@@ -6,8 +6,9 @@
 // 둘 다 &full=1 을 붙이면 '뉴스 더보기' 화면용으로 더 많이 돌려준다
 import { cache } from "./_util.js";
 import { PREF_QUERY, dedupe, keywords, searchUrl, newsReady, byTrust, globalNews, newsdata, meaty, translateTitles, translateState } from "./_news.js";
-import { pressReleases, isEcon } from "./_policy.js";
+import { pressReleases, isEcon, byHot, hotScores } from "./_policy.js";
 
+const hotTop = (it, corpus) => { const all = [it, ...corpus.filter((c) => c !== it)]; return hotScores(all)[0]; };
 // 화면에는 제목·링크만 보낸다
 const strip = (list) => list;
 
@@ -19,7 +20,7 @@ function sampleHome(interests) {
   return { sample: true, issues, forYou, keywords: ["FOMC", "환율", "반도체"] };
 }
 
-const policyNews = () => pressReleases(2).then((l) => l.filter(isEcon).slice(0, 15).map((r) => ({ title: r.title, url: r.url, source: r.org || "정책브리핑", at: new Date().toISOString() })));
+const policyNews = () => pressReleases(2, true).then((l) => l.filter(isEcon).slice(0, 30).map((r) => ({ title: r.title, url: r.url, source: r.org || "정책브리핑", at: new Date().toISOString() }))); // 제목·링크만이라 변경 금지 유형도 넣음
 // 낱말 검색이 비면, 이미 받은 기사(경제 최신·정책브리핑) 제목에서 그 낱말이 든 것으로
 const byWords = (list, tag, q) => {
   const words = [tag, ...String(q || "").split(/\s+/)].filter((w) => w && w.length >= 2);
@@ -64,8 +65,11 @@ export default async function handler(req, res) {
 
   try {
     const pool = dedupe(nd).filter(meaty);
-    // 오늘의 이슈: 언론(신뢰 순) · 정책브리핑을 번갈아 골라 한 출처에 쏠리지 않게
-    const lanes = [byTrust(pool), policy].filter((l) => l.length);
+    // 오늘의 이슈: 여러 언론·부처가 같이 다루는 화제부터(byHot), 같은 화제 점수면 믿을 만한 출처 먼저.
+    // 언론 · 정책브리핑을 번갈아 골라 한 출처에 쏠리지 않게 하되, 화제 점수가 더 높은 쪽이 첫 줄
+    const corpus = [...pool, ...policy];
+    const lanes = [byHot(byTrust(pool), corpus), byHot(policy, corpus)].filter((l) => l.length);
+    if (lanes.length === 2) { const [a, b] = lanes.map((l) => hotTop(l[0], corpus)); if (b > a) lanes.reverse(); }
     const issues = [], seenT = new Set(), wantI = full ? 15 : 3;
     for (let i = 0; issues.length < wantI && lanes.some((l) => l.length > i); i++) for (const l of lanes) {
       const it = l[i], k = it?.title.replace(/[^가-힣A-Za-z0-9]/g, "").slice(0, 14);

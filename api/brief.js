@@ -4,7 +4,7 @@
 // POST /api/brief { text }                  → 붙여넣은 뉴스레터 풀이 (저장하지 않음)
 import { generate, aiReady, levelRule } from "./_ai.js";
 import { cache } from "./_util.js";
-import { pressReleases, isEcon, interestScore } from "./_policy.js";
+import { pressReleases, isEcon, interestScore, hotScores, atKey } from "./_policy.js";
 
 const SCHEMA = {
   type: "object",
@@ -73,16 +73,19 @@ export default async function handler(req, res) {
   const interests = String(req.query.interests || "").split(",").map((s) => s.trim()).filter(Boolean).slice(0, 5);
   const who = String(req.query.who || "").slice(0, 60); // 예: "대학생, 전세·내 집 마련"
   try {
-    // 최근 7일 경제 보도자료 중 관심사와 겹치는 것을 앞에 두고 40개까지
-    const pool = (await pressReleases(7)).filter(isEcon)
-      .map((p, i) => ({ p, i, s: interestScore(p, interests) }))
+    // 최근 7일 경제 보도자료 중 오늘의 큰 화제(여러 보도자료에 같이 나오는 낱말·시장 낱말·핵심 경제 부처)와
+    // 최근 것(오늘·어제)을 앞에, 관심사와 겹치는 것을 그다음으로 40개까지
+    const all = (await pressReleases(7)).filter(isEcon);
+    const hot = hotScores(all), fresh = (p) => { const d = atKey(p.at).slice(0, 8), t = new Date(Date.now() + 9 * 3600e3); const ymd = (n) => new Date(t - n * 86400e3).toISOString().slice(0, 10).replace(/-/g, ""); return d === ymd(0) ? 3 : d === ymd(1) ? 2 : 0; };
+    const pool = all
+      .map((p, i) => ({ p, i, s: hot[i] + fresh(p) * 2 + interestScore(p, interests) * 2 }))
       .sort((a, b) => b.s - a.s || a.i - b.i)
       .slice(0, 40).map((x) => x.p);
     if (pool.length < 3) return res.status(200).json({ available: true, mood: "", points: [] });
 
     const listText = pool.map((n, i) => `[${i}] (${n.org}) ${n.title} — ${n.sub} ${n.body.slice(0, 200)}`).join("\n");
     const out = await ask(RULES + levelRule(req.query.lv) + (req.query.lang === "en" ? EN_RULE : "") + (who ? `\n- 이 사람의 상황·목표: ${who}. forMe는 이 상황과 목표에 이어서 말해줘.` : "") + `
-- 아래는 최근 7일 정부 보도자료야(관심사와 관련된 것이 앞쪽에 있어). 생활과 돈에 영향이 큰 흐름 3개를 골라 points로 정리해. 관심사(${interests.join(", ") || "없음"})와 관련된 게 있으면 하나 이상 꼭 포함하고, 그 point의 forMe에서 관심사와 이어서 설명해.
+- 아래는 최근 7일 정부 보도자료야(요즘 가장 큰 화제·최근 것이 앞쪽에 있어). 생활과 돈에 영향이 큰 흐름 3개를 골라 points로 정리하고, 첫 번째 point는 여러 보도자료가 함께 다루는 오늘의 가장 큰 화제(증시·금리·환율처럼 시장 전체에 영향이 큰 정부 대책이 있으면 그것)로 해. 관심사(${interests.join(", ") || "없음"})와 관련된 게 있으면 하나 이상 꼭 포함하고, 그 point의 forMe에서 관심사와 이어서 설명해.
 - sources에는 근거 보도자료 번호를 1~3개 넣어.`, listText);
     const points = (out.points || []).slice(0, 3).map((p) => ({
       ...p,

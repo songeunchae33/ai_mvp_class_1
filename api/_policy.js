@@ -39,13 +39,22 @@ function clean(s) {
     .trim();
 }
 
+// 승인일(ApproveDate)을 비교할 수 있게 YYYYMMDDhhmm으로 ('2026-11-25 10:00' · '11/25/2026 10:00:00' 둘 다)
+export function atKey(at) {
+  const t = String(at || "");
+  let m = t.match(/(\d{4})[-./]?(\d{2})[-./]?(\d{2})\D*(\d{1,2})?:?(\d{2})?/);
+  if (m) return `${m[1]}${m[2]}${m[3]}${(m[4] || "0").padStart(2, "0")}${m[5] || "00"}`;
+  m = t.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})\D*(\d{1,2})?:?(\d{2})?/);
+  return m ? `${m[3]}${m[1].padStart(2, "0")}${m[2].padStart(2, "0")}${(m[4] || "0").padStart(2, "0")}${m[5] || "00"}` : "";
+}
 function field(block, tag) {
   const m = block.match(new RegExp(`<${tag}>([\\s\\S]*?)</${tag}>`));
   return m ? clean(m[1]) : "";
 }
 
 // 최근 days일 보도자료 (API는 한 번에 최대 3일 범위라 나눠서 부른다)
-export async function pressReleases(days = 3) {
+// listOnly: 제목·링크만 보여 줄 때는 공공누리 3·4유형(변경 금지)도 넣는다. AI로 다시 쓰는 곳(쉽게 풀이 등)은 기본값(뺌)으로
+export async function pressReleases(days = 3, listOnly = false) {
   const ranges = [];
   for (let d = 0; d < days; d += 3) ranges.push([kstYmd(Math.min(d + 2, days - 1)), kstYmd(d)]);
   const texts = await Promise.all(ranges.map(([start, end]) =>
@@ -60,7 +69,7 @@ export async function pressReleases(days = 3) {
       const title = field(b, "Title");
       if (!title || seen.has(title)) continue;
       // 공공누리 3·4유형(변경 금지)은 AI로 다시 쓰면 안 되니 뺀다
-      if (/[34]/.test(field(b, "KoglType"))) continue;
+      if (!listOnly && /[34]/.test(field(b, "KoglType"))) continue;
       seen.add(title);
       items.push({
         title, sub: field(b, "SubTitle1"), body: field(b, "DataContents").slice(0, 500),
@@ -68,10 +77,49 @@ export async function pressReleases(days = 3) {
       });
     }
   }
-  return items;
+  return items.sort((a, b) => (atKey(b.at) > atKey(a.at) ? 1 : -1)); // 최근 것부터
 }
 
 export function isEcon(p) {
   const text = `${p.title} ${p.sub}`;
   return ECON_ORGS.some((o) => p.org.includes(o)) || ECON_WORDS.some((w) => text.includes(w));
+}
+
+// ── 오늘의 화제 점수: 여러 기사·보도자료 제목에 같이 나오는 낱말일수록 큰 화제로 본다 ──
+// (예: '증시안정펀드'가 언론 기사 여러 개와 금융위원회 보도자료에 같이 나오면 그 기사들이 위로)
+const JOSA = /(으로서|으로써|에서는|에게서|으로|에서|에게|까지|부터|보다|처럼|에는|이며|하고|하며|에도|으로는|은|는|이|가|을|를|의|에|와|과|도|만|로)$/;
+const STOP = new Set(["정부", "관련", "위해", "위한", "대한", "통해", "추진", "개최", "발표", "오늘", "내일", "올해", "내년", "지난해", "이번", "최대", "확대", "지원", "강화", "개선",
+  "본격", "시행", "운영", "계획", "결과", "현장", "방안", "회의", "기자", "속보", "단독", "종합", "포토", "사진", "영상", "뉴스", "기업", "한국", "국내", "우리", "주요", "대통령"]);
+// 같은 뜻 다른 이름은 하나로 (증안펀드 = 증시안정펀드 = 증권시장안정펀드)
+const SAME = [[/증권시장안정펀드|증시안정펀드|증안펀드/g, "증시안정펀드"], [/코스피지수/g, "코스피"], [/기준 ?금리/g, "기준금리"]];
+export function topicWords(title) {
+  let t = String(title || "");
+  for (const [re, to] of SAME) t = t.replace(re, ` ${to} `);
+  const out = new Set();
+  for (let w of t.split(/[^가-힣A-Za-z0-9]+/)) {
+    const cut = w.replace(JOSA, "");
+    if (cut.length >= 2) w = cut; // '주가'·'물가'처럼 잘라서 한 글자가 되면 그대로
+    if (w.length >= 2 && !/^\d+$/.test(w) && !STOP.has(w)) out.add(w);
+  }
+  return [...out];
+}
+// 시장·경제 전체를 흔드는 낱말과 핵심 경제 부처는 조금 더 무겁게
+const BIG = ["증시안정펀드", "증시", "코스피", "코스닥", "기준금리", "금리", "환율", "외환", "폭락", "급락", "급등", "긴급", "대책", "관세", "물가", "부동산", "공매도", "밸류업"];
+const CORE_ORG = ["금융위원회", "기획재정부", "재정경제부", "한국은행", "금융감독원"];
+export function hotScores(items) {
+  const df = new Map();
+  const words = items.map((it) => topicWords(it.title));
+  words.forEach((ws) => ws.forEach((w) => df.set(w, (df.get(w) || 0) + 1)));
+  return items.map((it, i) => {
+    let s = words[i].reduce((a, w) => a + Math.max(0, (df.get(w) || 0) - 1), 0);
+    s += BIG.filter((w) => it.title.includes(w)).length * 2;
+    if (CORE_ORG.some((o) => String(it.source || it.org || "").includes(o))) s += 2;
+    return s;
+  });
+}
+// 화제 점수가 높은 순(같으면 원래 순서). corpus는 점수를 셀 때 같이 볼 기사들(언론+보도자료 전체)
+export function byHot(items, corpus = items) {
+  const all = [...items, ...corpus.filter((c) => !items.includes(c))];
+  const sc = hotScores(all);
+  return items.map((it, i) => ({ it, i, s: sc[i] })).sort((a, b) => b.s - a.s || a.i - b.i).map((x) => x.it);
 }
