@@ -2,7 +2,7 @@
 // 출처를 여러 곳으로 나눈다(한 곳이 막혀도 뉴스가 끊기지 않게): 정책브리핑 보도자료(api/_policy.js)
 // · GDELT(전 세계 뉴스 목록, 무료 공개 데이터, 해외 뉴스) · NewsData.io(NEWSDATA_KEY가 있을 때만, 무료 등급 하루 200번).
 // 모두 제목과 링크만 보여준다(본문 없음, 네이버·NewsData 결과는 AI 요약에 쓰지 않음).
-import { fetchJson } from "./_util.js";
+import { fetchJson, adminReady, fsReq, fromFs, fsSet } from "./_util.js";
 
 // 취향(선호) → 그 사람에게 의미 있는 뉴스 검색어
 export const PREF_QUERY = {
@@ -179,19 +179,53 @@ export async function gdelt(max = 10) {
 // q를 주면 그 낱말로 찾고(나를 위한 뉴스·키워드·종목 뉴스), 없으면 국내 경제 최신 뉴스.
 // 하루 횟수를 아끼려고 이 서버가 결과를 기억한다(낱말 검색 3시간, 경제 최신 30분). 실패하면 기억해 둔 것을 쓴다
 const ndCache = new Map();
+const ndItems = (j) => (j.results || []).filter((a) => a.title && a.link).map((a) => ({ title: clean(a.title), url: a.link, source: source(a.link) || a.source_name || a.source_id || "", at: new Date(a.pubDate ? a.pubDate.replace(" ", "T") + "Z" : Date.now()).toISOString() }));
+const ndUrl = (q, page) => `https://newsdata.io/api/1/latest?apikey=${encodeURIComponent(process.env.NEWSDATA_KEY)}&country=kr&language=ko${q ? `&q=${encodeURIComponent(q)}` : "&category=business"}${page ? `&page=${encodeURIComponent(page)}` : ""}`;
 export async function newsdata(q) {
   if (!process.env.NEWSDATA_KEY) return [];
+  if (!q && adminReady()) { try { return await newsPool(); } catch (e) { console.error("newsPool", e.message); } } // 하루치 모아 두기가 안 되면 예전처럼
   const key = q || "", hit = ndCache.get(key), ttl = q ? 3 * 3600e3 : 1800e3;
   if (hit && Date.now() - hit.at < ttl) return hit.items;
   try {
-    const j = await fetchJson(`https://newsdata.io/api/1/latest?apikey=${encodeURIComponent(process.env.NEWSDATA_KEY)}&country=kr&language=ko${q ? `&q=${encodeURIComponent(q)}` : "&category=business"}`, {}, 8000);
-    const items = (j.results || []).filter((a) => a.title && a.link).map((a) => ({ title: clean(a.title), url: a.link, source: source(a.link) || a.source_name || a.source_id || "", at: new Date(a.pubDate ? a.pubDate.replace(" ", "T") + "Z" : Date.now()).toISOString() }));
+    const items = ndItems(await fetchJson(ndUrl(q), {}, 8000));
     if (items.length) { ndCache.set(key, { at: Date.now(), items }); if (ndCache.size > 300) ndCache.delete(ndCache.keys().next().value); }
     return items.length ? items : hit?.items || [];
   } catch (e) {
     if (hit) return hit.items;
     throw e;
   }
+}
+
+// ── 국내 경제 최신 뉴스 하루치 모아 두기 (Firestore newsPool/kr) ──
+// 1시간에 한 번만 2쪽(기사 약 20개, NewsData 2번)을 새로 받아 최근 24시간치와 합친다 → 하루 약 48번.
+// 한 번에 10개만 보면 아침에 쏟아진 큰 화제(예: 증안펀드)가 점심엔 사라지므로, 하루치 제목 전체로 화제 점수를 매기기 위함.
+// 제목·링크·출처·시간만 저장한다(본문 없음).
+const POOL_DOC = "newsPool/kr", POOL_EVERY = 3600e3, POOL_KEEP = 24 * 3600e3, POOL_MAX = 250;
+let poolMem = null; // { at: 이 서버가 읽은 시각, fetchedAt, items }
+export async function newsPool() {
+  if (poolMem && Date.now() - poolMem.at < 5 * 60e3 && Date.now() - poolMem.fetchedAt < POOL_EVERY) return poolMem.items;
+  const doc = await fsReq(POOL_DOC);
+  const f = doc ? fromFs({ mapValue: { fields: doc.fields || {} } }) : {};
+  let items = []; try { items = JSON.parse(f.items || "[]"); } catch {}
+  let fetchedAt = Number(f.fetchedAt) || 0;
+  if (Date.now() - fetchedAt >= POOL_EVERY || !items.length) {
+    const got = [];
+    try {
+      const j1 = await fetchJson(ndUrl(""), {}, 8000);
+      got.push(...ndItems(j1));
+      if (j1.nextPage) got.push(...ndItems(await fetchJson(ndUrl("", j1.nextPage), {}, 8000).catch(() => ({}))));
+    } catch (e) { console.error("newsdata pool", e.message); }
+    if (got.length) {
+      const now = Date.now(), byUrl = new Map(items.map((it) => [it.url, it]));
+      for (const it of got) if (!byUrl.has(it.url)) byUrl.set(it.url, { ...it, seen: now });
+      items = [...byUrl.values()].filter((it) => now - (it.seen || Date.parse(it.at) || 0) < POOL_KEEP)
+        .sort((a, b) => (a.at < b.at ? 1 : -1)).slice(0, POOL_MAX);
+      fetchedAt = now;
+      await fsSet(POOL_DOC, { items: JSON.stringify(items), fetchedAt, n: items.length }).catch((e) => console.error("pool save", e.message));
+    } else if (!items.length) throw new Error("newsdata 빈 결과");
+  }
+  poolMem = { at: Date.now(), fetchedAt, items };
+  return items;
 }
 
 // GDELT가 막히면(5초 제한 때문에 자주 429) BBC 경제 RSS로 대신한다 (제목·링크만, 출처 BBC 표시)

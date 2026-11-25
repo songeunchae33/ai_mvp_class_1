@@ -6,7 +6,7 @@
 // 미국 주식(MASSIVE_KEY + Firestore가 있을 때): 종목 id는 "US:티커", 값은 원화(그날 종가 × 유럽중앙은행 기준 환율). api/_us.js
 // GET /api/market?game=hints              → 모의투자 힌트 (시장 소식 + 보도자료, 제미나이 검수)
 // 키가 없거나 호출이 실패하면 예시 데이터를 sample:true 로 돌려준다.
-import { kstYmd, fetchJson, num, dataGoItems, dataGoKey, cache } from "./_util.js";
+import { kstYmd, fetchJson, num, dataGoItems, dataGoKey, cache, adminReady, adminToken, fsReq, toFs, fromFs, fsList, fsSet, fsGetMany } from "./_util.js";
 import { pressReleases, isEcon } from "./_policy.js";
 import { generate } from "./_ai.js";
 import crypto from "node:crypto";
@@ -345,76 +345,6 @@ async function holdOf(req, uid) {
   let hold = [];
   try { hold = JSON.parse(f.hold || "[]"); } catch {}
   return { status: 200, body: { hold, cash: f.cash, at: f.at } };
-}
-let saToken = null;
-async function adminToken() {
-  if (saToken && saToken.exp > Date.now() + 60e3) return saToken.v;
-  const sa = JSON.parse(process.env.FIREBASE_SA);
-  const now = Math.floor(Date.now() / 1000);
-  const enc = (o) => Buffer.from(JSON.stringify(o)).toString("base64url");
-  const unsigned = `${enc({ alg: "RS256", typ: "JWT" })}.${enc({ iss: sa.client_email, scope: "https://www.googleapis.com/auth/datastore", aud: "https://oauth2.googleapis.com/token", iat: now, exp: now + 3600 })}`;
-  const sig = crypto.createSign("RSA-SHA256").update(unsigned).sign(sa.private_key, "base64url");
-  const r = await fetch("https://oauth2.googleapis.com/token", {
-    method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({ grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer", assertion: `${unsigned}.${sig}` }),
-    signal: AbortSignal.timeout(8000),
-  });
-  const j = await r.json();
-  if (!j.access_token) throw new Error(`firebase 열쇠 오류 ${String(j.error || "").slice(0, 60)}`);
-  saToken = { v: j.access_token, exp: Date.now() + 3500e3 };
-  return saToken.v;
-}
-function adminReady() { return !!(process.env.FIREBASE_SA && process.env.FIREBASE_PROJECT_ID); }
-async function fsReq(path, opt = {}) {
-  const t = await adminToken();
-  const r = await fetch(`https://firestore.googleapis.com/v1/projects/${process.env.FIREBASE_PROJECT_ID}/databases/(default)/documents/${path}`, {
-    ...opt, headers: { Authorization: `Bearer ${t}`, "Content-Type": "application/json" }, signal: AbortSignal.timeout(10000) });
-  if (r.status === 404) return null;
-  if (!r.ok) throw new Error(`firestore ${r.status} ${(await r.text()).slice(0, 120)}`);
-  return r.json();
-}
-function toFs(v) {
-  if (v === null || v === undefined) return { nullValue: null };
-  if (typeof v === "boolean") return { booleanValue: v };
-  if (typeof v === "number") return Number.isInteger(v) ? { integerValue: String(v) } : { doubleValue: v };
-  if (typeof v === "string") return { stringValue: v };
-  if (Array.isArray(v)) return { arrayValue: { values: v.map(toFs) } };
-  return { mapValue: { fields: Object.fromEntries(Object.entries(v).map(([k, x]) => [k, toFs(x)])) } };
-}
-function fromFs(x) {
-  if (!x) return null;
-  if ("stringValue" in x) return x.stringValue;
-  if ("integerValue" in x) return Number(x.integerValue);
-  if ("doubleValue" in x) return x.doubleValue;
-  if ("booleanValue" in x) return x.booleanValue;
-  if ("timestampValue" in x) return x.timestampValue;
-  if ("arrayValue" in x) return (x.arrayValue.values || []).map(fromFs);
-  if ("mapValue" in x) return Object.fromEntries(Object.entries(x.mapValue.fields || {}).map(([k, v]) => [k, fromFs(v)]));
-  return null;
-}
-async function fsList(coll) {
-  const out = [];
-  let token = "";
-  do {
-    const j = await fsReq(`${coll}?pageSize=300${token ? `&pageToken=${encodeURIComponent(token)}` : ""}`);
-    out.push(...(j?.documents || []));
-    token = j?.nextPageToken || "";
-  } while (token);
-  return out.map((d) => ({ id: d.name.split("/").pop(), ...fromFs({ mapValue: { fields: d.fields || {} } }) }));
-}
-const fsSet = (path, data) => fsReq(path, { method: "PATCH", body: JSON.stringify({ fields: toFs(data).mapValue.fields }) });
-// 여러 문서를 한 번에, 정한 칸만 읽는다 → { 경로: 칸들 | null }
-async function fsGetMany(paths, fields) {
-  if (!paths.length) return {};
-  const t = await adminToken(), root = `projects/${process.env.FIREBASE_PROJECT_ID}/databases/(default)/documents`;
-  const r = await fetch(`https://firestore.googleapis.com/v1/${root}:batchGet`, {
-    method: "POST", headers: { Authorization: `Bearer ${t}`, "Content-Type": "application/json" }, signal: AbortSignal.timeout(10000),
-    body: JSON.stringify({ documents: paths.map((p) => `${root}/${p}`), mask: { fieldPaths: fields } }),
-  });
-  if (!r.ok) throw new Error(`firestore batchGet ${r.status}`);
-  const out = Object.fromEntries(paths.map((p) => [p, null]));
-  for (const x of await r.json()) if (x.found) out[x.found.name.slice(root.length + 1)] = fromFs({ mapValue: { fields: x.found.fields || {} } });
-  return out;
 }
 const usFs = { get: fsGetMany, set: fsSet };
 const fsDel = (path) => fsReq(path, { method: "DELETE" });

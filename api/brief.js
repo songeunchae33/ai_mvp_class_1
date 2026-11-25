@@ -4,6 +4,7 @@
 // POST /api/brief { text }                  → 붙여넣은 뉴스레터 풀이 (저장하지 않음)
 import { generate, aiReady, levelRule } from "./_ai.js";
 import { cache } from "./_util.js";
+import { newsdata } from "./_news.js";
 import { pressReleases, isEcon, interestScore, hotScores, atKey } from "./_policy.js";
 
 const SCHEMA = {
@@ -76,7 +77,9 @@ export default async function handler(req, res) {
     // 최근 7일 경제 보도자료 중 오늘의 큰 화제(여러 보도자료에 같이 나오는 낱말·시장 낱말·핵심 경제 부처)와
     // 최근 것(오늘·어제)을 앞에, 관심사와 겹치는 것을 그다음으로 40개까지
     const all = (await pressReleases(7)).filter(isEcon);
-    const hot = hotScores(all), fresh = (p) => { const d = atKey(p.at).slice(0, 8), t = new Date(Date.now() + 9 * 3600e3); const ymd = (n) => new Date(t - n * 86400e3).toISOString().slice(0, 10).replace(/-/g, ""); return d === ymd(0) ? 3 : d === ymd(1) ? 2 : 0; };
+    // 화제 점수는 언론 기사 제목(하루치)도 같이 보고 센다. 기사 제목은 점수에만 쓰고 AI에는 보내지 않는다(네이버·NewsData 결과는 AI 요약에 안 씀)
+    const press = await newsdata().catch(() => []);
+    const hot = hotScores([...all, ...press.map((n) => ({ title: n.title, source: n.source }))]).slice(0, all.length), fresh = (p) => { const d = atKey(p.at).slice(0, 8), t = new Date(Date.now() + 9 * 3600e3); const ymd = (n) => new Date(t - n * 86400e3).toISOString().slice(0, 10).replace(/-/g, ""); return d === ymd(0) ? 3 : d === ymd(1) ? 2 : 0; };
     const pool = all
       .map((p, i) => ({ p, i, s: hot[i] + fresh(p) * 2 + interestScore(p, interests) * 2 }))
       .sort((a, b) => b.s - a.s || a.i - b.i)
