@@ -1670,6 +1670,8 @@ function investGuide(a) {
 }
 
 // ───────────────────────── 도우미 ─────────────────────────
+// 바깥에서 받은 링크(뉴스·혜택·뉴스레터)는 http(s) 주소만 쓴다. javascript: 같은 주소가 섞여 와도 누르면 코드가 실행되지 않게
+function href(u) { return /^https?:\/\//i.test(String(u ?? "").trim()) ? esc(String(u).trim()) : "#"; }
 function esc(s) {
   return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
@@ -1764,7 +1766,7 @@ function newProfile() {
 // 이 기기의 무작위 표시: 서버가 AI 하루 횟수를 기기마다 세는 데만 쓴다(이름·계정과 이어지지 않음)
 const DEV_ID = (() => { try { let v = localStorage.getItem("myeco.dev"); if (!v) { v = Math.random().toString(36).slice(2) + Date.now().toString(36); localStorage.setItem("myeco.dev", v); } return v; } catch { return ""; } })();
 async function getJson(url, opt) {
-  if (DEV_ID && /^\/api\/(ask|brief|receipts)/.test(url)) opt = { ...(opt || {}), headers: { ...(opt?.headers || {}), "X-Dev": DEV_ID } };
+  if (DEV_ID && /^\/api\//.test(url)) opt = { ...(opt || {}), headers: { ...(opt?.headers || {}), "X-Dev": DEV_ID } };
   const r = await fetch(url, opt);
   const j = await r.json().catch(() => ({}));
   if (!r.ok) throw Object.assign(new Error(j.error || r.status), { body: j });
@@ -2035,11 +2037,11 @@ function homeNewsPick(n) {
 // swipe: 홈 뉴스는 제목을 자르지 않고 한 줄에 다 넣어, 옆으로 밀면 끝까지 보인다
 function newsLine(it, swipe) {
   const t = swipe === true ? it.title : shortTitle(it.title);
-  return `<a href="${esc(it.url)}" target="_blank" rel="noopener" title="${esc(it.orig || it.title)}">
+  return `<a href="${href(it.url)}" target="_blank" rel="noopener" title="${esc(it.orig || it.title)}">
     ${it.tag ? `<span class="badge b-green">${esc(it.tag)}</span>` : ""}<span class="t1${swipe === true ? " swipe" : ""}">${esc(t)}</span><span class="src">${esc(it.source || "")}</span></a>`;
 }
 function newsList(items, numbered) { // 뉴스 더보기 화면: 제목 전체
-  return (items || []).map((it, i) => `<a href="${esc(it.url)}" target="_blank" rel="noopener">
+  return (items || []).map((it, i) => `<a href="${href(it.url)}" target="_blank" rel="noopener">
       ${numbered ? `<span class="no">${i + 1}</span>` : ""}
       <div style="flex:1"><div class="t">${esc(it.title)}</div><div class="m">${it.tag ? `<span class="badge b-green">${esc(it.tag)}</span>` : ""}<span>${esc(it.source || "")}</span>${it.at ? `<span>· ${ago(it.at)}</span>` : ""}</div></div></a>`).join("");
 }
@@ -2110,7 +2112,7 @@ function calRow(e) {
   const badge = e.approx ? `<span class="dday approx">예상</span>` : `<span class="dday ${dd <= 7 ? "soon" : ""}">${dd === 0 ? "오늘" : "D-" + dd}</span>`;
   const when = e.approx ? e.when : `${e.d.getMonth() + 1}월 ${e.d.getDate()}일 (${"일월화수목금토"[e.d.getDay()]})${e.time ? " " + e.time : ""}`;
   const inner = `${badge}<div style="flex:1;min-width:0"><div class="t">${esc(e.title)}</div><div class="d">${e.tag ? `<span class="tagc">${esc(e.tag)}</span>` : ""}${esc(when)}${e.note ? " · " + esc(e.note) : ""}</div></div>`;
-  return e.url ? `<a class="cal ${e.mine ? "mine" : ""}" href="${esc(e.url)}" target="_blank" rel="noopener">${inner}</a>` : `<div class="cal ${e.mine ? "mine" : ""}">${inner}</div>`;
+  return e.url ? `<a class="cal ${e.mine ? "mine" : ""}" href="${href(e.url)}" target="_blank" rel="noopener">${inner}</a>` : `<div class="cal ${e.mine ? "mine" : ""}">${inner}</div>`;
 }
 
 // OX 퀴즈 (홈·경제 공부 공용). 답은 이 기기에 기록돼서 복습에 쓰인다
@@ -2612,7 +2614,7 @@ function homeBlocks() {
   const addTile = profile.watch.length < 10 ? `<button class="add" data-act="go-my" data-focus="watch">+ 종목</button>` : "";
 
   // 누르면 그 정보를 가져온 곳(환율은 관련 기사, 금리는 한국은행·연준, 종목은 네이버 증권)으로 바로 간다
-  const imp = impacts().map((c) => `<a class="impact" href="${esc(c.src[1])}" target="_blank" rel="noopener" style="cursor:pointer;color:inherit;text-decoration:none" aria-label="${esc(c.tag)} · ${esc(c.src[0])} 열기">
+  const imp = impacts().map((c) => `<a class="impact" href="${href(c.src[1])}" target="_blank" rel="noopener" style="cursor:pointer;color:inherit;text-decoration:none" aria-label="${esc(c.tag)} · ${esc(c.src[0])} 열기">
       <span class="badge b-${c.tone}" style="align-self:flex-start">${esc(c.tag)}</span><p>${esc(c.text)}</p><span class="hint" style="margin-top:auto">${c.num && c.num !== c.src[0] ? `출처 ${esc(c.num)} · ` : ""}${esc(c.src[0])} ${ICON.out}</span></a>`).join("");
 
   // 뉴스: 진짜 중요한 것 두 줄 (오늘의 이슈 1 + 나를 위한 1) + 키워드·뉴스레터 한 줄
@@ -2632,7 +2634,7 @@ function homeBlocks() {
       ${kws.length || letters.length ? `<div class="strip" style="gap:6px;margin-top:8px;align-items:center">
         ${kws.map((k) => `<button class="chip small" style="flex-shrink:0" data-act="kw" data-k="${esc(k)}">#${esc(k)}</button>`).join("")}
         ${letters.length ? `<span aria-hidden="true" style="flex-shrink:0;width:1px;height:20px;background:var(--line)"></span>` : ""}
-        ${letters.map((l) => `<a class="chip small" style="flex-shrink:0" href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.name)} ${ICON.out}</a>`).join("")}
+        ${letters.map((l) => `<a class="chip small" style="flex-shrink:0" href="${href(l.url)}" target="_blank" rel="noopener">${esc(l.name)} ${ICON.out}</a>`).join("")}
       </div>` : ""}
     </section>`;
 
@@ -2797,7 +2799,7 @@ function viewNews() {
   <main class="scroll">
     <div class="tabs" role="tablist">${tabs.map(([id, label]) => `<button class="chip ${N.tab === id ? "on" : ""}" role="tab" aria-selected="${N.tab === id}" data-act="news-tab" data-t="${esc(id)}">${esc(label)}</button>`).join("")}</div>
     ${N.tab === "brief" ? viewBrief() : `<section class="card"><div class="news">${items ? newsList(items, N.tab === "issues") || `<p class="hint">뉴스가 없어요</p>` : `<p class="hint">불러오는 중…</p>`}</div></section>`}
-    ${letters.length ? `<div class="chips"><span class="hint">구독 중</span>${letters.map((l) => `<a class="chip small" href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.name)} ${ICON.out}</a>`).join("")}</div>` : ""}
+    ${letters.length ? `<div class="chips"><span class="hint">구독 중</span>${letters.map((l) => `<a class="chip small" href="${href(l.url)}" target="_blank" rel="noopener">${esc(l.name)} ${ICON.out}</a>`).join("")}</div>` : ""}
     <p class="foot">제목을 누르면 언론사 원문으로 이동해요. 국내 뉴스는 ${esc((f?.providers || []).filter((x) => x !== "GDELT" && x !== "BBC").join("·") || "NewsData·정책브리핑")}에서, 해외 뉴스는 ${esc((f?.providers || []).includes("BBC") ? "BBC 경제 뉴스" : "GDELT(전 세계 뉴스 목록)")}에서 제목과 링크만 가져와요. 해외 뉴스 제목은 AI가 한국어로 옮긴 거예요.</p>
   </main>`;
 }
@@ -2807,7 +2809,7 @@ function briefCards(b) {
       <div class="bp-t">${esc(pt.title)}</div>
       <p>${esc(pt.easy)}</p>
       <p class="me"><b>나에게는</b> ${esc(pt.forMe)}</p>
-      ${pt.sources?.length ? `<div class="bp-s">${pt.sources.map((x) => `<a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.source || "기사")} ${ICON.out}</a>`).join("")}</div>` : ""}
+      ${pt.sources?.length ? `<div class="bp-s">${pt.sources.map((x) => `<a href="${href(x.url)}" target="_blank" rel="noopener">${esc(x.source || "기사")} ${ICON.out}</a>`).join("")}</div>` : ""}
     </div>`).join("");
 }
 function viewBrief() {
@@ -4710,7 +4712,7 @@ function viewLearn() {
       <div class="sec-title"><h2>요즘 화제 TOP 5</h2><span>최근 ${data.trending?.days || 3}일 정부 보도자료</span></div>
       <div class="hot-list">${evs.map((e, i) => {
         const q = mode === "basic" ? basicFor(e) : null;
-        return `<div class="hot-row"><a class="hot-item" href="${esc(e.url)}" target="_blank" rel="noopener"><span class="hot-rank">${i + 1}</span><span class="hot-t">${esc(e.title)}<small class="hint">#${esc(e.word)} · 관련 보도자료 ${e.count}건</small></span>${ICON.out}</a>${q ? `<button class="hot-quiz ${mastered(q) ? "done" : ""}" data-act="concept-open" data-id="${q.id}" aria-label="${esc(e.title)} 관련 퀴즈 풀기">${mastered(q) ? "✓ 풀었어요" : "이 화제로 퀴즈 ›"}</button>` : ""}</div>`;
+        return `<div class="hot-row"><a class="hot-item" href="${href(e.url)}" target="_blank" rel="noopener"><span class="hot-rank">${i + 1}</span><span class="hot-t">${esc(e.title)}<small class="hint">#${esc(e.word)} · 관련 보도자료 ${e.count}건</small></span>${ICON.out}</a>${q ? `<button class="hot-quiz ${mastered(q) ? "done" : ""}" data-act="concept-open" data-id="${q.id}" aria-label="${esc(e.title)} 관련 퀴즈 풀기">${mastered(q) ? "✓ 풀었어요" : "이 화제로 퀴즈 ›"}</button>` : ""}</div>`;
       }).join("")}</div>
     </section>` : "";
   const hub = `<section class="hub">
@@ -5184,7 +5186,7 @@ function viewBenefits() {
   const body = !p.region?.sido ? `<p class="hint" style="margin:0">위에서 사는 곳을 고르면 지자체·교육청·정부 혜택을 나이와 상황에 맞춰 찾아드려요.</p>`
     : !B ? `<p class="hint" style="margin:0">찾는 중…</p>`
     : B.available === false ? `<p style="margin:0;font-size:calc(14px * var(--fs, 1));line-height:1.6">공공데이터포털 키를 연결하면 정부24 혜택이 여기에 떠요.</p><a class="btn ghost" style="display:inline-flex;align-items:center;margin-top:10px" href="https://www.gov.kr/portal/rcvfvrSvc/main" target="_blank" rel="noopener">보조금24에서 직접 찾기 ${ICON.out}</a>`
-    : items.length ? items.map((b) => `<a class="benefit2" href="${esc(b.url || "https://www.gov.kr")}" target="_blank" rel="noopener">
+    : items.length ? items.map((b) => `<a class="benefit2" href="${href(b.url || "https://www.gov.kr")}" target="_blank" rel="noopener">
         <div class="t">${esc(b.name)}</div>
         ${b.summary ? `<div class="d">${esc(b.summary)}</div>` : ""}
         <div class="m"><span class="badge ${b.local ? "b-green" : "b-flat"}">${b.local ? "우리 지역" : "정부"}</span><span>${esc(b.org || "")}</span>${b.deadline ? `<span>· ${esc(String(b.deadline).slice(0, 24))}</span>` : ""}</div>
@@ -5308,7 +5310,7 @@ function searchResults() {
   const pool = [...(data.news?.issues || []), ...(data.news?.forYou || []), ...(data.newsFull?.issues || []), ...(data.newsFull?.forYou || [])];
   const seen = new Set();
   const news = pool.filter((n) => has(n.title) && !seen.has(n.url) && seen.add(n.url)).slice(0, 3)
-    .map((n) => `<a class="si" href="${esc(n.url)}" target="_blank" rel="noopener"><span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(shortTitle(n.title))}</span><span class="s2">${esc(n.source || "")}</span></a>`);
+    .map((n) => `<a class="si" href="${href(n.url)}" target="_blank" rel="noopener"><span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(shortTitle(n.title))}</span><span class="s2">${esc(n.source || "")}</span></a>`);
   news.push(`<button class="si" data-act="kw" data-k="${esc(q)}"><span>‘${esc(q)}’ 뉴스 더 보기</span><span class="s2">›</span></button>`);
   group("뉴스", news);
 
@@ -5316,7 +5318,7 @@ function searchResults() {
     .map((e) => `<button class="si" data-act="go-schedule" data-all="1"><span>${esc(e.title)}</span><span class="s2">${esc(e.approx ? e.when : e.monthly ? `매달 ${e.monthly}일` : `${Number(e.date.slice(5, 7))}/${Number(e.date.slice(8, 10))}`)}</span></button>`));
 
   group("우리 지역 혜택", (data.benefitsApi?.items || []).filter((b) => has(b.name) || has(b.summary) || has(b.org)).slice(0, 3)
-    .map((b) => `<a class="si" href="${esc(b.url || "https://www.gov.kr")}" target="_blank" rel="noopener"><span>${esc(b.name)}</span><span class="s2">${b.local ? "지역" : "정부"} ${ICON.out}</span></a>`));
+    .map((b) => `<a class="si" href="${href(b.url || "https://www.gov.kr")}" target="_blank" rel="noopener"><span>${esc(b.name)}</span><span class="s2">${b.local ? "지역" : "정부"} ${ICON.out}</span></a>`));
 
   // 바로 가기: 화면 안의 칸·버튼(SPOTS)과 목차 항목. 이름이 딱 맞는 것부터
   const norm = (x) => String(x).toLowerCase().replace(/\s+/g, "");
@@ -6680,7 +6682,7 @@ function hintCard(h) {
   return `<div class="inv-hint">
       <div class="r">${h.kind === "market" ? `<span class="badge b-flat">시장 소식</span>` : dirPill(h.dir)}<span class="hint">${daysText(h.days)}</span></div>
       <b>${esc(h.title)}</b><p>${esc(hintText(h))}</p>
-      <div class="r"><span class="hint">${h.sources.length ? `근거 ${h.sources.map((s) => (s.url ? `<a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.source)}${h.kind === "news" ? " 보도자료" : ""}</a>` : esc(s.source))).join(" · ")}` : "예시 소식"}</span>
+      <div class="r"><span class="hint">${h.sources.length ? `근거 ${h.sources.map((s) => (s.url ? `<a href="${href(s.url)}" target="_blank" rel="noopener">${esc(s.source)}${h.kind === "news" ? " 보도자료" : ""}</a>` : esc(s.source))).join(" · ")}` : "예시 소식"}</span>
         <span class="inv-hs">${h.stocks.map((id) => `<button class="chip small" data-act="inv-open" data-k="stock:${esc(id)}">${esc(company(id)?.name || id)}</button>`).join("")}</span></div>
     </div>`;
 }

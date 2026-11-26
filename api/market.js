@@ -6,7 +6,7 @@
 // 미국 주식(MASSIVE_KEY + Firestore가 있을 때): 종목 id는 "US:티커", 값은 원화(그날 종가 × 유럽중앙은행 기준 환율). api/_us.js
 // GET /api/market?game=hints              → 모의투자 힌트 (시장 소식 + 보도자료, 제미나이 검수)
 // 키가 없거나 호출이 실패하면 예시 데이터를 sample:true 로 돌려준다.
-import { kstYmd, fetchJson, num, dataGoItems, dataGoKey, cache, adminReady, adminToken, fsReq, toFs, fromFs, fsList, fsSet, fsGetMany } from "./_util.js";
+import { kstYmd, fetchJson, num, dataGoItems, dataGoKey, cache, adminReady, adminToken, fsReq, toFs, fromFs, fsList, fsSet, fsGetMany, quota } from "./_util.js";
 import { pressReleases, isEcon } from "./_policy.js";
 import { generate } from "./_ai.js";
 import crypto from "node:crypto";
@@ -324,14 +324,17 @@ async function gameHints() {
 const RATES_SV = { cma: 2.2, dep: 2.8, ktb3: 2.7, corp3: 3.3 }; // index.html RATES와 같은 게임 금리
 const RATE_NAMES = { cma: "CMA", dep: "정기예금 1년", ktb3: "국고채 3년", corp3: "회사채 3년" };
 // 로그인한 사람 확인: 휴대폰이 보낸 Firebase 로그인 표(ID token)를 Google에 물어 uid를 받는다
-async function whoIs(req) {
+// → { uid, createdAt(밀리초) } | null. 가입일은 휴대폰이 보내는 날짜를 믿지 않고 구글이 알려 준 계정 생성 시각으로 쓴다
+async function whoIsFull(req) {
   const tok = String(req.headers.authorization || "").replace(/^Bearer\s+/i, "");
   if (!tok || !process.env.FIREBASE_API_KEY) return null;
   const r = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${process.env.FIREBASE_API_KEY}`, {
     method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ idToken: tok }), signal: AbortSignal.timeout(6000) });
   if (!r.ok) return null;
-  return (await r.json()).users?.[0]?.localId || null;
+  const u = (await r.json()).users?.[0];
+  return u?.localId ? { uid: u.localId, createdAt: Number(u.createdAt) || null } : null;
 }
+async function whoIs(req) { return (await whoIsFull(req))?.uid || null; }
 // 다른 사람의 보유 종목: 나와 그 사람이 둘 다 공유에 동의했을 때만
 async function holdOf(req, uid) {
   const me = await whoIs(req);
@@ -376,11 +379,11 @@ async function takeOrder(req) {
 }
 
 // 순위 다시 계산: 시즌의 모든 거래 기록을 공식 종가로 따라가며 검증
-async function settle(force) {
+async function settle(force, gap = 10 * 60e3) {
   const today = kstYmd(0), season = `${today.slice(0, 4)}-${today.slice(4, 6)}`;
   const meta = await fsReq(`invest/${season}`);
   const last = fromFs(meta?.fields?.settledAt) || 0;
-  if (!force && Date.now() - last < 10 * 60e3) return { season, skipped: true };
+  if (!force && Date.now() - last < gap) return { season, skipped: true };
   const players = await fsList(`invest/${season}/trades`);
   // 공유 동의·가입일 (investMeta/{uid}, 서버만 씀)
   const metas = players.length ? await fsGetMany(players.map((p) => `investMeta/${p.id}`), ["share", "joined"]).catch(() => ({})) : {};
@@ -459,10 +462,14 @@ function vapidHeaders(endpoint) {
   const sig = crypto.sign("sha256", Buffer.from(unsigned), { key, dsaEncoding: "ieee-p1363" }).toString("base64url");
   return { Authorization: `vapid t=${unsigned}.${sig}, k=${pub}`, TTL: "43200", Urgency: "normal", "Content-Length": "0" };
 }
+// 브라우저 알림 서비스(구글·모질라·애플·마이크로소프트) 주소만 받는다. 다른 주소를 넣어 우리 서버가 아무 데나 요청을 보내게 하는 것을 막는다
+const PUSH_HOST = /(^|\.)(fcm\.googleapis\.com|push\.services\.mozilla\.com|push\.apple\.com|notify\.windows\.com)$/i;
+function pushOk(endpoint) { try { const u = new URL(endpoint); return u.protocol === "https:" && !u.port && PUSH_HOST.test(u.hostname); } catch { return false; } }
 const subId = (endpoint) => crypto.createHash("sha256").update(endpoint).digest("hex").slice(0, 40);
 async function pushAll() {
-  const subs = await fsList("pushSubs");
+  const all = await fsList("pushSubs"), subs = all.filter((s) => pushOk(s.endpoint));
   let sent = 0, gone = 0;
+  for (const s of all) if (!pushOk(s.endpoint)) await fsDel(`pushSubs/${s.id}`).catch(() => {}); // 예전에 들어온 이상한 주소는 지운다
   for (let i = 0; i < subs.length; i += 10) {
     await Promise.all(subs.slice(i, i + 10).map(async (s) => {
       try {
@@ -496,6 +503,10 @@ export default async function handler(req, res) {
     if (process.env.CRON_SECRET && req.headers.authorization !== `Bearer ${process.env.CRON_SECRET}`) return res.status(401).json({ error: "no" });
     const out = {};
     if (adminReady()) {
+      // 누가 이 주소를 계속 불러도 알림 폭탄·순위 계산이 반복되지 않게 20시간에 한 번만 (Vercel에 CRON_SECRET을 넣으면 Vercel만 부를 수 있음)
+      const ran = fromFs((await fsReq("cronRun/daily"))?.fields?.at) || 0;
+      if (Date.now() - ran < 20 * 3600e3) return res.status(200).json({ skipped: true });
+      await fsSet("cronRun/daily", { at: Date.now() });
       if (usReady()) { try { out.us = await usFill(usFs, ymdAdd(`${kstYmd(0).slice(0, 6)}01`, -10), 4); } catch (e) { out.us = { error: e.message.slice(0, 80) }; } }
       try { out.settle = await settle(true); } catch (e) { out.settle = { error: e.message.slice(0, 80) }; }
       if (process.env.VAPID_PUBLIC && process.env.VAPID_PRIVATE) { try { out.push = await pushAll(); } catch (e) { out.push = { error: e.message.slice(0, 80) }; } }
@@ -506,11 +517,13 @@ export default async function handler(req, res) {
   if (req.query.game === "share") {
     if (req.method !== "POST" || !adminReady()) return res.status(400).json({ error: "잘못된 요청이에요" });
     try {
-      const me = await whoIs(req);
+      const who = await whoIsFull(req), me = who?.uid;
       if (!me) return res.status(401).json({ error: "로그인이 필요해요" });
-      const share = req.body?.share === true, joined = /^\d{4}-\d{2}-\d{2}$/.test(String(req.body?.joined || "")) ? req.body.joined : null;
+      if (!(await quota(req, "share", 20, 100))) return res.status(429).json({ error: "잠시 후 다시 해 주세요" });
+      const share = req.body?.share === true;
+      const joined = who.createdAt ? new Date(who.createdAt + 9 * 3600e3).toISOString().slice(0, 10) : null; // 구글 계정이 이 앱에 처음 로그인한 날(한국 날짜)
       await fsSet(`investMeta/${me}`, { share, joined, at: Date.now() });
-      await settle(true).catch((e) => console.error("settle after share", e.message));
+      await settle(false, 60e3).catch((e) => console.error("settle after share", e.message)); // 1분 안에 이미 계산했으면 건너뜀
       return res.status(200).json({ ok: true, share });
     } catch (e) { console.error(e); return res.status(200).json({ error: "공유 설정을 저장하지 못했어요" }); }
   }
@@ -534,8 +547,9 @@ export default async function handler(req, res) {
   if (req.query.push === "today") { cache(res, 1800); return res.status(200).json(await pushToday()); }
   if (req.query.push === "subscribe" || req.query.push === "unsubscribe") {
     const endpoint = String(req.body?.endpoint || "");
-    if (req.method !== "POST" || !/^https:\/\/[^\s]{10,600}$/.test(endpoint)) return res.status(400).json({ error: "잘못된 요청이에요" });
+    if (req.method !== "POST" || endpoint.length > 600 || !pushOk(endpoint)) return res.status(400).json({ error: "잘못된 요청이에요" });
     if (!adminReady()) return res.status(200).json({ available: false });
+    if (!(await quota(req, "push", 10, 60))) return res.status(429).json({ error: "잠시 후 다시 해 주세요" });
     try {
       if (req.query.push === "subscribe") await fsSet(`pushSubs/${subId(endpoint)}`, { endpoint, at: Date.now() });
       else await fsDel(`pushSubs/${subId(endpoint)}`);
@@ -553,6 +567,7 @@ export default async function handler(req, res) {
     }
   }
   if (req.query.game !== undefined) {
+    if (!(await quota(req, "mkt", 200, 1000))) return res.status(429).json({ error: "오늘은 너무 많이 불렀어요. 내일 다시 해 주세요" });
     try {
       const extra = String(req.query.extra || "").split(",").map((x) => x.trim()).filter(Boolean).slice(0, 14);
       const out = await realMarket(extra);
@@ -568,6 +583,7 @@ export default async function handler(req, res) {
     const q = String(req.query.search).trim().slice(0, 20);
     if (!q) return res.status(200).json({ results: [] });
     if (!hasData && !usReady()) return res.status(200).json({ results: [], sample: true });
+    if (!(await quota(req, "search", 200, 1000))) return res.status(429).json({ results: [], error: "오늘 검색을 너무 많이 했어요. 내일 다시 해 주세요" });
     try {
       cache(res, 3600);
       const [kr, us] = await Promise.all([hasData ? search(q).catch(() => []) : [], req.query.kr ? [] : usSearch(q).catch(() => [])]);
@@ -579,6 +595,7 @@ export default async function handler(req, res) {
   }
 
 
+  if (!(await quota(req, "mkt", 200, 1000))) return res.status(429).json({ error: "오늘은 너무 많이 불렀어요. 내일 다시 해 주세요" });
   const names = String(req.query.stocks || "")
     .split(",")
     .map((s) => s.trim())

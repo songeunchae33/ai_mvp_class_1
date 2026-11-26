@@ -4,7 +4,7 @@
 // GET /api/news?interests=삼성전자,여행   → { issues: 오늘의 이슈 3, forYou: 관심 뉴스 3, global: 해외 뉴스 3, keywords: 오늘의 키워드 3, providers }
 // GET /api/news?q=FOMC                     → { items: 해당 키워드 뉴스 3 }
 // 둘 다 &full=1 을 붙이면 '뉴스 더보기' 화면용으로 더 많이 돌려준다
-import { cache } from "./_util.js";
+import { cache, quota } from "./_util.js";
 import { PREF_QUERY, dedupe, keywords, searchUrl, newsReady, byTrust, globalNews, newsdata, meaty, translateTitles, translateState, tier, poolState } from "./_news.js";
 import { pressReleases, isEcon, stories, forYouStories } from "./_policy.js";
 
@@ -32,6 +32,8 @@ export default async function handler(req, res) {
 
   if (req.query.q) {
     const q = String(req.query.q).slice(0, 30);
+    // 낱말을 바꿔 가며 불러 무료 뉴스 검색(하루 200번)을 다 써 버리는 것을 막는다 (같은 낱말은 1시간 CDN에 저장돼 여기까지 안 옴)
+    if (!(await quota(req, "newsq", 60, 300))) return res.status(429).json({ items: [], error: "오늘 검색을 너무 많이 했어요. 내일 다시 해 주세요" });
     if (!ready) return res.status(200).json({ sample: true, items: [{ title: `${q} 뉴스 검색 결과 보기`, url: searchUrl(q), source: "네이버 뉴스 검색" }] });
     try {
       let items = await newsdata(q).catch((e) => { console.error("q", q, e.message); return []; });
@@ -62,6 +64,7 @@ export default async function handler(req, res) {
       화제순위: ST.slice(0, 10).map((st, i) => `${i + 1}. [${st.outlets}곳] ${st.rep.title} (${st.rep.source})`), 오류: Array.isArray(nd) ? undefined : nd.error,
     });
   }
+  if (req.query.interests && !(await quota(req, "news", 120, 600))) return res.status(429).json({ issues: [], forYou: [], global: [], error: "오늘은 너무 많이 불렀어요. 내일 다시 해 주세요" });
   const interests = String(req.query.interests || "")
     .split(",").map((s) => s.trim()).filter(Boolean).slice(0, 6);
 
