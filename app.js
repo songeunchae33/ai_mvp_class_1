@@ -1,0 +1,6448 @@
+// 나만의 경제 화면 코드. 예전엔 index.html 안에 있었는데, 보안 헤더(CSP)가 "파일 안에 적힌 코드 실행"을 막을 수 있게 따로 뺐다.
+// index.html은 껍데기(스타일·splash)만 갖고 이 파일을 불러온다.
+// ───────────────────────── 저장 (이 기기에만) ─────────────────────────
+const STORE_KEY = "myeco.profile.v1";
+// ───────── 기기 연결: 구글로 로그인하면 이 기기의 기록을 내 계정(Firebase, 본인만 읽기·쓰기)에 저장하고 다른 기기에서 불러온다 ─────────
+// 로그인하지 않으면 지금처럼 이 기기에만 저장된다. 캡처 사진·비밀번호는 저장하지 않는다.
+// 계정 문서: users/{uid} = { profile, ledger, learn, ui, updatedAt }. 더 최근에 바뀐 쪽이 이긴다.
+const SYNC_KEY = "myeco.sync.v1";
+const FB_VER = "10.12.2";
+const SYNC_DATA = { profile: "myeco.profile.v1", ledger: "myeco.ledger.v1", learn: "myeco.learn.v1", ui: "myeco.ui.v1", invest: "myeco.invest.v2" };
+let sync = (() => { try { return JSON.parse(localStorage.getItem(SYNC_KEY)) || {}; } catch { return {}; } })(); // { on, email, lastSync, changedAt }
+let fb = null, syncTimer = null;
+function saveSync() { try { localStorage.setItem(SYNC_KEY, JSON.stringify(sync)); } catch {} }
+async function loadFirebase() {
+  if (fb) return fb;
+  const cfg = await getJson("/api/config");
+  if (!cfg.available) throw new Error("로그인 기능이 아직 설정되지 않았어요");
+  const base = `https://www.gstatic.com/firebasejs/${FB_VER}`;
+  const [A, U, F] = await Promise.all([import(`${base}/firebase-app.js`), import(`${base}/firebase-auth.js`), import(`${base}/firebase-firestore.js`)]);
+  const conf = { ...cfg.firebase };
+  if (location.hostname.endsWith(".vercel.app")) conf.authDomain = location.host; // 로그인 창을 같은 주소에서 (휴대폰 브라우저 대응)
+  const app = A.initializeApp(conf);
+  fb = { U, F, auth: U.getAuth(app), db: F.getFirestore(app) };
+  return fb;
+}
+function localBundle() {
+  const out = {};
+  for (const [k, key] of Object.entries(SYNC_DATA)) { try { out[k] = localStorage.getItem(key); } catch { out[k] = null; } }
+  return out;
+}
+async function pushNow() {
+  clearTimeout(syncTimer);
+  if (!sync.on || !fb?.auth.currentUser) return;
+  const updatedAt = Date.now();
+  await fb.F.setDoc(fb.F.doc(fb.db, "users", fb.auth.currentUser.uid), { ...localBundle(), updatedAt });
+  sync.lastSync = updatedAt; sync.changedAt = 0; saveSync();
+}
+function syncSoon() {
+  if (!sync.on) return;
+  sync.changedAt = Date.now(); saveSync();
+  clearTimeout(syncTimer);
+  syncTimer = setTimeout(() => pushNow().catch(() => {}), 2500);
+}
+// 계정 기록으로 이 기기를 바꾸고 다시 연다
+function applyRemote(d) {
+  for (const [k, key] of Object.entries(SYNC_DATA)) { try { if (d[k]) localStorage.setItem(key, d[k]); else localStorage.removeItem(key); } catch {} }
+  sync.lastSync = d.updatedAt; sync.changedAt = 0; saveSync();
+  location.reload();
+}
+// 로그인 직후·앱을 열 때: 계정 기록과 이 기기 기록 중 더 최근 것을 쓴다
+async function reconcile(firstLogin) {
+  const snap = await fb.F.getDoc(fb.F.doc(fb.db, "users", fb.auth.currentUser.uid));
+  const remote = snap.exists() ? snap.data() : null;
+  const localHas = !!localStorage.getItem(SYNC_DATA.profile);
+  // 계정에 기록이 없거나 빈 기록이면: 이 기기 기록을 올린다 (빈 기록으로 이 기기를 덮어쓰지 않음)
+  if (!remote || !remote.profile) {
+    if (localHas || !remote) await pushNow();
+    return localHas ? "uploaded" : "empty";
+  }
+  if (firstLogin) {
+    if (!localHas) { applyRemote(remote); return "loaded"; }
+    if (confirm("이 계정에 저장된 기록이 있어요.\n[확인] 저장된 기록을 이 기기로 불러오기\n[취소] 이 기기 기록으로 계정을 덮어쓰기")) { applyRemote(remote); return "loaded"; }
+    await pushNow(); return "uploaded";
+  }
+  if (remote.updatedAt > (sync.lastSync || 0)) {
+    if ((sync.changedAt && sync.changedAt > remote.updatedAt) || !localHas && !remote.profile) { await pushNow(); return "uploaded"; }
+    applyRemote(remote); return "loaded";
+  }
+  if (sync.changedAt) await pushNow();
+  return "same";
+}
+// 로그인 성공 뒤 공통 처리
+async function afterLogin(user) {
+  sync = { on: true, email: user.email || "", lastSync: 0, changedAt: 0 }; saveSync();
+  ui.modal = null;
+  let res;
+  try { res = await reconcile(true); }
+  catch (e) { sync = {}; saveSync(); render(); throw e; } // 저장소를 못 쓰면 연결하지 않은 상태로 되돌림
+  if (res === "loaded") return; // 불러와서 다시 열리는 중
+  render();
+  alert(res === "empty"
+    ? "구글 계정과 연결했어요.\n\n아직 이 계정에 저장된 기록이 없어요. 기록이 있는 컴퓨터에서도 같은 구글 계정으로 로그인(마이페이지 → 기기 연결)해 주세요. 그다음 이 기기에서 '기록 다시 불러오기'를 누르면 돼요."
+    : "구글 계정과 연결했어요. 이 기기의 기록을 계정에 저장했어요. 다른 기기에서 같은 계정으로 로그인하면 불러와져요.");
+}
+function loginError(e) {
+  const code = e?.code || "";
+  if (code.includes("cancelled")) return;
+  alert(code.includes("popup-closed") ? "로그인 창이 닫혔어요. 다시 눌러 주세요 (popup-closed)" : code.includes("popup-blocked") ? "팝업이 막혔어요. 브라우저에서 팝업을 허용해 주세요"
+    : code.includes("unauthorized-domain") ? "Firebase 승인된 도메인에 이 주소를 넣어야 해요"
+    : code.includes("permission-denied") ? "로그인은 됐는데 기록 저장이 막혔어요. Firestore 보안 규칙을 게시해 주세요"
+    : code.includes("web-storage-unsupported") || code.includes("operation-not-supported") ? "이 브라우저에서는 로그인할 수 없어요. 크롬이나 사파리로 열어 주세요"
+    : `로그인하지 못했어요 (${code || e?.message || "알 수 없음"})`);
+  ui.modal = null; render();
+}
+async function startSync() {
+  // 휴대폰: 구글 로그인 화면에 갔다가 돌아온 경우
+  if (sync.pending) {
+    try {
+      await loadFirebase();
+      const r = await fb.U.getRedirectResult(fb.auth);
+      await fb.auth.authStateReady();
+      const user = r?.user || fb.auth.currentUser;
+      sync.pending = false; saveSync();
+      if (user) return afterLogin(user);
+      alert("구글에서 돌아왔지만 로그인 결과를 받지 못했어요 (no-redirect-result). 다시 시도해 주세요");
+    } catch (e) { sync.pending = false; saveSync(); loginError(e); }
+    return;
+  }
+  if (!sync.on) return;
+  try {
+    await loadFirebase();
+    await fb.auth.authStateReady();
+    if (!fb.auth.currentUser) { sync.on = false; saveSync(); render(); return; }
+    await reconcile(false);
+  } catch { /* 인터넷이 없거나 설정 전이면 이 기기 기록만 쓴다 */ }
+}
+async function login() {
+  try {
+    await loadFirebase();
+    const provider = new fb.U.GoogleAuthProvider();
+    provider.setCustomParameters({ prompt: "select_account" });
+    // 로그인 창을 같은 주소에서 띄우니 휴대폰도 팝업(새 탭)으로 먼저. 팝업이 막히는 곳만 화면을 넘겼다가 돌아오는 방식
+    let r;
+    try { r = await fb.U.signInWithPopup(fb.auth, provider); }
+    catch (e) {
+      const code = e?.code || "";
+      if (!code.includes("popup-blocked") && !code.includes("operation-not-supported")) throw e;
+      sync = { ...sync, pending: true }; saveSync();
+      await fb.U.signInWithRedirect(fb.auth, provider);
+      return;
+    }
+    await afterLogin(r.user);
+  } catch (e) {
+    sync.pending = false; saveSync();
+    loginError(e);
+  }
+}
+async function logout() {
+  try { await pushNow(); await loadFirebase(); await fb.U.signOut(fb.auth); } catch {}
+  sync = {}; saveSync(); render(); toast("로그아웃했어요. 기록은 이 기기에 남아 있어요");
+}
+// 내 정보 전부 지우기: 계정의 기록과 계정 연결도 지운다
+async function deleteRemote() {
+  if (!sync.on) return;
+  try {
+    await loadFirebase();
+    const u = fb.auth.currentUser;
+    if (u) {
+      // 모의투자 순위에 남은 내 닉네임·거래 기록도 서버가 함께 지운다 (순위표는 서버만 쓸 수 있어서)
+      await getJson("/api/market?game=forget", { method: "POST", headers: { Authorization: `Bearer ${await u.getIdToken()}` } }).catch(() => {});
+      await fb.F.deleteDoc(fb.F.doc(fb.db, "users", u.uid)); await fb.U.deleteUser(u).catch(() => fb.U.signOut(fb.auth));
+    }
+  } catch {}
+  sync = {}; saveSync();
+}
+function syncCard() {
+  if (sync.on) return `<section class="card sync-card" id="sec-sync">
+      <div class="sec-title"><h2>기기 연결</h2><span class="badge b-green">연결됨</span></div>
+      <p style="margin:0;font-size:calc(14px * var(--fs, 1));line-height:1.6"><b>${esc(sync.email || "구글 계정")}</b>으로 연결돼 있어요. 이 계정으로 로그인한 기기끼리 기록이 같아져요.${sync.lastSync ? `<br><span class="hint">마지막 저장 ${new Date(sync.lastSync).toLocaleString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}</span>` : ""}</p>
+      <button class="btn ghost" data-act="sync-logout">로그아웃</button>
+    </section>`;
+  return `<section class="card sync-card" id="sec-sync">
+      <div class="sec-title"><h2>기기 연결</h2><span>선택</span></div>
+      <p style="margin:0;font-size:calc(14px * var(--fs, 1));line-height:1.6">구글로 로그인하면 컴퓨터와 휴대폰의 기록(자산·가계부·퀴즈 등)이 같아져요. 로그인하지 않으면 지금처럼 이 기기에만 저장돼요.</p>
+      <button class="btn" data-act="sync-start">구글로 로그인하고 연결하기</button>
+    </section>`;
+}
+function modalConsent() {
+  return `<div class="sec-title" style="margin:0"><h2>기기 연결 전에 확인해 주세요</h2></div>
+    <ul class="consent">
+      <li>구글로 로그인하면 이 기기에 저장된 <b>내 정보(닉네임·나이·성향, 자산·대출·목표, 가계부, 퀴즈 기록)</b>를 내 계정 저장소(Google Firebase, 서울)에 저장해요.</li>
+      <li>저장한 기록은 <b>나만</b> 읽고 고칠 수 있어요. 같은 구글 계정으로 다른 기기에서 로그인하면 불러와져요.</li>
+      <li>캡처 사진과 비밀번호는 저장하지 않아요. 구글 비밀번호는 우리가 볼 수 없어요.</li>
+      <li>언제든 로그아웃할 수 있고, 기타 → ‘내 정보 전부 지우기’를 하면 계정에 저장된 기록과 연결까지 지워져요.</li>
+    </ul>
+    <label class="consent-check"><input type="checkbox" id="consent-ok"> 위 내용을 읽었고 동의해요</label>
+    <div class="inline"><button class="btn ghost" data-act="modal-close" style="flex:1">취소</button><button class="btn" data-act="sync-agree" style="flex:2">동의하고 구글로 로그인</button></div>`;
+}
+const UI_KEY = "myeco.ui.v1";
+
+function loadProfile() {
+  try { return JSON.parse(localStorage.getItem(STORE_KEY)); } catch { return null; }
+}
+function saveProfile() {
+  try { localStorage.setItem(STORE_KEY, JSON.stringify(profile)); } catch {}
+  syncSoon();
+}
+function loadUi() {
+  try { return JSON.parse(localStorage.getItem(UI_KEY)) || {}; } catch { return {}; }
+}
+function saveUi() {
+  try { localStorage.setItem(UI_KEY, JSON.stringify({ hideMoney: ui.hideMoney, lumiStill: ui.lumiStill, fs: ui.fs, lang: ui.lang })); } catch {}
+}
+const LEARN_KEY = "myeco.learn.v1";
+function loadLearn() {
+  try {
+    const v = JSON.parse(localStorage.getItem(LEARN_KEY)) || {};
+    const answers = {};
+    Object.entries(v.answers || {}).forEach(([k, a]) => (answers[k.includes(":") ? k : k + ":0"] = a)); // 예전 기록은 1단계 답으로
+    return { ...v, answers, notes: v.notes || {}, days: v.days || {}, today: v.today || null, badges: v.badges || {} };
+  } catch { return { answers: {}, notes: {}, days: {}, today: null }; }
+}
+function saveLearn() {
+  try { localStorage.setItem(LEARN_KEY, JSON.stringify(learnState)); } catch {}
+  syncSoon();
+}
+const learnState = loadLearn();
+
+let profile = loadProfile();
+const data = { market: null, news: null, newsFull: null, rates: null, calendar: [], benefitsApi: null, learn: null, brief: null, loading: false };
+const ui = {
+  bubble: 0, q: "", sremote: [], searchOpen: false, sheet: null,
+  news: { tab: "issues", kwItems: {} }, letter: { text: "", loading: false, result: null, error: "" },
+  hideMoney: false, schedAll: false, learnTab: "all", learnOpen: null, learnSort: "hot", learnExpand: {}, benTab: "all",
+  onb: { step: 0, draft: null }, search: { q: "", results: [], sample: false },
+  ...loadUi(),
+};
+// 기타 → 글자 크기(배율)·언어. 글자 크기는 CSS의 모든 font-size에 곱하는 --fs
+const FS_STEPS = [[0.9, "작게"], [1, "보통"], [1.12, "크게"], [1.25, "아주 크게"]];
+function applyDisplay() {
+  document.documentElement.style.setProperty("--fs", ui.fs || 1);
+  document.documentElement.lang = ui.lang === "en" ? "en" : "ko";
+}
+applyDisplay();
+
+// ── 영어 버전: 화면에 그려진 한국어를 AI(제미나이)로 번역해 그 자리에서 바꿔 끼운다 ──
+// 번역은 이 기기에 기억해 두고(TR_KEY) 다음부터는 바로 쓴다. 굵은 글씨가 섞인 한 문장은 [[1]]…[[/1]] 표시를 붙여 한 번에 번역한다.
+// translate="no"가 붙은 곳과 입력 칸 안의 글자는 바꾸지 않는다. canvas 그림 속 글자는 한국어로 남는다.
+const TR_KEY = "myeco.tr.en.v1";
+const HANGUL = /[가-힣]/;
+let trMem = {};
+try { trMem = JSON.parse(localStorage.getItem(TR_KEY) || "{}") || {}; } catch {}
+const trDone = new WeakSet(), trWait = new Set(), trFail = new Map();
+let trTimer = null, trBusy = false;
+const TR_INLINE = new Set(["B", "STRONG", "SMALL", "I", "EM", "SPAN", "U"]);
+const TR_BLOCKS = "body,#app,main,section,.card,.modal";
+const trSimple = (n) => n.nodeType === 3 || n.nodeName === "BR" || (n.nodeType === 1 && TR_INLINE.has(n.nodeName) && n.getAttribute("translate") !== "no" && [...n.childNodes].every((c) => c.nodeType === 3));
+const trSentence = (el) => el && !el.matches(TR_BLOCKS) && el.childNodes.length > 1 && [...el.childNodes].every(trSimple);
+function trUnit(t) {
+  const el = t.parentElement;
+  if (!el) return t;
+  if (TR_INLINE.has(el.nodeName) && trSentence(el.parentElement)) return el.parentElement;
+  return trSentence(el) ? el : t;
+}
+function trSrc(u) {
+  if (u.nodeType === 3) return u.nodeValue.trim();
+  let k = 0;
+  return [...u.childNodes].map((c) => (c.nodeType === 3 ? c.nodeValue : c.nodeName === "BR" ? "[[br]]" : `[[${++k}]]${c.textContent}[[/${k}]]`)).join("").replace(/\s+/g, " ").trim();
+}
+function trApply(u, en) {
+  if (u.nodeType === 3) {
+    const m = u.nodeValue.match(/^(\s*)[\s\S]*?(\s*)$/);
+    u.nodeValue = m[1] + en + m[2]; trDone.add(u); return;
+  }
+  const kids = [...u.childNodes].filter((c) => c.nodeType === 1 && c.nodeName !== "BR");
+  const out = [], re = /\[\[br\]\]|\[\[(\d+)\]\]([\s\S]*?)\[\[\/\1\]\]/g;
+  let last = 0, m, used = 0;
+  while ((m = re.exec(en))) {
+    if (m.index > last) out.push(document.createTextNode(en.slice(last, m.index)));
+    if (m[0] === "[[br]]") out.push(document.createElement("br"));
+    else { const k = kids[Number(m[1]) - 1]; if (k) { const c = k.cloneNode(false); c.textContent = m[2]; out.push(c); used++; } else out.push(document.createTextNode(m[2])); }
+    last = re.lastIndex;
+  }
+  if (last < en.length) out.push(document.createTextNode(en.slice(last)));
+  if (!out.length) return;
+  u.replaceChildren(...out);
+  out.forEach((n) => { trDone.add(n); if (n.firstChild) trDone.add(n.firstChild); });
+}
+function trPass() {
+  if (ui.lang !== "en") return;
+  const units = new Set();
+  const w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, { acceptNode: (n) => (!trDone.has(n) && HANGUL.test(n.nodeValue) && !n.parentElement?.closest('script,style,textarea,[translate="no"]') ? 1 : 3) });
+  for (let n; (n = w.nextNode());) units.add(trUnit(n));
+  for (const u of units) {
+    const src = trSrc(u);
+    if (!src || src.length > 1500) continue;
+    const en = trMem[src];
+    if (en != null) trApply(u, en); else if (!(trFail.get(src) > Date.now())) trWait.add(src);
+  }
+  document.querySelectorAll("[placeholder]").forEach((el) => {
+    const ph = el.getAttribute("placeholder");
+    if (!HANGUL.test(ph)) return;
+    if (trMem[ph] != null) el.setAttribute("placeholder", trMem[ph]); else trWait.add(ph);
+  });
+  if (trWait.size && !trTimer) trTimer = setTimeout(trFetch, 120);
+}
+async function trFetch() {
+  trTimer = null;
+  if (trBusy || !trWait.size) return;
+  trBusy = true;
+  const batch = [];
+  let chars = 0;
+  for (const s of trWait) { if (batch.length >= 40 || chars + s.length > 4000) break; batch.push(s); chars += s.length; }
+  batch.forEach((s) => trWait.delete(s));
+  try {
+    const j = await getJson("/api/ask", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ translate: batch }) });
+    for (const s of batch) if (typeof j.tr?.[s] === "string") trMem[s] = j.tr[s]; else trFail.set(s, Date.now() + 60e3);
+    if (Object.keys(trMem).length > 6000) trMem = Object.fromEntries(Object.entries(trMem).slice(-4000)); // 너무 많으면 오래된 것부터
+    try { localStorage.setItem(TR_KEY, JSON.stringify(trMem)); } catch {}
+  } catch { batch.forEach((s) => trFail.set(s, Date.now() + 60e3)); } // 실패하면 1분 뒤에 다시
+  trBusy = false;
+  trPass();
+  if (trWait.size && !trTimer) trTimer = setTimeout(trFetch, 300);
+}
+new MutationObserver(() => { if (ui.lang === "en") trPass(); }).observe(document.documentElement, { childList: true, subtree: true, characterData: true });
+
+// ───────────────────────── 상수 ─────────────────────────
+const PREFS = ["쇼핑", "여행", "음식", "자기계발", "저축", "부동산", "취미"];
+// 첫 설문에서 더 묻는 것: 돈 목표·고민, 관심 분야(업종), 경제 지식 수준, 투자 경험. 뉴스·중요한 3가지·루미 설명에 쓴다
+const AIMS = ["비상금", "첫 투자", "내 집 마련", "대출 갚기", "여행 자금", "취업·이직", "노후·연금"];
+const AIM_LABEL = { 비상금: "비상금 모으기", "첫 투자": "첫 투자 시작", "내 집 마련": "전세·내 집 마련", "대출 갚기": "학자금·대출 갚기", "여행 자금": "여행 자금 모으기", "취업·이직": "취업·이직 준비", "노후·연금": "노후·연금 준비" };
+const FIELDS = ["반도체", "2차전지", "AI", "바이오", "자동차", "게임·엔터", "은행·금융"];
+// 모의투자 힌트의 업종 이름(api/market.js SECTORS)에 이 낱말이 들어 있으면 그 관심 분야 소식
+const FIELD_HINT = { 반도체: "반도체", "2차전지": "배터리", AI: "플랫폼", 바이오: "바이오", 자동차: "자동차", "게임·엔터": "콘텐츠", "은행·금융": "은행" };
+const LEVELS = ["처음이에요", "뉴스는 보는데 어려워요", "어느 정도 알아요", "경제 전공자예요"];
+const EXPS = ["없어요", "예적금만 해 봤어요", "주식도 해 봤어요"];
+// 사는 형태 (연 소득 대신 묻는다: 생활비 규모와 1인 가구 혜택을 가늠하는 데 쓴다)
+const HOUSEHOLDS = ["혼자 살아요", "가족과 살아요", "친구·룸메이트와", "기숙사·고시원"];
+// 관심 분야 칩: 기본 분야 + 내가 직접 적은 분야, 그리고 '기타' 직접 적는 칸
+function fieldChips(sel, act, extra = "") {
+  const all = [...FIELDS, ...sel.filter((x) => !FIELDS.includes(x))];
+  return `<div class="chips">${all.map((x) => { const on = sel.includes(x); return `<button class="chip ${on ? "on" : ""}" data-act="${act}" data-v="${esc(x)}" ${extra} aria-pressed="${on}">${esc(x)}</button>`; }).join("")}</div>
+      <div class="inline"><label for="f-field-add" class="sr">관심 분야 직접 적기</label><input class="field" id="f-field-add" maxlength="12" placeholder="기타: 직접 적기 (예: 우주항공, 부동산)" style="flex:1"><button class="btn ghost" data-act="add-field" ${extra}>추가</button></div>`;
+}
+// 경제 지식 퀴즈 7문제: 쉬운 것부터 전공 수준까지. 맞힌 개수로 4단계 중 하나를 정한다
+const KQ = [
+  { q: "금리가 오르면, 은행 예금 이자는 보통 어떻게 될까요?", a: ["올라가요", "내려가요", "상관없어요"], c: 0, ex: "예금 이자는 시장 금리를 따라 움직여서, 금리가 오르면 보통 함께 올라요." },
+  { q: "'물가가 꾸준히 오르는 현상'을 뭐라고 할까요?", a: ["디플레이션", "인플레이션", "스태그네이션"], c: 1, ex: "인플레이션이에요. 같은 돈으로 살 수 있는 게 줄어들어요." },
+  { q: "같은 업종이라면, PER(주가수익비율)이 높은 회사는 보통 어떤 뜻일까요?", a: ["이익에 비해 주가가 싸요", "이익에 비해 주가가 비싸게 매겨졌어요", "배당을 많이 줘요"], c: 1, ex: "PER = 주가 ÷ 주당순이익. 높을수록 이익 대비 주가가 높게(기대가 크게) 매겨진 거예요." },
+  { q: "시장금리가 오르면, 이미 발행된 채권의 가격은?", a: ["오른다", "내린다", "변하지 않는다"], c: 1, ex: "새 채권이 더 높은 이자를 주니, 예전 채권은 값을 낮춰야 팔려요. 금리와 채권 가격은 반대로 움직여요." },
+  { q: "다른 조건이 같을 때, 한국은행이 기준금리를 올리면 원/달러 환율은 보통 어느 쪽 압력을 받을까요?", a: ["환율 상승(원화 약세)", "환율 하락(원화 강세)", "영향 없음"], c: 1, ex: "원화 자산의 금리가 높아지면 원화 수요가 늘어 환율 하락(원화 강세) 압력이 생겨요." },
+  { q: "장기 국채 금리가 단기 금리보다 낮아지는 '장단기 금리 역전'은 보통 무엇의 신호로 읽힐까요?", a: ["경기 과열", "경기 침체 가능성", "물가 급등"], c: 1, ex: "시장이 앞으로 금리 인하(경기 둔화)를 예상한다는 뜻이라, 경기 침체의 선행 신호로 자주 읽혀요." },
+  { q: "듀레이션이 긴 채권일수록, 금리가 1%p 바뀔 때 가격은?", a: ["더 크게 변해요", "더 작게 변해요", "똑같이 변해요"], c: 0, ex: "듀레이션은 금리 민감도예요. 길수록 같은 금리 변화에 가격이 더 크게 움직여요." },
+];
+const kqLevel = (n) => (n >= 7 ? 3 : n >= 5 ? 2 : n >= 3 ? 1 : 0);
+function modalKQuiz(m) {
+  const close = `<button class="icon-btn" data-act="modal-close" aria-label="닫기">${ICON.close}</button>`;
+  if (m.i >= KQ.length) {
+    const lv = kqLevel(m.right);
+    return `<div class="sec-title" style="margin:0"><h2>경제 지식 퀴즈</h2>${close}</div>
+      <div style="text-align:center;display:flex;flex-direction:column;align-items:center;gap:8px">${mascot(56)}<span class="hint">${KQ.length}문제 중 ${m.right}개 맞혔어요</span><b style="font-size:calc(22px * var(--fs, 1))">${LEVELS[lv]}</b>
+      <p class="hint" style="margin:0">루미가 이 수준에 맞춰 설명할게요. 나중에 마이페이지에서 언제든 바꿀 수 있어요.</p></div>
+      <button class="btn" data-act="kq-apply" data-v="${lv}">이걸로 정하기</button>`;
+  }
+  const q = KQ[m.i], pick = m.pick;
+  return `<div class="sec-title" style="margin:0"><h2>경제 지식 퀴즈</h2><span>${m.i + 1} / ${KQ.length}</span>${close}</div>
+    <div class="steps">${KQ.map((_, i) => `<i class="${i <= m.i ? "on" : ""}"></i>`).join("")}</div>
+    <p style="margin:0;font-size:calc(16px * var(--fs, 1));font-weight:700;line-height:1.5">${esc(q.q)}</p>
+    <div class="mcq">${q.a.map((x, i) => `<button class="${pick == null ? "" : i === q.c ? "ok" : i === pick ? "no" : ""}" data-act="kq-pick" data-v="${i}" ${pick == null ? "" : "disabled"}>${esc(x)}</button>`).join("")}</div>
+    ${pick == null ? `<p class="hint" style="margin:0">모르면 아무거나 골라도 돼요. 점수가 아니라 설명 수준을 정하는 데만 써요.</p>`
+      : `<p style="margin:0;font-size:calc(14px * var(--fs, 1));line-height:1.6">${pick === q.c ? "맞았어요! " : "아쉬워요. "}${esc(q.ex)}</p><button class="btn" data-act="kq-next">${m.i + 1 < KQ.length ? "다음 문제" : "결과 보기"}</button>`}`;
+}
+const kqLink = `<button class="link-btn" data-act="kq-open" style="align-self:flex-start;padding-left:0">잘 모르겠어요 · 퀴즈 7문제로 알아보기 ›</button>`;
+// 뉴스·풀이를 찾을 관심사: 관심 종목 → 관심 분야 → 돈 목표 → 선호 순으로 고르게 섞어 n개
+function myInterests(n = 6, p = profile) {
+  const w = p.watch.map((x) => x.name), f = p.fields || [], a = p.aims || [], pr = p.prefs || [];
+  return [...new Set([...w.slice(0, 2), ...f.slice(0, 2), ...a.slice(0, 2), ...pr.slice(0, 2), ...w.slice(2, 4), ...f.slice(2), ...a.slice(2), ...pr.slice(2)])].slice(0, n);
+}
+const hasAim = (k) => (profile?.aims || []).includes(k);
+const POPULAR = ["삼성전자", "SK하이닉스", "LG에너지솔루션", "현대차", "NAVER", "카카오", "셀트리온", "KB금융"];
+// 무료 경제 뉴스레터 구독자 순 TOP 5 (각 뉴스레터가 공개한 수치 기준, 2026년. 공개하지 않은 곳은 뒤에)
+const LETTERS = [
+  { id: "uppity", name: "머니레터", by: "어피티", url: "https://uppity.co.kr", subs: "약 116만 명", desc: "2030 돈 관리와 경제 뉴스, 평일 아침" },
+  { id: "newneek", name: "뉴닉", by: "NEWNEEK", url: "https://newneek.co", subs: "약 63만 명", desc: "시사·경제를 쉽게 (경제만 다루진 않아요)" },
+  { id: "miracle", name: "미라클레터", by: "매일경제", url: "https://www.mk.co.kr/newsletter", subs: "12만 명 이상", desc: "테크·글로벌 비즈니스 트렌드" },
+  { id: "soonsal", name: "순살브리핑", by: "순살", url: "https://subscribe.soonsal.com/subscribe", subs: "구독자 수 비공개", desc: "해외주식·투자 정보를 핵심만" },
+  { id: "dailybyte", name: "데일리바이트", by: "데일리바이트", url: "https://www.mydailybyte.com", subs: "구독자 수 비공개", desc: "경제·비즈니스 이슈를 배경부터 전망까지, 매일 아침" },
+];
+const INCOME = ["", "~3천만원", "3천~5천만원", "5천~7,500만원", "7,500만원~"];
+const INCOME_MONTHLY = [0, 210, 330, 520, 750]; // 구간별 대략 월 소득(만원), 비상금 진단용
+// 월 소득(만원): 자산 입력의 월 소득(가계부 고정 수입 월급과 이어짐) → 없으면 연 소득 구간으로 대략
+function incomeMonthly(p = profile) { return Number(p?.monthlyIncome) > 0 ? Number(p.monthlyIncome) : INCOME_MONTHLY[p?.income || 0] || 0; }
+// 가계부 고정 수입 가운데 월급 (분류가 급여·수입이거나 이름에 월급·급여)
+function salaryFixed() { return ledger.fixed.find((f) => f.dir === "in" && (f.cat === "급여·수입" || /월급|급여/.test(f.name))) || null; }
+// 위험기피 점수(1=위험 괜찮음 … 10=절대 싫음) → 금융투자협회 5단계 투자성향 이름
+function riskType(a) {
+  if (a >= 9) return "안정형";
+  if (a >= 7) return "안정추구형";
+  if (a >= 5) return "위험중립형";
+  if (a >= 3) return "적극투자형";
+  return "공격투자형";
+}
+// 성향별로 흔히 쓰는 투자자산 비중 참고치 (일반 기준, 투자 권유 아님)
+function investGuide(a) {
+  if (a >= 9) return [0, 10];
+  if (a >= 7) return [10, 30];
+  if (a >= 5) return [30, 50];
+  if (a >= 3) return [50, 70];
+  return [60, 90];
+}
+
+// ───────────────────────── 도우미 ─────────────────────────
+// 바깥에서 받은 링크(뉴스·혜택·뉴스레터)는 http(s) 주소만 쓴다. javascript: 같은 주소가 섞여 와도 누르면 코드가 실행되지 않게
+function href(u) { return /^https?:\/\//i.test(String(u ?? "").trim()) ? esc(String(u).trim()) : "#"; }
+function esc(s) {
+  return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+function fmt(n, dec = 0) {
+  if (n === null || n === undefined || Number.isNaN(n)) return "-";
+  return Number(n).toLocaleString("ko-KR", { minimumFractionDigits: dec, maximumFractionDigits: dec });
+}
+function won(n) { // 원 단위 금액을 읽기 쉽게
+  const a = Math.abs(n);
+  if (a >= 1e8) return `${fmt(a / 1e8, a % 1e8 ? 1 : 0)}억원`;
+  if (a >= 1e4) return `${fmt(a / 1e4, a < 1e5 ? 1 : 0)}만원`;
+  return `${fmt(Math.round(a))}원`;
+}
+function man(m) { // 만원 단위 숫자 → "1억 2,000만원"
+  if (m === null || m === undefined || m === "") return "-";
+  const n = Math.round(Number(m));
+  const eok = Math.floor(Math.abs(n) / 10000), rest = Math.abs(n) % 10000;
+  const s = (eok ? `${eok}억` : "") + (rest ? `${eok ? " " : ""}${fmt(rest)}만` : "") + "원";
+  return (n < 0 ? "-" : "") + (n === 0 ? "0원" : s);
+}
+function tone(v) { return v > 0 ? "up" : v < 0 ? "down" : "flat"; }
+function arrow(v) { return v > 0 ? "▲" : v < 0 ? "▼" : "-"; }
+function pct(v) { return v === null || v === undefined ? "-" : `${arrow(v)} ${fmt(Math.abs(v), 2)}%`; }
+function ymdLabel(s) { return s ? `${Number(s.slice(4, 6))}월 ${Number(s.slice(6, 8))}일` : ""; }
+// 국내 종가는 금융위원회·한국은행이 다음 영업일 낮에 올린다. 가장 최근 종가 날짜를 보고 '다음 종가가 언제 들어오는지' 한 줄 (주말만 빼고, 공휴일은 모름)
+function nextCloseNote(s) {
+  if (!/^\d{8}$/.test(String(s || ""))) return "";
+  const day = (y) => new Date(Date.UTC(+y.slice(0, 4), +y.slice(4, 6) - 1, +y.slice(6, 8)));
+  const nextWd = (d) => { const t = new Date(d); do t.setUTCDate(t.getUTCDate() + 1); while ([0, 6].includes(t.getUTCDay())); return t; };
+  const kst = new Date(Date.now() + 9 * 3600e3), today = Date.UTC(kst.getUTCFullYear(), kst.getUTCMonth(), kst.getUTCDate());
+  const n = nextWd(day(s)), p = nextWd(n), lab = `${n.getUTCMonth() + 1}월 ${n.getUTCDate()}일`;
+  if (today > p.getTime()) return "새 종가를 기다리는 중이에요";
+  if (today < n.getTime()) return "";
+  const when = today === p.getTime() ? "오늘" : p.getTime() - today === 864e5 ? "내일" : `${p.getUTCMonth() + 1}월 ${p.getUTCDate()}일(${"일월화수목금토"[p.getUTCDay()]})`;
+  return `${lab} 종가는 ${when} 오후에 올라와요`;
+}
+function josa(word, a, b) { // 받침 있으면 a, 없으면 b
+  const c = String(word).charCodeAt(String(word).length - 1);
+  if (c < 0xac00 || c > 0xd7a3) return b;
+  return (c - 0xac00) % 28 ? a : b;
+}
+function today0() { const d = new Date(); d.setHours(0, 0, 0, 0); return d; }
+function dayDiff(date) { return Math.round((date - today0()) / 86400e3); }
+function greet() {
+  const h = new Date().getHours();
+  return h < 11 ? "좋은 아침이에요" : h < 18 ? "좋은 오후예요" : "좋은 저녁이에요";
+}
+function toast(msg) {
+  document.querySelector(".toast")?.remove();
+  const t = document.createElement("div");
+  t.className = "toast"; t.setAttribute("role", "status"); t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 2200);
+}
+// 캐릭터 루미(이루미): 길을 밝혀주는 금융 길잡이. 그림은 사용자가 만든 캐릭터 시트(img/lumi/)를 그대로 쓴다.
+// face = 포즈·표정 이름: main(대표) · wave(손 흔들기) · sit(앉기) · lookup(올려다보기) · happy · curious · reassure · confident · icon(앱 아이콘)
+// anim = '' | 'up'(신나서 콩콩) | 'flat'(두리번) | 'down'(차분히 숨쉬기)
+const LUMI_ALIAS = { wave: "wave" };
+function mascot(size = 40, face = "wave", anim = "") {
+  const img = size <= 36 && face === "wave" ? "icon" : LUMI_ALIAS[face] || face; // 작은 자리는 앱 아이콘
+  const move = anim && !ui.lumiStill ? " lumi-" + anim : "";
+  return `<span class="lumi is-${img}${move}" style="width:${size}px;height:${size}px" aria-hidden="true"><img src="/img/lumi/${img}.png" alt="" width="${size}" height="${size}" draggable="false"></span>`;
+}
+// 오늘 코스피 분위기 → 루미의 포즈와 움직임
+function lumiMood() {
+  const m = marketMood();
+  return m === "상승" ? ["wave", "up"] : m === "하락" ? ["sit", "down"] : ["lookup", "flat"];
+}
+const ICON = {
+  gear: `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>`,
+  menu: `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h10"/></svg>`,
+  refresh: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>`,
+  send: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5"/><path d="M5 12l7-7 7 7"/></svg>`,
+  back: `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>`,
+  out: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17L17 7"/><path d="M8 7h9v9"/></svg>`,
+  close: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>`,
+  x: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>`,
+};
+
+function newProfile() {
+  return {
+    nickname: "", age: null, gender: "", income: null, avert: 6, prefs: [],
+    watch: [], letters: [], customLetters: [],
+    assets: { cash: null, invest: null, other: null }, debts: null, payday: null,
+    region: { sido: "", sigungu: "" }, status: "", school: "",
+    aims: [], fields: [], level: null, exp: null, household: "",
+    skipped: {}, createdAt: new Date().toISOString(),
+  };
+}
+
+// ───────────────────────── 데이터 불러오기 ─────────────────────────
+// 이 기기의 무작위 표시: 서버가 AI 하루 횟수를 기기마다 세는 데만 쓴다(이름·계정과 이어지지 않음)
+const DEV_ID = (() => { try { let v = localStorage.getItem("myeco.dev"); if (!v) { v = Math.random().toString(36).slice(2) + Date.now().toString(36); localStorage.setItem("myeco.dev", v); } return v; } catch { return ""; } })();
+async function getJson(url, opt) {
+  if (DEV_ID && /^\/api\//.test(url)) opt = { ...(opt || {}), headers: { ...(opt?.headers || {}), "X-Dev": DEV_ID } };
+  const r = await fetch(url, opt);
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw Object.assign(new Error(j.error || r.status), { body: j });
+  return j;
+}
+
+// 나를 위한 뉴스는 하루 한 번 바뀌면 충분해서, 처음 찾은 목록을 그날 내내 쓴다.
+// 네이버 검색이 막힌 날(429 등)에 비어 보이지 않게, 새로 못 찾으면 마지막으로 찾은 목록을 그대로 둔다(관심사가 같을 때만)
+const FORYOU_KEY = "myeco.foryou.v1";
+function keepForYou(kind, interests, j) {
+  if (!j || j.sample) return j;
+  let all = {};
+  try { all = JSON.parse(localStorage.getItem(FORYOU_KEY) || "{}") || {}; } catch {}
+  const saved = all[kind], day = ymd(today0()), fresh = j.forYou || [];
+  const same = saved && saved.interests === interests && saved.items?.length;
+  if (same && !fresh.length) return { ...j, forYou: saved.items }; // 새로 받은 게 없을 때만 마지막 목록 (예전엔 하루 내내 아침 목록을 고정했음)
+  if (fresh.length) { all[kind] = { day, interests, items: fresh }; try { localStorage.setItem(FORYOU_KEY, JSON.stringify(all)); } catch {} }
+  return j;
+}
+async function loadAll(manual = false) {
+  if (!profile) return;
+  data.loading = true;
+  data.newsFull = null; // 관심사가 바뀌었을 수 있으니 더보기 목록은 다시 받는다
+  const names = profile.watch.map((w) => w.name).join(",");
+  const interests = myInterests(6).join(",");
+  const jobs = [
+    getJson(`/api/market?stocks=${encodeURIComponent(names)}`).then((j) => (data.market = j)).catch(() => {}),
+    getJson(`/api/news?interests=${encodeURIComponent(interests)}`).then((j) => (data.news = keepForYou("home", interests, j))).catch(() => {}),
+    Promise.resolve(ensureTrending()),
+    getJson(`/api/news?full=1&q=${encodeURIComponent("환율")}`).then((j) => (data.fxNews = j.sample ? [] : j.items || [])).catch(() => {}),
+  ];
+  if (!data.calendar.length) jobs.push(getJson("/data/calendar.json").then((j) => (data.calendar = j.events || [])).catch(() => {}));
+  if (!data.learn) jobs.push(getJson("/data/learn.json").then((j) => (data.learn = withBasics(j))).catch(() => {}));
+  jobs.push(loadBenefits());
+  if (!data.rates) jobs.push(getJson("/api/rates").then((j) => (data.rates = j)).catch(() => {}));
+  await Promise.all(jobs);
+  data.loading = false;
+  if (!["onboard", "my"].includes(route())) render();
+  if (route() === "news") openNews(ui.news.tab); // 뉴스 화면에서 새로 고친 경우 지운 목록을 다시 받는다
+  if (manual) toast(data.market ? `업데이트했어요 · ${ymdLabel(data.market.kospi?.date)} 종가 기준` : "불러오지 못했어요. 잠시 후 다시 시도해 주세요");
+}
+
+// ───────────────────────── 개인화 계산 ─────────────────────────
+function marketMood() {
+  const p = data.market?.kospi?.pct;
+  if (p === undefined || p === null) return "확인 중";
+  return p >= 0.7 ? "상승" : p <= -0.7 ? "하락" : "관망";
+}
+function biggestMover() { // 0.01% 미만은 '움직이지 않음'으로 본다
+  const list = (data.market?.stocks || []).filter((s) => !s.missing && s.pct !== null && Math.abs(s.pct) >= 0.01);
+  return list.sort((a, b) => Math.abs(b.pct) - Math.abs(a.pct))[0];
+}
+function watchIndex(name) { const i = profile.watch.findIndex((w) => w.name === name); return i < 0 ? 99 : i; }
+function qtyOf(name) { return Number(profile.watch.find((w) => w.name === name)?.qty) || 0; }
+
+// 금리 일정은 대출·종목·저축·부동산 관심이 있는 사람에게만
+function interestTags() {
+  const t = new Set(profile.prefs);
+  if ((profile.debts || []).length || profile.watch.length || t.has("저축") || t.has("부동산")) t.add("금리");
+  return t;
+}
+function upcoming(limit = 5, all = false) {
+  const now = today0();
+  const tags = interestTags();
+  const list = [];
+  for (const e of data.calendar) {
+    if (!all && e.tags && !e.tags.some((x) => tags.has(x))) continue;
+    if (e.ageMax && profile.age && profile.age > e.ageMax) continue;
+    let d;
+    if (e.monthly) {
+      d = new Date(now.getFullYear(), now.getMonth(), e.monthly);
+      if (d < now) d.setMonth(d.getMonth() + 1);
+    } else d = new Date(e.date + "T00:00:00");
+    if (d < now || dayDiff(d) > 100) continue;
+    list.push({ ...e, d, tag: (e.tags || []).find((x) => tags.has(x)) || (all ? (e.tags || [])[0] || "" : "") });
+  }
+  // 내 일정: 월급날, 대출 이자일 (다음 한 번)
+  const next = (day) => {
+    const d = new Date(now.getFullYear(), now.getMonth(), Math.min(day, 28));
+    if (d < now) d.setMonth(d.getMonth() + 1);
+    return d;
+  };
+  if (profile.payday) list.push({ d: next(profile.payday), title: "월급날", tag: "내 일정", mine: true });
+  (profile.debts || []).forEach((dbt) => {
+    if (dbt.day) list.push({ d: next(dbt.day), title: `${dbt.name || "대출"} 이자 납부일`, tag: "내 일정", mine: true, note: dbt.amount && dbt.rate ? `약 ${won((dbt.amount * 1e4 * dbt.rate) / 100 / 12)}` : "" });
+  });
+  // 내 일정 → 관심사 확정 일정 → 관심사 예상 일정 → 금리 일정 순으로 자리를 채우고, 보여줄 때는 날짜순
+  const rank = (e) => (e.mine ? 0 : e.tag === "금리" ? 3 : e.approx ? 2 : 1); // 확정 일정이 예상 일정보다 먼저
+  const picked = all ? list : list.sort((a, b) => rank(a) - rank(b) || a.d - b.d).slice(0, limit);
+  return picked.sort((a, b) => a.d - b.d);
+}
+
+// 종목 시세의 원천: 네이버 증권 종목 페이지 (종목 코드가 없으면 검색)
+function stockSrc(st) {
+  return [`네이버 증권 · ${st.name}`, st.code ? `https://finance.naver.com/item/main.naver?code=${encodeURIComponent(st.code)}` : `https://finance.naver.com/search/searchList.naver?query=${encodeURIComponent(st.name)}`];
+}
+function impacts() {
+  const m = data.market, p = profile, out = [];
+  if (!m) return out;
+  if (m.usd) {
+    const vs = m.usd.vs || 0, up = vs > 0;
+    let text;
+    if (!vs) text = "환율이 직전 고시와 같아요. 해외결제 비용 변화는 없어요.";
+    else if (p.prefs.includes("여행") || hasAim("여행 자금")) text = `여행${hasAim("여행 자금") ? " 자금을 모으는" : "을 좋아하는"} 당신, 1,000달러를 환전하면 직전 고시보다 약 ${won(Math.abs(vs * 1000))} ${up ? "더 들어요" : "덜 들어요"}.`;
+    else if (p.prefs.includes("쇼핑")) text = `쇼핑을 좋아하는 당신, 해외직구 100달러 결제 시 약 ${won(Math.abs(vs * 100))} ${up ? "더 내요" : "덜 내요"}.`;
+    else text = up ? "수입품 가격과 해외결제 비용이 조금 오를 수 있어요." : "해외결제·수입품 비용 부담이 조금 줄어요.";
+    const fxSrc = m.src?.usd === "ecos" ? ["한국은행 경제통계(ECOS) 원/달러 환율", "https://ecos.bok.or.kr"] : ["한국수출입은행 환율", "https://www.koreaexim.go.kr"];
+    const fxNews = (data.fxNews || []).find((n) => /환율/.test(n.title) && /^https?:\/\//.test(n.url));
+    out.push({ kind: "fx", score: 1 + (p.prefs.includes("여행") || p.prefs.includes("쇼핑") || hasAim("여행 자금") ? 2 : 0) + Math.min(2, Math.abs(m.usd.pct || 0)),
+      tag: `환율 ${arrow(vs)} ${fmt(m.usd.v, 1)}원`, tone: tone(vs), text, num: fxSrc[0], src: fxNews ? [`${fxNews.source || "뉴스"} 기사`, fxNews.url] : fxSrc });
+  }
+  const rateEvent = upcoming(20).find((e) => (e.tags || []).includes("금리"));
+  const isBok = !rateEvent || rateEvent.title.includes("한국은행");
+  const rateSoon = rateEvent && dayDiff(rateEvent.d) <= 7 ? 2 : 0;
+  const when = rateEvent ? `${rateEvent.d.getMonth() + 1}/${rateEvent.d.getDate()} ${isBok ? "금통위" : "FOMC"}` : "다음 금리 결정";
+  const rateSrc = isBok ? ["한국은행 기준금리 추이", "https://www.bok.or.kr/portal/singl/baseRate/list.do?dataSeCd=01&menuNo=200643"] : ["미국 연준 FOMC 일정", "https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm"];
+  if (p.debts === null) { // 대출은 묻지 않는다. 내 돈 '자산'에서 직접 넣을 때까지 일반 설명만
+    // 돈 목표가 있으면 그 목표 쪽으로 풀어 말한다 (일반 설명, 내 대출 금액은 묻지 않음)
+    const head = rateEvent ? `${when}에 기준금리가 정해져요. ` : "";
+    const aimText = hasAim("내 집 마련") ? `${head}전세·내 집 마련을 준비 중이라면, 금리가 오르면 전세대출·주택담보대출 이자가 커지고 내리면 줄어요.`
+      : hasAim("대출 갚기") ? `${head}대출을 갚는 중이라면, 변동금리 대출은 금리가 오를 때 이자가 커져요. 고정금리는 그대로예요.`
+      : hasAim("비상금") ? `${head}비상금을 모으는 중이라면, 금리가 오르면 예금·파킹통장 이자가 늘어요.`
+      : "";
+    const text = p.assets.cash ? `${when}에서 금리가 0.25%p 바뀌면, 예금 ${man(p.assets.cash)}의 1년 이자가 약 ${won(p.assets.cash * 1e4 * 0.0025)} 달라질 수 있어요.` : aimText || `${head}금리가 오르면 예금 이자는 늘고, 대출 이자는 커져요.`;
+    const aimBoost = hasAim("내 집 마련") || hasAim("대출 갚기") ? 2 : hasAim("비상금") ? 1 : 0;
+    out.push({ tag: rateEvent ? `금리 · ${when}` : "금리", tone: "flat", text, kind: "rate", score: 1 + rateSoon + aimBoost, num: p.assets.cash ? "예금: 내가 입력한 금액" : "금리 일정: 한국은행·연준 발표", src: rateSrc });
+  } else {
+    const variable = p.debts.filter((d) => d.kind === "변동").reduce((s, d) => s + (Number(d.amount) || 0), 0);
+    let text;
+    if (variable > 0) text = `${when}에서 금리가 0.25%p 오르면, 변동금리 대출 ${man(variable)}의 이자가 월 약 ${won((variable * 1e4 * 0.0025) / 12)} 늘어요.`;
+    else if (p.debts.length) text = "대출이 고정금리라 금리가 바뀌어도 당장 이자는 그대로예요.";
+    else if (p.assets.cash) text = `${when}에서 금리가 0.25%p 바뀌면, 예금 ${man(p.assets.cash)}의 1년 이자가 약 ${won(p.assets.cash * 1e4 * 0.0025)} 달라질 수 있어요.`;
+    else text = "대출이 없으니 금리 변화는 예금·적금 이자 쪽으로 영향을 줘요.";
+    out.push({ kind: "rate", score: 1 + rateSoon + (variable > 0 ? 3 : 0), num: variable > 0 ? "대출: 내가 입력한 금액" : p.assets.cash ? "예금: 내가 입력한 금액" : "", tag: rateEvent ? `금리 · ${when}` : "금리", tone: "flat", text, src: rateSrc });
+  }
+  const stocks = (m.stocks || []).filter((s) => !s.missing && s.vs !== null);
+  const held = stocks.filter((s) => qtyOf(s.name) > 0);
+  if (held.length) {
+    const sum = held.reduce((t, s) => t + qtyOf(s.name) * s.vs, 0);
+    const big = held.reduce((a, b) => (Math.abs(qtyOf(b.name) * b.vs) > Math.abs(qtyOf(a.name) * a.vs) ? b : a));
+    out.push({ tag: `내 종목 ${sum >= 0 ? "▲" : "▼"}`, tone: tone(sum), text: `보유 종목 평가액이 전일보다 약 ${won(sum)} ${sum >= 0 ? "늘었어요" : "줄었어요"}.`, kind: "stock", score: 4 + Math.abs(big.pct || 0) / 2, num: "금융위원회 전일 종가", src: stockSrc(big) });
+  } else {
+    const top = biggestMover();
+    if (top) out.push({ tag: `${top.name} ${pct(top.pct)}`, tone: tone(top.pct), text: `관심 종목 중 ${top.name}${josa(top.name, "이", "가")} 가장 크게 움직였어요. 보유 수량을 넣으면 내 손익으로 보여드려요.`, kind: "stock", score: 1 + Math.min(3, Math.abs(top.pct || 0) / 2), num: "금융위원회 전일 종가", src: stockSrc(top) });
+  }
+  // 코스피가 크게 움직인 날
+  const kp = m.kospi?.pct;
+  const starter = hasAim("첫 투자"); // 투자를 시작하려는 사람에게는 코스피가 조금만 움직여도 알려준다
+  if (kp !== null && kp !== undefined && Math.abs(kp) >= (starter ? 0.8 : 1.5)) {
+    const ecos = m.src?.index === "ecos";
+    out.push({ kind: "index", score: 1 + Math.abs(kp) + (starter ? 1 : 0), tag: `코스피 ${pct(kp)}`, tone: tone(kp),
+      text: `코스피가 전일보다 ${fmt(Math.abs(kp), 2)}% ${kp > 0 ? "올랐어요" : "내렸어요"}.${starter ? " 첫 투자를 준비 중이라면, 코스피는 우리나라 주식 전체의 흐름을 보여주는 숫자예요." : p.watch.length ? " 내 관심 종목도 함께 움직였을 수 있어요." : ""}`,
+      num: "",
+      src: ecos ? ["출처 한국은행 경제통계(ECOS)", "https://ecos.bok.or.kr"] : ["출처 금융위원회 지수시세", "https://www.data.go.kr/data/15094807/openapi.do"] });
+  }
+  // 3일 안에 있는 내 관심사 일정 (금리 일정은 위 카드에 있으니 빼고, 원문 주소가 있는 것만)
+  const ev = upcoming(10).find((e) => !(e.tags || []).includes("금리") && e.url && dayDiff(e.d) <= 3 && (e.tags || []).some((t) => p.prefs.includes(t)));
+  if (ev) {
+    const dd = dayDiff(ev.d);
+    out.push({ kind: "event", score: 2 + (3 - dd), tag: dd === 0 ? "오늘 일정" : `D-${dd} 일정`, tone: "flat", text: `관심 있는 ‘${ev.title}’ 일정이 ${dd === 0 ? "오늘" : `${dd}일 뒤`}예요.`, num: "", src: ["일정 원문", ev.url] });
+  }
+  // 하루 3개만: 나와 더 관련 있고 많이 움직인 것부터
+  return out.sort((x, y) => y.score - x.score).slice(0, 3);
+}
+
+function bubbleLines() {
+  const L = [];
+  const name = profile.nickname || "오늘";
+  const m = data.market;
+  L.push({ text: `${esc(name)}님, ${greet()}! ${m ? `${{ 상승: "오늘 시장은 ‘오르는’ 분위기예요.", 하락: "오늘 시장은 ‘내리는’ 분위기예요." }[marketMood()] || "오늘 시장은 크게 오르지도 내리지도 않고 지켜보는 분위기예요."}` : "오늘 경제 소식을 모으고 있어요."}` });
+  const top = biggestMover();
+  if (top) L.push({ text: `관심 종목 ${esc(top.name)}${josa(top.name, "이", "가")} 전일보다 ${fmt(Math.abs(top.pct), 2)}% ${top.pct >= 0 ? "올랐어요" : "내렸어요"}.` });
+  const fx = impacts().find((x) => x.kind === "fx");
+  if (fx && m?.usd) L.push({ text: `원/달러 환율은 ${fmt(m.usd.v, 1)}원이에요. ${fx.text}` });
+  const ev = upcoming(5).find((e) => dayDiff(e.d) <= 14);
+  if (ev) {
+    const dd = dayDiff(ev.d);
+    const when = ev.approx ? `곧(${esc(ev.when)})` : dd === 0 ? "오늘" : `${dd}일 뒤`;
+    L.push({ text: `${when} ‘${esc(ev.title)}’ 일정이 있어요.${(ev.tags || []).includes("금리") ? " 발표 전후로 시장이 출렁일 수 있어요." : ""}` });
+  }
+  const b = data.benefitsApi?.items?.[0];
+  if (b) L.push({ text: `${esc(profile.region.sigungu || profile.region.sido)}에 사는 ${esc(name)}님이 받을 수 있는 혜택이 있어요. ‘${esc(shortTitle(b.name))}’`, act: "go-benefits", label: "혜택 보기" });
+  else if (!profile.region?.sido) L.push({ text: "사는 지역을 알려주면 지자체·정부 혜택을 찾아드릴게요.", act: "go-benefits", label: "지역 입력" });
+  const gl = goalLine();
+  if (gl) L.push(gl);
+  const ml = moneyLine();
+  if (ml) L.push(ml);
+  L.push({ text: "궁금한 건 맨 위 검색창에 편하게 물어보세요!", act: "focus-ask" });
+  return L;
+}
+
+function nextQuestion() {
+  const p = profile, s = p.skipped || {};
+  if (!p.region?.sido && !s.region) return "region";
+  if (!p.status && !s.status) return "status";
+  if (!(p.aims || []).length && !s.aims) return "aims";
+  if (p.level == null && !s.level) return "level";
+  if (!(p.fields || []).length && !s.fields) return "fields";
+  if (!p.household && !s.household) return "household";
+  if (p.assets.cash === null && !s.cash) return "cash";
+  if (!p.payday && !s.payday) return "payday";
+  if (!p.gender && !s.gender) return "gender";
+  return null;
+}
+
+function summaryForAi() {
+  const p = profile;
+  const debts = p.debts || [];
+  return {
+    profile: {
+      ageGroup: p.age ? `${Math.floor(p.age / 10) * 10}대` : undefined,
+      riskType: riskType(p.avert), riskAversion: `${p.avert}/10`,
+      values: p.prefs, income: INCOME[p.income || 0] || undefined, household: p.household || undefined,
+      cashMan: p.assets.cash ?? undefined, investMan: p.assets.invest ?? undefined,
+      debtMan: debts.reduce((s, d) => s + (Number(d.amount) || 0), 0),
+      variableDebtMan: debts.filter((d) => d.kind === "변동").reduce((s, d) => s + (Number(d.amount) || 0), 0),
+      watchlist: p.watch.map((w) => w.name),
+      status: p.status || undefined, aims: (p.aims || []).map((a) => AIM_LABEL[a]), fields: p.fields || [],
+      knowledge: LEVELS[p.level] || undefined, investExp: EXPS[p.exp] || undefined,
+    },
+    market: data.market ? {
+      kospi: data.market.kospi, usdkrw: data.market.usd,
+      stocks: (data.market.stocks || []).filter((s) => !s.missing).map((s) => ({ name: s.name, close: s.v, pct: s.pct })),
+    } : {},
+  };
+}
+
+// ───────────────────────── 화면: 홈 ─────────────────────────
+// 뉴스 제목을 몇 단어로 줄이기: [단독] 같은 머리말, 언론사 꼬리, 부제(… · - |) 떼고 22자 안팎에서 자르기
+function shortTitle(t) {
+  let s = String(t || "").replace(/^\s*(\[[^\]]*\]|【[^】]*】|<[^>]*>)\s*/g, "").replace(/\s*[-|]\s*[^-|]{2,12}$/, "");
+  // 부제(… · - | , 뒤)는 잘라내되, 앞부분이 너무 짧으면('북,' '삼성그룹,') 자르지 않고 길이로만 줄인다
+  const head = s.split(/…|\.\.\.|\s·\s|\s-\s|\s\|\s|,\s/)[0].trim();
+  if (head.length >= 10) s = head;
+  if (s.length > 22) {
+    const cut = s.slice(0, 22);
+    const sp = cut.lastIndexOf(" ");
+    s = (sp > 10 ? cut.slice(0, sp) : cut) + "…";
+  }
+  return s;
+}
+// 홈 뉴스 3줄은 서로 다른 화제로: 제목의 핵심 낱말(젠슨·엔비디아처럼)이 겹치면 같은 이야기로 보고 다음 기사를 쓴다
+const NEWS_STOP = new Set("경제 정부 시장 올해 내년 전망 확대 검토 위해 대한 관련 오늘 최근 기업 국내 국가 한국 미국 산업 정책 발표 지원 추진 투자 증시 주가 상승 하락 급등 급락 가능 이유 결정 역할 필요 속보 단독 특징주 달러 억원 조원 만원 가운데 이후 대통령 사상 최대 최고 최저".split(" "));
+function topicWords(t) {
+  return (String(t || "").replace(/\[[^\]]*\]|【[^】]*】/g, " ").match(/[가-힣A-Za-z0-9]{2,}/g) || [])
+    .map((w) => w.replace(/(에서|으로|까지|부터|은|는|이|가|을|를|의|에|와|과|도|로|만)$/, ""))
+    .filter((w) => w.length >= 2 && !NEWS_STOP.has(w) && !/^\d+$/.test(w));
+}
+function sameTopic(a, b) {
+  const A = topicWords(a.title), B = topicWords(b.title);
+  return A.some((x) => B.some((y) => x === y || (x.length >= 2 && y.length >= 2 && (x.startsWith(y) || y.startsWith(x)))));
+}
+// 홈 뉴스: 위 칸 '나를 위한 뉴스' 2줄(관심사가 다르게), 아래 칸 '오늘의 이슈' 2줄(이슈 1 + 해외 1). 네 줄 모두 화제가 겹치지 않게
+function homeNewsPick(n) {
+  const picked = [];
+  const ok = (it) => !picked.some((p) => p.url === it.url || sameTopic(p, it));
+  const take = (it) => { if (it) picked.push(it); return it; };
+  const fy = n.forYou || [];
+  const mine = [];
+  for (const it of fy) if (mine.length < 2 && !mine.some((m) => m.tag === it.tag) && ok(it)) mine.push(take(it)); // 관심사마다 하나씩
+  for (const it of fy) if (mine.length < 2 && !mine.includes(it) && ok(it)) mine.push(take(it)); // 관심사가 하나뿐이면 같은 관심사에서 하나 더
+  const issues = (n.issues || []).map((it) => ({ ...it, tag: "이슈" })), global = (n.global || []).map((it) => ({ ...it, tag: "해외" }));
+  const rest = [];
+  for (const lane of [issues, global]) { const it = lane.find(ok) || [...issues, ...global].find(ok); if (it) rest.push(take(it)); }
+  for (const it of [...issues, ...global]) if (rest.length < 2 && !picked.some((p) => p.url === it.url)) rest.push(take(it));
+  return { mine, rest };
+}
+// swipe: 홈 뉴스는 제목을 자르지 않고 한 줄에 다 넣어, 옆으로 밀면 끝까지 보인다
+function newsLine(it, swipe) {
+  const t = swipe === true ? it.title : shortTitle(it.title);
+  return `<a href="${href(it.url)}" target="_blank" rel="noopener" title="${esc(it.orig || it.title)}">
+    ${it.tag ? `<span class="badge b-green">${esc(it.tag)}</span>` : ""}<span class="t1${swipe === true ? " swipe" : ""}">${esc(t)}</span><span class="src">${esc(it.source || "")}</span></a>`;
+}
+function newsList(items, numbered) { // 뉴스 더보기 화면: 제목 전체
+  return (items || []).map((it, i) => `<a href="${href(it.url)}" target="_blank" rel="noopener">
+      ${numbered ? `<span class="no">${i + 1}</span>` : ""}
+      <div style="flex:1"><div class="t">${esc(it.title)}</div><div class="m">${it.tag ? `<span class="badge b-green">${esc(it.tag)}</span>` : ""}<span>${esc(it.source || "")}</span>${it.at ? `<span>· ${ago(it.at)}</span>` : ""}</div></div></a>`).join("");
+}
+function tile(name, v, c, dec) {
+  return `<div><span class="k">${esc(name)}</span><span class="v num">${v === undefined || v === null ? "-" : fmt(v, dec)}</span><span class="c num ${tone(c)}">${pct(c)}</span></div>`;
+}
+const SEARCH_ICON = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" style="flex-shrink:0;color:#7C8DF5"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>`;
+function pageHead(title, extra = "", back = "go-home") {
+  return `<header class="page-head">
+    <button class="icon-btn" data-act="${back}" aria-label="${back === "go-learn" ? "공부로" : "홈으로"}">${ICON.back}</button>
+    <h1>${title}</h1>${extra}
+    <button class="icon-btn menu-btn" data-act="open-drawer" aria-label="목차 열기">${ICON.menu}</button>
+  </header>`;
+}
+
+function header() {
+  return `<header class="top home-top">
+    <button class="brandbtn" data-act="open-drawer" aria-label="목차 열기">${mascot(30)}<span>나만의 경제</span></button>
+    <div class="top-icons">
+      <button class="icon-btn" data-act="refresh" aria-label="새로고침">${ICON.refresh}</button>
+      <button class="icon-btn" data-act="open-drawer" aria-label="목차 열기">${ICON.menu}</button>
+    </div>
+  </header>
+  <div class="searchwrap ${ui.searchOpen ? "open" : ""}" id="searchwrap">
+    <form class="searchbox" id="searchform" role="search">
+      ${SEARCH_ICON}
+      <label for="q" class="sr">앱 안에서 검색하거나 질문하기</label>
+      <input id="q" type="search" autocomplete="off" enterkeyhint="search" placeholder="종목·뉴스·용어 검색, 질문도 OK" value="${esc(ui.q)}">
+    </form>
+    <div class="sresults" id="sresults">${searchResults()}</div>
+  </div>`;
+}
+// 아래 탭의 첫 화면용 머리 (뒤로가기 없이 큰 제목)
+function tabHead(title) {
+  return `<header class="page-head tab-head">
+    <h1>${title}</h1>
+    <div class="top-icons">
+      <button class="icon-btn" data-act="go-my" aria-label="마이페이지">${ICON.gear}</button>
+      <button class="icon-btn" data-act="open-drawer" aria-label="목차 열기">${ICON.menu}</button>
+    </div>
+  </header>`;
+}
+// 하단 탭: 홈 / 경제 공부 / 내 돈(가계부+자산관리) / 모의투자. 푼 문제·복습·문제 화면은 공부 안의 전체 화면
+const LEARN_POP = ["solved", "review", "quiz"];
+function learnHead() { return tabHead("경제 공부"); }
+const TABS = [
+  ["home", "홈", `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 10.5 12 4l8.5 6.5V19a1.5 1.5 0 0 1-1.5 1.5h-4.5v-5.5h-5v5.5H5A1.5 1.5 0 0 1 3.5 19z"/></svg>`],
+  ["learn", "경제 공부", `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" aria-hidden="true"><path d="M4 5.5A1.5 1.5 0 0 1 5.5 4H11v16H5.5A1.5 1.5 0 0 1 4 18.5z"/><path d="M20 5.5A1.5 1.5 0 0 0 18.5 4H13v16h5.5a1.5 1.5 0 0 0 1.5-1.5z"/></svg>`],
+  ["ledger", "내 돈", `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="6" width="18" height="14" rx="3"/><path d="M3 10h18M16 15h2"/><path d="M7 6V5a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v1"/></svg>`],
+  ["invest", "모의투자", `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" aria-hidden="true"><path d="M4 19h16"/><path d="M5 15l4-4 3 3 6-7"/><path d="M15 7h3v3"/></svg>`],
+];
+// 내 돈 안의 보기 4칸: 기록·통계는 가계부(#ledger), 분석·자산은 자산관리(#assets)
+function moneySeg() {
+  const r = route(), on = (rt, k, v) => r === rt || (rt === "ledger" && r === "money") ? (ui[k] || (k === "ledgerTab" ? "rec" : "invest")) === v : false;
+  const b = (rt, k, v, label) => `<button class="${on(rt, k, v) ? "on" : ""}" role="tab" aria-selected="${on(rt, k, v)}" data-act="money-seg" data-r="${rt}" data-k="${k}" data-v="${v}">${label}</button>`;
+  return `<div class="sortbar seg4" role="tablist" aria-label="내 돈 보기">${b("ledger", "ledgerTab", "rec", "기록")}${b("ledger", "ledgerTab", "stat", "통계")}${b("assets", "assetTab", "analysis", "분석")}${b("assets", "assetTab", "invest", "자산")}</div>`;
+}
+function tabBar(r) {
+  const cur = ["money", "assets"].includes(r) ? "ledger" : ["news", "letters"].includes(r) ? "learn" : ["schedule", "benefits", "layout", "watch"].includes(r) ? "home" : r;
+  const T = shownTabs(), tn = tutNext()?.tab; // 기타 → 아래 탭 고르기에서 없앤 탭은 빼고, 튜토리얼 중이면 갈 탭을 반짝
+  return `<nav class="tabbar" aria-label="주요 메뉴" style="grid-template-columns:repeat(${T.length}, minmax(0, 1fr))">${T.map(([id, label, icon]) =>
+    `<button class="${cur === id ? "on" : ""}${tn === id && cur !== id ? " tut-pulse" : ""}" data-act="tab" data-t="${id}" ${cur === id ? 'aria-current="page"' : ""}>${icon}<span>${label}</span></button>`).join("")}</nav>`;
+}
+
+// 일정 한 줄 (홈·일정 화면 공용)
+function calRow(e) {
+  const dd = dayDiff(e.d);
+  const badge = e.approx ? `<span class="dday approx">예상</span>` : `<span class="dday ${dd <= 7 ? "soon" : ""}">${dd === 0 ? "오늘" : "D-" + dd}</span>`;
+  const when = e.approx ? e.when : `${e.d.getMonth() + 1}월 ${e.d.getDate()}일 (${"일월화수목금토"[e.d.getDay()]})${e.time ? " " + e.time : ""}`;
+  const inner = `${badge}<div style="flex:1;min-width:0"><div class="t">${esc(e.title)}</div><div class="d">${e.tag ? `<span class="tagc">${esc(e.tag)}</span>` : ""}${esc(when)}${e.note ? " · " + esc(e.note) : ""}</div></div>`;
+  return e.url ? `<a class="cal ${e.mine ? "mine" : ""}" href="${href(e.url)}" target="_blank" rel="noopener">${inner}</a>` : `<div class="cal ${e.mine ? "mine" : ""}">${inner}</div>`;
+}
+
+// OX 퀴즈 (홈·경제 공부 공용). 답은 이 기기에 기록돼서 복습에 쓰인다
+const LV_NAME = ["1단계 기본", "2단계 심화", "3단계 도전"];
+function quizzesOf(c) { return [c.quiz, ...(c.more || [])]; }
+function qa(c, lv) { return learnState.answers[`${c.id}:${lv}`]; }
+// 지금 풀 단계: 맞힌 단계 다음. 다 맞히면 단계 수와 같아진다(완료)
+function curLv(c) { const n = quizzesOf(c).length; let lv = 0; while (lv < n && qa(c, lv)?.ok) lv++; return lv; }
+function mastered(c) { return curLv(c) >= quizzesOf(c).length; }
+function isWrong(c) { const a = qa(c, curLv(c)); return !!a && !a.ok; }
+function conceptById(id) { ensureCustom(); return data.learn?.concepts.find((x) => x.id === id); }
+// ── 주제별 공부: 추천 주제(learn.json topics, cat = "t-" + id)와 '기타'로 직접 적어 루미(AI)가 만든 주제(learnState.custom, cat = 주제 id) ──
+const TOPIC_DAY = 2; // 직접 입력 주제는 하루 2개까지 만든다
+function ensureCustom() {
+  const L = data.learn;
+  if (!L) return;
+  const have = new Set(L.concepts.map((c) => c.id));
+  for (const t of learnState.custom || []) for (const c of t.concepts) if (!have.has(c.id)) L.concepts.push({ ...c, cat: t.id, ai: true });
+}
+function topicList() {
+  const pre = (data.learn?.topics || []).map((t) => ({ ...t, cat: "t-" + t.id }));
+  const mine = (learnState.custom || []).map((t) => ({ id: t.id, name: t.name, icon: "✏️", desc: "직접 고른 주제", cat: t.id, mine: true }));
+  return [...pre, ...mine];
+}
+function topicByCat(cat) { return topicList().find((t) => t.cat === cat); }
+function topicGenLeft() { const g = learnState.topicGen || {}; return TOPIC_DAY - (g.day === ymd(today0()) ? g.n : 0); }
+// 관련 뉴스 검색어: 개념에 적어 둔 kw, 없으면 이름의 앞부분("환율 표시와 매입·매도율" → "환율 표시")
+function conceptKw(c) {
+  if (c.kw) return c.kw;
+  return c.term.replace(/\([^)]*\)/g, "").split(/(?:와|과|및|·|,|\/) /)[0].split("·")[0].trim().split(/\s+/).slice(0, 2).join(" ") || c.term;
+}
+// 개념 화면의 '관련 뉴스 보기': 뉴스 제목·링크 그대로 3개(NewsData, 요약 안 함) + 더 보기(네이버 뉴스 검색 페이지 링크) + 보도자료 쉽게 풀이
+function newsBlock(c) {
+  const kw = conceptKw(c);
+  if (ui.cnewsOpen !== c.id) return `<button class="btn ghost cnews-btn" data-act="cnews-toggle" data-id="${c.id}">📰 ‘${esc(kw)}’ 관련 뉴스 보기</button>`;
+  const got = data.cnews?.[kw];
+  const items = got?.items || [];
+  return `<div class="cnews">
+      <div class="sec-title" style="margin:0"><h3>‘${esc(kw)}’ 관련 뉴스</h3><button class="link-btn" data-act="cnews-toggle" data-id="${c.id}">접기</button></div>
+      <div class="nl">${!got ? `<p class="hint">불러오는 중…</p>` : items.length ? items.slice(0, 3).map(newsLine).join("") : `<p class="hint">지금은 관련 뉴스를 찾지 못했어요.</p>`}</div>
+      <div class="cnews-more"><a class="link-btn" href="https://search.naver.com/search.naver?where=news&query=${encodeURIComponent(kw)}" target="_blank" rel="noopener">뉴스 더 보기 ›</a><button class="link-btn" data-act="nav" data-route="news" data-target="">정부 보도자료 쉽게 풀이 ›</button></div>
+      <p class="hint" style="margin:0;font-size:calc(11px * var(--fs, 1))">뉴스 제목·링크를 그대로 보여줘요.</p>
+    </div>`;
+}
+function loadConceptNews(kw) {
+  data.cnews = data.cnews || {};
+  if (data.cnews[kw]) return;
+  getJson(`/api/news?q=${encodeURIComponent(kw)}`)
+    .then((j) => (data.cnews[kw] = { items: j.items || [] }))
+    .catch(() => (data.cnews[kw] = { items: [] }))
+    .finally(() => { if (route() === "quiz") render(); });
+}
+function markAttend() { const k = ymd(today0()); if (!learnState.days[k]) { learnState.days[k] = 1; saveLearn(); } }
+function attendRate() {
+  const t = today0(), pre = ymd(t).slice(0, 8);
+  const n = Object.keys(learnState.days).filter((k) => k.startsWith(pre)).length;
+  return { n, of: t.getDate(), pct: Math.round((n / t.getDate()) * 100) };
+}
+// 해설 그림: 그래프나 구조가 있어야 이해되는 개념(learn.json의 fig)에 답한 뒤 함께 보여준다
+const FIG_AH = `<defs><marker id="qfah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="fa"/></marker></defs>`;
+const fig = (cap, h, inner) => `<figure class="qfig"><svg viewBox="0 0 320 ${h}" role="img" aria-label="${cap}">${FIG_AH}${inner}</svg><figcaption>${cap}</figcaption></figure>`;
+const ft = (x, y, t, cls = "", a = "middle") => `<text x="${x}" y="${y}" text-anchor="${a}" class="${cls}">${t}</text>`;
+const fbox = (x, y, w, h, t, s = "", hl = false) => `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="8" class="bx ${hl ? "hl" : ""}"/>${ft(x + w / 2, y + (s ? h / 2 - 3 : h / 2 + 4), t, "bt")}${s ? ft(x + w / 2, y + h / 2 + 12, s) : ""}`;
+const farr = (x1, y1, x2, y2) => `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" class="ar" marker-end="url(#qfah)"/>`;
+const faxes = (h, yl, xl) => `<line x1="34" y1="${h - 26}" x2="306" y2="${h - 26}" class="ax"/><line x1="34" y1="12" x2="34" y2="${h - 26}" class="ax"/>${ft(38, 14, yl, "", "start")}${ft(306, h - 10, xl, "", "end")}`;
+const fsteps = (rows, cuts, hl) => rows.map((t, i) => fbox(70, 6 + i * 50, 180, 30, t, "", i === hl) + (cuts[i] ? farr(160, 36 + i * 50, 160, 54 + i * 50) + ft(172, 50 + i * 50, cuts[i], "", "start") : "")).join("");
+const FIGS = {
+  steep: () => fig("장기금리가 단기보다 더 올라 곡선이 가팔라져요. 금리가 오르면 채권값이 떨어지니, 더 많이 떨어질 장기채를 팔고 단기채를 사요.", 170,
+    faxes(170, "금리", "") + `<path d="M40 112C110 100 200 92 300 86" class="l0"/><path d="M40 118C110 96 200 66 300 36" class="l1"/>` + ft(300, 104, "지금", "", "end") + ft(240, 40, "스티프닝 후", "hlt", "end") + ft(60, 160, "단기") + ft(300, 160, "장기 (만기 →)", "", "end")),
+  roll: () => fig("백워데이션은 먼 만기가 더 싸서, 비싸진 가까운 계약을 팔고 싼 계약으로 갈아탈 때 이익(+)이에요. 콘탱고는 반대라 갈아탈 때마다 손해(−)예요.", 170,
+    ft(90, 18, "백워데이션", "bt") + ft(240, 18, "콘탱고", "bt") + `<line x1="20" y1="130" x2="160" y2="130" class="ax"/><line x1="170" y1="130" x2="310" y2="130" class="ax"/><path d="M50 50L130 105" class="l1"/><path d="M200 105L280 50" class="l2"/><circle cx="50" cy="50" r="4" class="fa"/><circle cx="130" cy="105" r="4" class="fa"/><circle cx="200" cy="105" r="4" class="fb"/><circle cx="280" cy="50" r="4" class="fb"/>`
+    + ft(50, 146, "근월물") + ft(130, 146, "원월물") + ft(200, 146, "근월물") + ft(280, 146, "원월물") + ft(90, 164, "+ 롤 수익", "hlt") + ft(240, 164, "− 롤 수익", "hlb")),
+  timevalue: () => fig("ELW 가격 = 내재가치 + 시간가치. 시간가치는 만기에 가까울수록 빠르게 0으로 줄어서, 콜·풋 모두 값이 떨어져요.", 160,
+    faxes(160, "시간가치", "") + `<path d="M40 36C160 42 240 66 300 132" class="l1"/>` + ft(50, 150, "많이 남음", "", "start") + ft(304, 150, "만기", "", "end") + ft(150, 100, "만기에 가까울수록 빠르게 줄어요", "hlt")),
+  parity: () => fig("패리티 = 기초자산 가격 ÷ 행사가격 × 100. 100%보다 크면 지금 권리를 써도 이익이라 내가격(ITM)이에요.", 110,
+    `<rect x="20" y="40" width="130" height="14" rx="7" class="bx"/><rect x="170" y="40" width="130" height="14" rx="7" class="bx hl"/><line x1="160" y1="30" x2="160" y2="64" class="ax"/>` + ft(85, 30, "외가격(OTM) · 100% 미만") + ft(235, 30, "내가격(ITM) · 100% 초과", "hlt") + ft(160, 82, "등가격(ATM) = 100%") + ft(160, 102, "패리티 = 기초자산 가격 ÷ 행사가격 × 100", "bt")),
+  tranche: () => fig("손실은 에쿼티부터 먼저 떠안아요. 위험이 큰 대신 수익을 먼저 받고, 만기에 남은 담보자산 원금도 가져가요.", 170,
+    fbox(100, 10, 160, 42, "시니어", "손실 마지막 · 수익 낮음") + fbox(100, 58, 160, 42, "메자닌", "중간") + fbox(100, 106, 160, 42, "에쿼티", "손실 먼저 · 수익 높음", true) + farr(60, 146, 60, 16) + ft(60, 164, "손실은 아래부터")),
+  cashflow: () => fig("위에서부터 하나씩 빼 내려가요. 순영업소득(NOI)은 대출 원리금을 갚기 전에 부동산이 번 돈이에요.", 240,
+    fsteps(["가능총소득", "유효총소득", "순영업소득(NOI)", "세전영업현금흐름", "세후영업현금흐름"], ["− 공실 + 기타소득", "− 영업경비", "− 부채서비스액(원리금)", "− 세금"], 2)),
+  gains: () => fig("양도가액에서 하나씩 빼서 과세표준을 만들고, 여기에 세율을 곱해요.", 190,
+    fsteps(["양도가액", "양도차익", "양도소득금액", "과세표준"], ["− 필요경비", "− 장기보유특별공제", "− 양도소득기본공제(250만원)"], 3)),
+  far: () => fig("건폐율은 땅 위에서 건물이 차지하는 바닥 비율, 용적률은 모든 층 바닥을 합친 넓이의 비율이에요.", 180,
+    `<line x1="90" y1="154" x2="310" y2="154" class="ax"/><rect x="145" y="34" width="110" height="120" class="bx hl"/>${Array.from({ length: 11 }, (_, i) => `<line x1="145" y1="${44 + i * 10}" x2="255" y2="${44 + i * 10}" class="fl"/>`).join("")}`
+    + ft(200, 28, "지상 12층 × 500㎡") + ft(200, 170, "대지 1,000㎡") + ft(46, 52, "건폐율 50%", "bt") + ft(46, 68, "500 ÷ 1,000") + ft(46, 110, "용적률 600%", "bt") + ft(46, 126, "6,000 ÷ 1,000")),
+  trust3: () => fig("운용(위탁자)과 보관(수탁자)을 나눠, 운용사가 투자자 돈을 직접 만지지 못하게 해요.", 170,
+    fbox(6, 8, 136, 44, "위탁자", "집합투자업자 · 운용") + fbox(178, 8, 136, 44, "수탁자", "신탁업자 · 보관·관리", true) + fbox(92, 118, 136, 44, "수익자", "투자자") + farr(142, 30, 176, 30) + ft(160, 22, "지시") + farr(196, 118, 230, 54) + ft(232, 92, "돈", "", "start") + farr(90, 54, 124, 116) + ft(86, 92, "수익증권", "", "end")),
+  abs: () => fig("자산을 SPC로 옮겨 두면, 원래 회사가 망해도 자산이 남아 있어 투자자에게 돈을 줄 수 있어요.", 140,
+    fbox(4, 46, 90, 44, "자산보유자") + fbox(115, 46, 90, 44, "SPC", "특수목적회사", true) + fbox(226, 46, 90, 44, "투자자") + farr(94, 58, 113, 58) + farr(205, 58, 224, 58) + farr(224, 80, 207, 80) + farr(113, 80, 96, 80)
+    + ft(80, 34, "① 자산 양도") + ft(240, 34, "② ABS 발행") + ft(240, 110, "③ 투자금") + ft(80, 110, "④ 자산 대금")),
+  cds: () => fig("보장을 사는 쪽이 프리미엄을 내고, 부도가 나면 보장을 판 쪽이 손실을 물어줘요. 대출은 넘기지 않고 위험만 넘겨요.", 140,
+    fbox(8, 44, 112, 46, "보장매수자", "은행 · 대출 보유") + fbox(200, 44, 112, 46, "보장매도자", "보험사 역할", true) + farr(120, 56, 198, 56) + farr(198, 80, 122, 80) + ft(160, 46, "프리미엄") + ft(160, 100, "부도 시 손실 보상") + ft(64, 116, "대출(준거자산)은 그대로")),
+  trs: () => fig("매입자는 자산을 사지 않고도 자산을 가진 것과 같은 수익과 위험(신용위험 + 시장위험)을 얻어요.", 140,
+    fbox(8, 44, 112, 46, "TRS 매입자", "위험을 사는 쪽") + fbox(200, 44, 112, 46, "TRS 매도자", "자산 보유 · 위험을 넘김", true) + farr(120, 56, 198, 56) + farr(198, 80, 122, 80) + ft(160, 46, "기준금리 + 스프레드") + ft(160, 100, "총수익(이자 + 가격 변동)")),
+  exposure: () => fig("Net = (80 − 20) ÷ 100 = 60%, Gross = (80 + 20) ÷ 100 = 100%, Long/Short = 80 ÷ 20 = 4", 150,
+    [["Long", 80, "l1f"], ["Short", 20, "l2f"], ["Net", 60, "hlf"], ["Gross", 100, "gf"]].map(([k, v, c], i) => `${ft(92, 26 + i * 32, k, "bt", "end")}<rect x="100" y="${12 + i * 32}" width="${v * 1.7}" height="20" rx="5" class="${c}"/>${ft(106 + v * 1.7, 26 + i * 32, v + "억", "", "start")}`).join("")),
+  dbdc: () => fig("운용 결과가 누구 몫인지가 핵심이에요. DB형은 회사, DC형은 근로자예요.", 150,
+    fbox(8, 8, 146, 46, "DB형 (확정급여)", "받을 돈이 정해짐") + fbox(166, 8, 146, 46, "DC형 (확정기여)", "낼 돈이 정해짐", true) + farr(81, 54, 81, 92) + farr(239, 54, 239, 92) + ft(87, 78, "운용 성과", "", "start") + ft(245, 78, "운용 성과", "", "start")
+    + fbox(8, 96, 146, 40, "회사가 덜 냄") + fbox(166, 96, 146, 40, "근로자가 더 받음", "", true)),
+  cycle: () => fig("불황엔 팔려는 사람이 많아 사는 사람이 가격을 주도해요(매수인 우위). 호황엔 반대로 매도인 우위예요.", 170,
+    faxes(170, "경기", "시간 →") + `<path d="M40 100C80 100 90 36 130 36C170 36 180 110 220 110C250 110 270 74 300 66" class="l1"/>` + ft(74, 64, "회복") + ft(130, 28, "호황") + ft(186, 70, "후퇴") + ft(220, 128, "불황 · 매수인 우위", "hlt")),
+};
+// 투자운용사처럼 개념마다 문제 하나(객관식 mc·단답식 short)인 과목. 나머지 과목은 OX 3단계
+function isSingle(c) { return !!c?.quiz?.type; }
+function lvName(c, lv) { return isSingle(c) ? "" : LV_NAME[lv]; }
+function quizLabel(c) { return isSingle(c) ? "오늘의 퀴즈" : "오늘의 OX 퀴즈"; }
+// 단답식 채점: 띄어쓰기·문장부호는 무시하고, 정답이 '숫자+단위'면 숫자만 써도 맞다
+function normAns(s) { return String(s ?? "").toLowerCase().replace(/[\s.,·'"()~]/g, ""); }
+function isRight(q, pick) {
+  if (q.type === "mc") return String(pick) === String(q.a);
+  if (q.type !== "short") return pick === q.a;
+  const p = normAns(pick);
+  return !!p && [q.a, ...(q.alts || [])].some((a) => { const n = normAns(a); return p === n || n.match(/^(\d+(?:\.\d+)?)\D*$/)?.[1] === p; });
+}
+function answerText(q) { return q.type === "mc" ? `${q.a + 1}번 ‘${q.choices[q.a]}’` : q.type === "short" ? `‘${q.a}’` : q.a; }
+// 보기·입력칸·OX 버튼 (act: 개념 화면은 answer, 빠른 퀴즈는 qq-answer)
+function answerInput(c, lv, pick, act, extra = "", dark = false, mini = false) {
+  const q = quizzesOf(c)[lv], done = pick !== undefined && pick !== null;
+  if (q.type === "mc") {
+    const cls = (i) => (!done ? "" : i === q.a ? "right" : String(i) === String(pick) ? "wrong" : "dim");
+    return `<div class="mcq">${q.choices.map((t, i) => `<button class="${cls(i)}" data-act="${act}" data-id="${c.id}" data-lv="${lv}" data-o="${i}" ${extra} ${done ? "disabled" : ""}><span class="mcn num">${i + 1}</span><span>${esc(t)}</span></button>`).join("")}</div>`;
+  }
+  if (q.type === "short") {
+    return `<form class="sa-form"><label class="sr" for="sa-${c.id}">답 입력</label><input class="field ${done ? (isRight(q, pick) ? "ok" : "no") : ""}" id="sa-${c.id}" autocomplete="off" enterkeyhint="done" placeholder="답을 입력하세요" value="${done ? esc(pick) : ""}" ${done ? "disabled" : ""}>
+      <button type="button" class="btn" data-act="${act}" data-id="${c.id}" data-lv="${lv}" ${extra} ${done ? "disabled" : ""}>확인</button></form>`;
+  }
+  const cls = (o) => (!done ? "" : o === q.a ? "right" : o === pick ? "wrong" : "dim");
+  return `<div class="ox ${dark ? "" : "light"} ${mini ? "mini" : ""}">${["O", "X"].map((o) => `<button class="${cls(o)}" data-act="${act}" data-id="${c.id}" data-lv="${lv}" data-o="${o}" ${extra} ${done ? "disabled" : ""} aria-label="${o === "O" ? "맞다" : "아니다"}">${o}</button>`).join("")}</div>`;
+}
+// 답한 뒤 해설 (그림이 있으면 함께)
+function answerEx(c, q, ok) {
+  return `<div class="ex-row">${mascot(34, ok ? "happy" : "reassure")}<p class="ex"><b>${ok ? "정답이에요!" : `정답은 ${answerText(q)}예요.`}</b> ${esc(q.ex)}</p></div>${c.fig && FIGS[c.fig] ? FIGS[c.fig]() : ""}`;
+}
+// 퀴즈 (오늘의 퀴즈·문제 화면 공용). today면 답한 뒤 '옮겨둘게요' 버튼으로 치운다
+function quizBox(c, lv, dark, mini = false, today = false) {
+  const q = quizzesOf(c)[lv];
+  const ans = qa(c, lv);
+  const hasNext = lv + 1 < quizzesOf(c).length;
+  mini = mini && !isSingle(c);
+  return `${mini ? `<div class="qrow">` : ""}<p class="q">${esc(q.q)}</p>
+    ${answerInput(c, lv, ans?.pick, "answer", today ? 'data-today="1"' : "", dark, mini)}${mini ? "</div>" : ""}
+    ${ans ? `${answerEx(c, q, ans.ok)}
+      ${today ? `<button class="link-btn quiz-done" data-act="quiz-dismiss">${ans.ok ? "‘푼 문제’로 옮겨둘게요" : "‘복습할 문제’에 담아둘게요"} ›</button>`
+        : !ans.ok ? `<button class="link-btn" style="padding-left:0;align-self:flex-start" data-act="retry" data-id="${c.id}" data-lv="${lv}">다시 풀기 ›</button>`
+        : hasNext && curLv(c) === lv + 1 ? `<button class="btn" data-act="quiz-next" data-id="${c.id}">더 어려운 ${LV_NAME[lv + 1]} 풀기 ›</button>` : ""}` : ""}`;
+}
+// 오늘의 퀴즈: 요즘 화제 TOP 5(정부 보도자료)에 이어지는 경제 기초 문제를 하루에 하나 정해 둔다. 답한 뒤 '옮겨둘게요'를 누르면 사라진다
+// 화제 자료가 없으면 아직 안 푼 경제 기초 문제를 날짜 순서대로. 예전 기록(수업 자료 문제)으로 정해진 날은 그대로 둔다
+function todayQuiz() {
+  const list = basicList();
+  if (!list.length) return null;
+  const day = ymd(today0());
+  let T = learnState.today;
+  const ev = hotEvents().map((e) => ({ e, c: basicFor(e) })).find((x) => x.c && !mastered(x.c));
+  // 아침에 화제 자료가 늦게 오면, 아직 안 푼 오늘 문제는 화제 문제로 바꾼다
+  const untouched = T && T.day === day && !T.hot && !qa(conceptById(T.id) || {}, T.lv) && !T.dismissed;
+  if (!T || T.day !== day || !conceptById(T.id) || (ev && untouched && ev.c.id !== T.id)) {
+    let c = ev?.c;
+    if (!c) {
+      const pool = list.filter((x) => !mastered(x));
+      if (!pool.length) return null;
+      const dayIdx = Math.floor((today0() - new Date(2026, 0, 1)) / 86400e3);
+      c = pool[((dayIdx % pool.length) + pool.length) % pool.length];
+    }
+    T = learnState.today = { day, id: c.id, lv: curLv(c), hot: !!ev, word: ev ? ev.e.title : "" };
+    saveLearn();
+  }
+  return { c: conceptById(T.id), lv: T.lv };
+}
+function todayQuizShown(t) {
+  if (!t) return false;
+  return !learnState.today?.dismissed;
+}
+// 답한 문제(개념·단계) 하나하나, 최근 순
+function solvedEntries() {
+  return Object.entries(learnState.answers).map(([k, a]) => {
+    const [id, lv] = k.split(":");
+    const c = conceptById(id);
+    return c && quizzesOf(c)[Number(lv)] ? { c, lv: Number(lv), a } : null;
+  }).filter(Boolean).sort((x, y) => (y.a.at || 0) - (x.a.at || 0));
+}
+// 날짜별로 묶은 문제 목록 (푼 문제·복습할 문제 화면 공용)
+function quizDayList(entries, empty) {
+  if (!entries.length) return `<section class="card"><p class="hint" style="margin:0">${empty}</p></section>`;
+  const groups = {};
+  entries.forEach((e) => (groups[ymd(new Date(e.a.at || 0))] = groups[ymd(new Date(e.a.at || 0))] || []).push(e));
+  return Object.entries(groups).map(([d, list]) => {
+    const dt = new Date(d + "T00:00:00");
+    const ok = list.filter((e) => e.a.ok).length;
+    return `<section class="card" style="padding:8px 16px">
+      <div class="tx-day" style="display:flex;justify-content:space-between"><span>${dt.getMonth() + 1}월 ${dt.getDate()}일 (${"일월화수목금토"[dt.getDay()]})</span><span>${list.length}문제${ok && ok < list.length ? ` · 정답 ${ok}` : ""}</span></div>
+      ${list.map(({ c, lv, a }) => `<button class="solved-row" data-act="quiz-open" data-id="${c.id}" data-lv="${lv}">
+        <div style="flex:1;min-width:0"><div class="t">${esc(c.term)} <span class="tagc">${lvName(c, lv) || esc(catName(c.cat))}</span></div><div class="d">${esc(quizzesOf(c)[lv].q)}</div></div>
+        ${a.ok ? `<span class="badge b-green">정답</span>` : `<span class="badge b-up">오답</span>`}</button>`).join("")}
+    </section>`;
+  }).join("");
+}
+function viewSolved() {
+  if (!data.learn) return `${pageHead("푼 문제", "", "go-learn")}<main class="scroll"><p class="hint">불러오는 중…</p></main>`;
+  const list = solvedEntries();
+  const ok = list.filter((e) => e.a.ok).length;
+  const totalQ = data.learn.concepts.reduce((n, c) => n + quizzesOf(c).length, 0);
+  return `${pageHead("푼 문제", "", "go-learn")}
+  <main class="scroll">
+    <section class="card stats">
+      <div><b class="num">${list.length}<small>/${totalQ}</small></b><span>푼 문제</span></div>
+      <div><b class="num" style="color:var(--green)">${ok}</b><span>정답</span></div>
+      <div><b class="num" style="color:${list.length - ok ? "var(--up)" : "inherit"}">${list.length - ok}</b><span>오답</span></div>
+    </section>
+    ${quizDayList(list, "아직 푼 문제가 없어요. 공부 탭에서 OX 퀴즈를 풀어보세요.")}
+    <p class="foot">문제를 누르면 해설을 다시 볼 수 있어요.</p>
+  </main>`;
+}
+function viewReview() {
+  if (!data.learn) return `${pageHead("복습할 문제", "", "go-learn")}<main class="scroll"><p class="hint">불러오는 중…</p></main>`;
+  // 지금 단계에서 틀린 문제 (다시 풀어서 맞히면 여기서 빠진다)
+  const list = data.learn.concepts.filter(isWrong).map((c) => ({ c, lv: curLv(c), a: qa(c, curLv(c)) })).sort((x, y) => (y.a.at || 0) - (x.a.at || 0));
+  return `${pageHead("복습할 문제", "", "go-learn")}
+  <main class="scroll">
+    ${quizDayList(list, "틀린 문제가 없어요. 잘하고 있어요!")}
+    <p class="foot">문제를 누르고 ‘다시 풀기’로 맞히면 목록에서 빠져요.</p>
+  </main>`;
+}
+// ───────── 공부 게임: 경험치(맞힌 단계만큼)·레벨·칭호·오늘의 미션·배지 ─────────
+const XP_LV = [10, 20, 30];          // 1·2·3단계 정답 경험치
+const LEVEL_XP = 100;                 // 레벨 하나에 필요한 경험치
+const MISSION = 3;                    // 오늘의 미션: 문제 3개 풀기
+const MISSION_XP = 20;
+const TITLES = [[1, "경제새싹"], [3, "용돈관리자"], [5, "뉴스해석가"], [8, "금리탐정"], [12, "자산설계자"], [16, "경제박사"], [20, "경제마스터"]];
+function xpTotal() {
+  let x = learnState.bonus || 0;
+  for (const [k, a] of Object.entries(learnState.answers)) if (a.ok) x += XP_LV[Number(k.split(":")[1])] || 10;
+  return x;
+}
+function levelOf(x) { return Math.floor(x / LEVEL_XP) + 1; }
+function titleOf(lv) { let t = TITLES[0][1]; for (const [n, name] of TITLES) if (lv >= n) t = name; return t; }
+// 날마다 퀴즈 점수: 푼 횟수와 맞힌 횟수를 모두 센다(같은 문제를 다시 풀어도 그날 점수에 들어감). 최근 30일만
+function scoreAdd(ok) {
+  if (route() !== "home") tutDone("learn"); // 경제 공부에서 푼 문제만 튜토리얼로 셈 (홈의 오늘의 퀴즈는 빼고)
+  const d = dayKey(Date.now()), S = (learnState.scores = learnState.scores || {});
+  const [o, n] = S[d] || [0, 0];
+  S[d] = [o + (ok ? 1 : 0), n + 1];
+  const keys = Object.keys(S).sort();
+  while (keys.length > 30) delete S[keys.shift()];
+}
+// [맞힌 수, 푼 수]. 점수 기록이 없던 날(이 기능 전)은 그날 마지막으로 푼 답으로 센다
+function dayScore(d) {
+  if (learnState.scores?.[d]) return learnState.scores[d];
+  const L = Object.values(learnState.answers).filter((a) => a.at && dayKey(a.at) === d);
+  return [L.filter((a) => a.ok).length, L.length];
+}
+const scorePts = ([o, n]) => (n ? Math.round((o / n) * 100) : null);
+function scoreCard() {
+  const today = dayScore(dayKey(Date.now())), p = scorePts(today);
+  const yest = scorePts(dayScore(dayKey(Date.now() - 86400e3)));
+  const week = Array.from({ length: 7 }, (_, k) => { const at = Date.now() - (6 - k) * 86400e3; return { d: new Date(at), s: dayScore(dayKey(at)) }; });
+  const say = p == null ? "오늘은 아직 안 풀었어요. 빠른 퀴즈로 오늘 점수를 만들어 볼까요?"
+    : p === 100 ? "전부 맞혔어요! 오늘은 루미보다 똑똑해요."
+    : p >= 80 ? "아주 잘하고 있어요. 틀린 건 복습하면 완벽해요!"
+    : p >= 50 ? "절반 넘게 맞혔어요. 조금만 더 해 봐요!"
+    : "틀린 문제가 실력이 돼요. 복습할 문제에서 다시 풀어 봐요.";
+  return `<section class="card score-card" id="l-score">
+      <div class="sec-title" style="margin:0"><h2>오늘 내 점수</h2><span>맞힌 문제 ÷ 푼 문제</span></div>
+      <div class="sc-row"><b class="num sc-big">${p == null ? "-" : p}<small>점</small></b>
+        <span>${today[1] ? `${today[1]}문제 중 <b>${today[0]}개</b> 맞혔어요` : "아직 푼 문제가 없어요"}${p != null && yest != null ? `<br><span class="hint">어제 ${yest}점보다 <b class="num" style="color:${p >= yest ? "var(--green)" : "var(--sub)"}">${p - yest >= 0 ? "+" : ""}${p - yest}점</b></span>` : ""}</span></div>
+      <div class="sc-week" aria-label="최근 7일 점수">${week.map(({ d, s }, k) => { const v = scorePts(s); return `<div class="${k === 6 ? "on" : ""}"><small class="num">${v == null ? "" : v}</small><i style="height:${v == null ? 3 : Math.max(6, v * 0.44)}px;${v == null ? "background:var(--line)" : ""}"></i><span>${k === 6 ? "오늘" : "일월화수목금토"[d.getDay()]}</span></div>`; }).join("")}</div>
+      <p class="hint" style="margin:0">${say}</p>
+    </section>`;
+}
+function todayCount() { const d = dayKey(Date.now()); return Object.values(learnState.answers).filter((a) => a.at && dayKey(a.at) === d).length; }
+function badgeList() {
+  const L = data.learn;
+  if (!L) return [];
+  const ok = Object.values(learnState.answers).filter((a) => a.ok).length;
+  return [
+    { id: "first", icon: "🌱", name: "첫 정답", desc: "첫 문제를 맞혔어요", ok: ok >= 1 },
+    { id: "ten", icon: "📘", name: "열 문제", desc: "10문제를 맞혔어요", ok: ok >= 10 },
+    { id: "fifty", icon: "📚", name: "쉰 문제", desc: "50문제를 맞혔어요", ok: ok >= 50 },
+    { id: "perfect", icon: "⭐", name: "퍼펙트", desc: "빠른 퀴즈 5문제를 모두 맞혔어요", ok: !!learnState.perfect },
+    { id: "attend7", icon: "📅", name: "꾸준함", desc: "한 달에 7일 공부했어요", ok: attendRate().n >= 7 },
+    ...L.categories.map((cat) => ({ id: "cat-" + cat.id, icon: "🏅", name: `${cat.name} 마스터`, desc: `${cat.name} 개념을 3단계까지 모두 맞혔어요`,
+      ok: L.concepts.filter((c) => c.cat === cat.id).every(mastered) })),
+  ];
+}
+// 처음엔 지금까지 쌓인 레벨·배지를 조용히 기록 (예전 기록 때문에 축하가 한꺼번에 뜨지 않게)
+function initGame() {
+  if (learnState.seenLevel || !data.learn) return;
+  learnState.seenLevel = levelOf(xpTotal());
+  for (const b of badgeList()) if (b.ok) learnState.badges[b.id] = Date.now();
+  saveLearn();
+}
+// 문제를 푼 뒤: 레벨 업·미션 완료·새 배지를 알려준다
+function checkProgress() {
+  initGame();
+  const msgs = [];
+  const day = ymd(today0());
+  if (todayCount() >= MISSION && learnState.missionDay !== day) { learnState.missionDay = day; learnState.bonus = (learnState.bonus || 0) + MISSION_XP; msgs.push(`오늘의 미션 완료! +${MISSION_XP} XP`); }
+  const lv = levelOf(xpTotal());
+  if (lv > (learnState.seenLevel || 1)) { learnState.seenLevel = lv; msgs.push(`🎉 레벨 업! Lv.${lv} ${titleOf(lv)}`); }
+  for (const b of badgeList()) if (b.ok && !learnState.badges[b.id]) { learnState.badges[b.id] = Date.now(); msgs.push(`배지 획득 ${b.icon} ${b.name}`); }
+  saveLearn();
+  if (msgs.length) toast(msgs.join(" · "));
+}
+// 스테이지(주제) 안의 개념 순서와 상태: 앞 개념의 1단계를 맞혀야 다음 개념이 열린다
+function stageConcepts(catId) { return (data.learn?.concepts || []).filter((c) => c.cat === catId); }
+function nodeState(list, i) {
+  const c = list[i];
+  if (mastered(c)) return "done";
+  if (isWrong(c)) return "wrong";
+  if (curLv(c) > 0) return "doing";
+  if (c.island) return islandOpen(c.cat, c.island) ? "open" : "locked";
+  return i === 0 || curLv(list[i - 1]) > 0 ? "open" : "locked";
+}
+// 섬(투자운용사): 앞 섬의 개념을 모두 맞혀야 다음 섬이 열린다. 섬 안에서는 아무 개념이나 풀 수 있다
+function islandNames(catId) { return data.learn?.categories.find((x) => x.id === catId)?.islands || []; }
+function islandConcepts(catId, n) { return stageConcepts(catId).filter((c) => c.island === n); }
+function islandDone(catId, n) { const l = islandConcepts(catId, n); return l.length > 0 && l.every(mastered); }
+function islandOpen(catId, n) { for (let k = 1; k < n; k++) if (!islandDone(catId, k)) return false; return true; }
+// 빠른 퀴즈 5문제: 열린 개념의 지금 단계에서 무작위로 (틀린 것 먼저)
+function pickQuick() {
+  const L = data.learn;
+  const cand = [];
+  // 경제 기초면 경제 기초 문제에서만 (요즘 화제 문제 먼저)
+  if (learnMode() !== "exam") {
+    const hot = new Set(hotEvents().map(basicFor).filter(Boolean).map((c) => c.id));
+    const pool = basicList();
+    const out = pool.filter((c) => !mastered(c)).map((c) => ({ id: c.id, lv: 0, w: (isWrong(c) ? 0 : 2) + (hot.has(c.id) ? 0 : 1) + Math.random() }))
+      .sort((a, b) => a.w - b.w).slice(0, 5).map(({ id, lv }) => ({ id, lv }));
+    const done = pool.filter(mastered).sort(() => Math.random() - 0.5);
+    while (out.length < 5 && done.length) out.push({ id: done.pop().id, lv: 0, review: true });
+    return out;
+  }
+  for (const cat of L.categories) {
+    const list = stageConcepts(cat.id);
+    list.forEach((c, i) => { const st = nodeState(list, i); if (st !== "locked" && st !== "done") cand.push({ id: c.id, lv: curLv(c), w: st === "wrong" ? 0 : Math.random() + 1 }); });
+  }
+  const out = cand.sort((a, b) => a.w - b.w || Math.random() - 0.5).slice(0, 5).map(({ id, lv }) => ({ id, lv }));
+  // 모자라면 다 맞힌 개념으로 복습(이 문제는 기록을 바꾸지 않음)
+  const done = L.concepts.filter(mastered).sort(() => Math.random() - 0.5);
+  while (out.length < 5 && done.length) { const c = done.pop(); out.push({ id: c.id, lv: Math.floor(Math.random() * 3), review: true }); }
+  return out;
+}
+function modalQuick(m) {
+  if (m.done) {
+    const perfect = m.ok === m.qs.length;
+    return `<div class="qq-result">${mascot(88, perfect ? "happy" : m.ok ? "wave" : "reassure", "up")}
+        <h2>${perfect ? "퍼펙트!" : m.ok >= 3 ? "잘했어요!" : "다음엔 더 잘할 수 있어요"}</h2>
+        <p><b class="num">${m.qs.length}문제 중 ${m.ok}개</b> 맞혔어요</p>
+        <div class="qq-xp"><span>얻은 경험치</span><b class="num">+${m.xp} XP</b>${m.bonus ? `<small>콤보 보너스 +${m.bonus}</small>` : ""}</div>
+        <p class="hint" style="margin:0">Lv.${levelOf(xpTotal())} ${titleOf(levelOf(xpTotal()))} · 다음 레벨까지 ${LEVEL_XP - (xpTotal() % LEVEL_XP)} XP</p></div>
+      <div class="inline"><button class="btn ghost" data-act="qp-back" style="flex:1">닫기</button><button class="btn" data-act="qq-start" style="flex:2">한 번 더 도전</button></div>`;
+  }
+  const cur = m.qs[m.i], c = conceptById(cur.id), q = quizzesOf(c)[cur.lv];
+  const picked = m.picked, ok = m.res[m.i];
+  const lvTag = lvName(c, cur.lv);
+  return `<div class="qq-top"><span class="hint">빠른 퀴즈 ${m.i + 1}/${m.qs.length}</span>${m.combo >= 2 ? `<span class="qq-combo">🔥 ${m.combo}연속</span>` : ""}</div>
+    <div class="qq-dots">${m.qs.map((_, k) => `<i class="${k < m.i ? (m.res[k] ? "ok" : "no") : k === m.i ? "cur" : ""}"></i>`).join("")}</div>
+    <div class="c-quiz"><span class="tagc">${esc(c.term)}${lvTag ? ` · ${lvTag}` : ""}${cur.review ? " · 복습" : ""}</span>
+      <p class="q">${esc(q.q)}</p>
+      ${answerInput(c, cur.lv, picked, "qq-answer")}
+      ${picked ? answerEx(c, q, ok).replace("정답이에요!", `정답! +${XP_LV[cur.lv]} XP${m.lastBonus ? ` (콤보 +${m.lastBonus})` : ""}`) : ""}
+    </div>
+    ${picked ? `<button class="btn" data-act="qq-next">${m.i + 1 < m.qs.length ? "다음 문제 ›" : "결과 보기"}</button>` : `<button class="link-btn" data-act="qp-back" style="align-self:center">그만하기</button>`}`;
+}
+function modalConcept(m) {
+  const c = conceptById(m.id);
+  if (!c) return "";
+  const done = mastered(c);
+  if (c.cat === "basic") {
+    // 경제 기초: 이 문제와 이어진 요즘 화제를 위에 보여주고, 다음은 아직 안 푼 다른 화제 문제
+    const ev = hotEvents().find((e) => basicFor(e)?.id === c.id || c.words.includes(e.word));
+    const next = hotEvents().map(basicFor).find((x) => x && x.id !== c.id && !mastered(x)) || basicList().find((x) => x.id !== c.id && !mastered(x));
+    const ans = qa(c, 0);
+    return `<div class="sec-title" style="margin:0"><h2>${esc(c.term)}</h2><span class="tagc">경제 기초</span></div>
+      ${ev ? `<p class="hint" style="margin:0">요즘 화제 · ${esc(ev.title)}</p>` : ""}
+      <div class="c-quiz">${quizBox(c, 0, false)}</div>
+      ${newsBlock(c)}
+      <div class="inline">${ans ? `<button class="btn ghost" data-act="qp-back" style="flex:1">공부로</button>${next ? `<button class="btn" data-act="concept-open" data-id="${next.id}" style="flex:2">다음 문제 ›</button>` : ""}`
+        : `<button class="btn ghost" data-act="note-toggle" data-id="${c.id}" style="flex:1">${learnState.notes[c.id] ? "★ 노트에서 빼기" : "☆ 노트에 담기"}</button><button class="btn ghost" data-act="qp-back" style="flex:1">공부로</button>`}</div>`;
+  }
+  if (isSingle(c)) {
+    // 섬 안의 개념: 문제를 먼저 풀고, 답한 뒤 해설. '다음 문제'는 같은 섬의 다음 개념
+    const list = islandConcepts(c.cat, c.island), k = list.indexOf(c), next = list[k + 1];
+    const ans = qa(c, 0);
+    return `<div class="sec-title" style="margin:0"><h2>${esc(c.term)}</h2><span class="tagc">${c.island}섬 · ${k + 1}/${list.length}</span></div>
+      <div class="c-quiz">${quizBox(c, 0, false)}</div>
+      ${newsBlock(c)}
+      <div class="inline">${ans ? `<button class="btn ghost" data-act="qp-back" style="flex:1">섬으로</button>${next ? `<button class="btn" data-act="concept-open" data-id="${next.id}" style="flex:2">다음 문제 ›</button>` : ""}`
+        : `<button class="btn ghost" data-act="note-toggle" data-id="${c.id}" style="flex:1">${learnState.notes[c.id] ? "★ 노트에서 빼기" : "☆ 노트에 담기"}</button><button class="btn ghost" data-act="qp-back" style="flex:1">섬으로</button>`}</div>`;
+  }
+  return `<div class="sec-title" style="margin:0"><h2>${esc(c.term)}</h2><span class="tagc">${esc(catName(c.cat))}</span></div>
+    <p class="hint" style="margin:0">${esc(c.short)}</p>
+    <p style="margin:0;font-size:calc(15px * var(--fs, 1));line-height:1.7">${esc(c.body)}</p>
+    <p class="me" style="margin:0"><b>나와 연결하면</b> ${esc(c.me)}</p>
+    ${c.ai ? `<p class="hint" style="margin:0;font-size:calc(12px * var(--fs, 1))">루미(AI)가 만든 설명과 문제라 틀린 내용이 있을 수 있어요. 중요한 결정 전엔 공식 자료로 꼭 확인해 주세요.</p>` : ""}
+    <div class="c-quiz"><span class="tagc">${done ? "3단계 모두 맞혔어요 · 다시 보기" : LV_NAME[m.lv]}</span>${quizBox(c, m.lv, false)}</div>
+    ${newsBlock(c)}
+    <div class="inline"><button class="btn ghost" data-act="note-toggle" data-id="${c.id}" style="flex:1">${learnState.notes[c.id] ? "★ 노트에서 빼기" : "☆ 노트에 담기"}</button><button class="btn ghost" data-act="qp-back" style="flex:1">닫기</button></div>`;
+}
+function modalBadges() {
+  const list = badgeList();
+  return `<div class="sec-title" style="margin:0"><h2>배지 보관함</h2><span>${list.filter((b) => b.ok).length}/${list.length}</span></div>
+    <div class="badge-grid">${list.map((b) => `<div class="bdg ${b.ok ? "on" : ""}"><span class="bdg-i" aria-hidden="true">${b.ok ? b.icon : "🔒"}</span><b>${esc(b.name)}</b><small>${esc(b.desc)}</small></div>`).join("")}</div>
+    <button class="btn ghost" data-act="modal-close">닫기</button>`;
+}
+function modalNotes() {
+  const list = (data.learn?.concepts || []).filter((c) => learnState.notes[c.id]);
+  return `<div class="sec-title" style="margin:0"><h2>내 노트</h2><span>${list.length}개</span></div>
+    ${list.map((c) => `<button class="solved-row" data-act="concept-open" data-id="${c.id}"><div style="flex:1;min-width:0"><div class="t">${esc(c.term)} <span class="tagc">${esc(catName(c.cat))}</span></div><div class="d">${esc(c.short || c.quiz?.q || "")}</div></div><span aria-hidden="true">›</span></button>`).join("")
+      || `<p class="hint">개념을 열고 ‘노트에 담기’를 누르면 여기 모여요.</p>`}
+    <button class="btn ghost" data-act="modal-close">닫기</button>`;
+}
+function modalQuiz(m) {
+  const c = conceptById(m.id);
+  if (!c) return "";
+  return `<div class="sec-title" style="margin:0"><h2>${esc(c.term)}</h2><span class="tagc">${isSingle(c) ? `${c.island}섬` : LV_NAME[m.lv]}</span></div>
+    <div class="c-quiz">${quizBox(c, m.lv, false)}</div>
+    <button class="btn ghost" data-act="qp-back">닫기</button>`;
+}
+// 문제 풀이 화면 (#quiz): 개념·다시 풀기·빠른 퀴즈를 팝업 대신 한 화면으로. 뒤로 가면 원래 화면으로 돌아간다
+function openQuizPage(kind, extra) {
+  ui.modal = null;
+  ui.qp = { kind, ...extra };
+  if (route() === "quiz") { render(); window.scrollTo(0, 0); } else { ui.qpPushed = true; location.hash = "#quiz"; }
+}
+function viewQuizPage() {
+  const m = ui.qp;
+  const body = data.learn && m && { concept: modalConcept, quiz: modalQuiz, quick: modalQuick }[m.kind]?.(m);
+  const title = !body ? "문제 풀기" : m.kind === "quick" ? "빠른 퀴즈" : esc(catName(conceptById(m.id)?.cat));
+  return `<header class="page-head">
+    <button class="icon-btn" data-act="qp-back" aria-label="뒤로">${ICON.back}</button>
+    <h1>${title}</h1>
+    <button class="icon-btn menu-btn" data-act="open-drawer" aria-label="목차 열기">${ICON.menu}</button>
+  </header>
+  <main class="scroll">
+    ${body ? `<section class="card form qpage">${body}</section>` : `<section class="card"><p class="hint" style="margin:0 0 10px">풀던 문제가 없어요. 공부에서 문제를 골라 주세요.</p><button class="btn" data-act="go-learn">공부로 가기</button></section>`}
+  </main>`;
+}
+function catName(id) { return id === "basic" ? "경제 기초" : data.learn?.categories.find((c) => c.id === id)?.name || topicByCat(id)?.name || ""; }
+
+// ── 경제 기초 퀴즈: 요즘 화제(정부 보도자료 TOP 5)의 낱말마다 쉬운 객관식 문제 ──
+// words: /api/trending 의 화제 낱말(event.word)이나 보도자료 제목에 이 말이 있으면 이 문제를 낸다. 정답은 보기 첫 번째로 적고, 화면에서는 자리를 돌린다
+const BASIC_Q = [
+  [["금리", "대출", "가계부채", "국채"], "기준금리", "한국은행이 기준금리를 올리면 보통 어떤 일이 생길까요?", ["예금·대출 이자가 함께 오르는 편이다", "대출 이자만 내려간다", "물가가 바로 두 배가 된다", "주식 거래 수수료가 없어진다"], "기준금리는 돈의 기본 가격이에요. 오르면 은행 예금·대출 금리도 따라 오르는 편이라, 저축하는 사람은 이자를 더 받고 돈을 빌린 사람은 이자 부담이 커져요."],
+  [["물가", "소비", "농산물"], "물가와 인플레이션", "물가가 오른다(인플레이션)는 것은 무슨 뜻일까요?", ["같은 돈으로 살 수 있는 물건이 줄어든다", "돈의 가치가 올라간다", "월급이 자동으로 오른다", "은행 이자가 사라진다"], "물건값이 전반적으로 오르면 만 원으로 살 수 있는 양이 줄어요. 그래서 물가가 오르면 돈의 가치는 떨어진다고 말해요."],
+  [["환율", "외환"], "원/달러 환율", "원/달러 환율이 1,300원에서 1,400원으로 오르면 어떻게 될까요?", ["해외여행·해외직구가 더 비싸진다", "달러가 더 싸진 것이다", "원화 가치가 올라간 것이다", "수입품 가격이 내려간다"], "1달러를 사는 데 원화가 더 많이 들게 됐으니 원화 가치는 떨어진 거예요. 그래서 달러로 값을 내는 여행·직구·수입품이 비싸져요."],
+  [["수출", "조선업", "자동차", "철강", "석유화학", "바이오", "방산"], "수출과 경기", "우리나라 수출이 크게 늘면 보통 생기는 일로 알맞은 것은?", ["기업 이익과 일자리가 늘어 경기에 도움이 된다", "외국에서 사 오는 물건이 늘어난다", "무역수지가 반드시 적자가 된다", "환율이 무조건 두 배로 오른다"], "수출이 늘면 해외에서 번 돈이 들어와 기업 실적·투자·고용에 도움이 돼요. 수출은 우리 경제에서 큰 몫을 차지해서 수출 소식이 경기의 신호로 자주 쓰여요."],
+  [["수입", "무역"], "무역수지", "무역수지 흑자란 무엇일까요?", ["수출한 금액이 수입한 금액보다 많은 것", "수입한 금액이 수출보다 많은 것", "정부가 세금을 많이 걷은 것", "주가가 많이 오른 것"], "나라 밖으로 판 돈(수출)에서 사 온 돈(수입)을 뺀 것이 무역수지예요. 판 게 더 많으면 흑자, 사 온 게 더 많으면 적자예요."],
+  [["관세"], "관세", "다른 나라가 우리 물건에 매기는 관세를 높이면 어떻게 될까요?", ["우리 물건이 그 나라에서 더 비싸져 덜 팔릴 수 있다", "우리 물건이 그 나라에서 더 싸진다", "우리나라가 걷는 세금이 줄어든다", "환율이 그 나라에서 정해진다"], "관세는 수입품에 붙는 세금이에요. 관세가 오르면 그 나라에서 우리 물건값이 비싸져 판매가 줄 수 있어서, 수출 기업에 부담이 돼요."],
+  [["FTA", "무역"], "자유무역협정(FTA)", "두 나라가 FTA(자유무역협정)를 맺으면 보통 어떻게 될까요?", ["두 나라 사이 관세 같은 무역 장벽이 낮아진다", "두 나라가 같은 화폐를 쓴다", "두 나라 사이 수출이 금지된다", "여권 없이 오갈 수 있다"], "FTA는 서로 관세를 낮추거나 없애 물건을 사고팔기 쉽게 하는 약속이에요. 서비스·투자 분야까지 넓히면 관광·콘텐츠 같은 서비스 시장 문도 열려요."],
+  [["반도체", "AI"], "반도체와 AI", "AI가 커지면서 우리나라 반도체 수출이 늘어난 까닭으로 알맞은 것은?", ["AI 계산에 고성능 메모리 반도체가 많이 필요해서", "반도체 가격이 법으로 정해져서", "AI가 반도체를 대신 만들어서", "다른 나라가 반도체 수입을 금지해서"], "AI 서버는 많은 데이터를 빠르게 처리해야 해서 고성능 메모리가 많이 들어가요. 한국은 메모리 반도체를 잘 만드는 나라라 AI 붐이 수출 증가로 이어졌어요."],
+  [["AI", "디지털", "플랫폼", "스타트업"], "AI와 생산성", "공장에 AI를 도입하면 기대하는 효과(생산성 향상)는 무엇일까요?", ["같은 시간에 더 많이, 더 정확하게 만들 수 있다", "전기를 전혀 쓰지 않게 된다", "회사가 세금을 내지 않게 된다", "물건값이 무조건 오른다"], "생산성은 같은 사람·시간으로 얼마나 많이 만들어 내는지예요. AI로 불량을 줄이고 일을 자동화하면 생산성이 올라 비용이 줄고 경쟁력이 커져요."],
+  [["에너지", "원전", "배터리", "전기차", "탈탄소"], "전기화와 탈탄소", "탄소를 줄이려고 '전기화'를 늘린다는 말의 뜻은 무엇일까요?", ["석유·가스 대신 전기로 움직이는 설비·차를 늘린다", "전기 요금을 없앤다", "전기를 다른 나라에 팔지 않는다", "석탄 발전을 늘린다"], "자동차·난방·공장 설비를 석유·가스 대신 전기로 돌리고, 그 전기를 깨끗한 에너지로 만들면 탄소가 줄어요. 그래서 전기차·배터리·청정에너지 산업이 함께 커져요."],
+  [["유가", "물류"], "국제 유가", "국제 유가가 크게 오르면 어떤 일이 생길까요?", ["기름값·운송비가 올라 물가에 부담이 된다", "휘발유가 싸진다", "우리나라 수입액이 줄어든다", "금리가 0이 된다"], "우리나라는 석유를 거의 다 수입해요. 유가가 오르면 기름값·운송비·원재료비가 함께 올라 여러 물건값이 오르기 쉬워요."],
+  [["부동산", "청약"], "주택청약", "주택청약통장은 무엇을 위한 통장일까요?", ["새로 짓는 아파트 분양을 신청할 자격을 쌓는 통장", "주식을 사고파는 통장", "외화를 모으는 통장", "대출을 갚는 전용 통장"], "청약통장에 꾸준히 넣은 기간과 금액이 새 아파트 분양에 신청할 자격과 순위가 돼요. 청년은 우대 금리를 주는 상품도 있어요."],
+  [["전세", "부동산"], "전세", "전세에 대한 설명으로 맞는 것은?", ["큰 보증금을 맡기고 월세 없이 살다가 나갈 때 돌려받는다", "매달 집값의 절반을 낸다", "집을 사는 것과 같다", "보증금 없이 들어가 산다"], "전세는 목돈을 보증금으로 맡기고 매달 월세를 내지 않는 방식이에요. 나갈 때 보증금을 돌려받아야 해서, 계약 전에 집에 걸린 빚을 꼭 확인해요."],
+  [["일자리", "고용", "청년"], "실업률", "실업률은 무엇의 비율일까요?", ["일하려는 사람 가운데 일자리를 구하지 못한 사람", "전체 국민 가운데 학생", "일하는 사람 가운데 공무원", "전체 국민 가운데 은퇴한 사람"], "실업률은 일할 뜻이 있는 사람(경제활동인구) 중 일자리가 없는 사람의 비율이에요. 일자리를 찾지 않는 사람은 계산에서 빠져요."],
+  [["최저임금"], "최저임금", "최저임금이란 무엇일까요?", ["법으로 정한, 일한 사람에게 줘야 하는 가장 낮은 시간당 임금", "회사가 줄 수 있는 가장 높은 월급", "내야 하는 가장 적은 세금", "은행 대출의 가장 낮은 금리"], "최저임금은 해마다 최저임금위원회가 정하고, 아르바이트도 이보다 적게 받으면 안 돼요."],
+  [["소상공인", "중소기업", "벤처"], "소상공인 정책자금", "정부가 소상공인·중소기업에 낮은 이자로 돈을 빌려주는 까닭으로 알맞은 것은?", ["은행에서 돈 빌리기 어려운 작은 기업의 버팀목이 되려고", "대기업만 키우려고", "세금을 없애려고", "수출을 막으려고"], "작은 가게·기업은 담보나 신용이 부족해 은행 대출이 어렵기 쉬워요. 정책자금은 이런 곳이 버티고 성장하도록 돕는 장치예요."],
+  [["예산", "추경", "국채"], "추가경정예산", "추경(추가경정예산)이란 무엇일까요?", ["한 해 예산을 정한 뒤 필요할 때 더 짜는 예산", "다음 해 예산", "세금을 돌려주는 제도", "한국은행이 돈을 찍어 내는 것"], "나라 예산은 미리 정하지만, 경기가 크게 나빠지거나 재난이 생기면 국회 승인을 받아 예산을 더 짜요. 이것이 추경이에요."],
+  [["세금", "세제"], "연말정산", "직장인의 연말정산은 무엇일까요?", ["1년 동안 월급에서 미리 뗀 세금을 실제 낼 세금과 맞춰 돌려받거나 더 내는 것", "새해 첫 월급", "통장 정리", "카드값을 한 번에 갚는 것"], "회사는 월급에서 세금을 미리 떼요. 연말에 카드 사용·보험료 같은 공제를 반영해 실제 세금을 다시 계산하고, 많이 뗐으면 돌려받아요."],
+  [["증시", "코스피", "밸류업"], "코스피 지수", "코스피 지수는 무엇일까요?", ["유가증권시장에 상장된 회사들의 주가를 모아 계산한 지수", "한 회사의 주가", "원/달러 환율", "한국은행 기준금리"], "코스피는 시장 전체 분위기를 한 숫자로 보여줘요. 코스피가 올랐다는 건 상장 회사들 주가가 전반적으로 올랐다는 뜻이에요."],
+  [["배당", "밸류업"], "배당", "배당이란 무엇일까요?", ["회사가 번 이익 일부를 주주에게 나눠 주는 것", "회사가 주식을 새로 찍는 것", "회사가 은행에서 빌린 돈", "주식을 팔 때 내는 세금"], "주식을 가진 사람(주주)은 회사의 주인 중 하나라서, 회사가 이익을 내면 그 일부를 배당으로 받을 수 있어요."],
+  [["연금", "건강보험", "저출생"], "국민연금과 고령화", "저출생·고령화가 국민연금에 부담이 되는 까닭은 무엇일까요?", ["보험료를 내는 사람은 줄고 연금을 받는 사람은 늘어서", "국민연금이 주식이라서", "은행 이자가 0이라서", "외국인만 연금을 받아서"], "국민연금은 일하는 세대가 낸 보험료로 굴러가는 몫이 커요. 아이는 적게 태어나고 오래 사는 사람이 많아지면 내는 쪽보다 받는 쪽이 커져요."],
+  [["가상자산", "스테이블코인"], "스테이블코인", "스테이블코인은 무엇일까요?", ["달러 같은 화폐 가치에 맞춰 값이 거의 일정하도록 만든 가상자산", "값이 매일 두 배가 되는 코인", "한국은행이 발행하는 원화", "주식의 한 종류"], "스테이블코인은 1코인 = 1달러처럼 값을 묶어 두려고 같은 금액의 돈·국채를 준비해 둬요. 그래서 송금·결제에 쓰려는 움직임이 있어요."],
+  [["관광"], "관광과 여행수지", "외국인 관광객이 한국에 와서 쓰는 돈은 어떻게 볼까요?", ["우리나라가 서비스를 팔아 돈이 들어오는 것", "우리나라가 물건을 사 오는 것(수입)", "정부가 걷는 세금", "어디에도 잡히지 않는다"], "외국인이 국내에서 숙박·쇼핑에 쓰는 돈은 서비스 수출처럼 들어오는 돈(여행수지 수입)이에요. 반대로 우리가 해외여행에서 쓰는 돈은 나가는 돈이에요."],
+  [["공급망", "물류"], "공급망", "'공급망이 흔들린다'는 말은 무슨 뜻일까요?", ["원료·부품이 제때 오지 않아 생산이 막힐 수 있다는 것", "가게들이 한꺼번에 문을 닫는 것", "인터넷이 끊기는 것", "세금이 오르는 것"], "물건 하나를 만드는 데 여러 나라의 원료·부품이 쓰여요. 한 곳이 막히면 생산이 늦어지고 값이 오를 수 있어서 공급망을 여러 곳으로 나눠요."],
+  [["농산물"], "농산물 수출", "농산물 수출이 늘면 농가에 좋은 점은 무엇일까요?", ["국내 말고도 팔 곳이 늘어 소득이 안정된다", "농산물 값이 법으로 고정된다", "농가가 세금을 내지 않게 된다", "외국 농산물 수입이 금지된다"], "국내에서 값이 떨어져도 해외에 팔 수 있으면 농가 소득이 덜 흔들려요. K-푸드 인기로 과일·김 같은 품목 수출이 늘고 있어요."],
+  [["소비", "내수"], "내수", "경제 뉴스의 '내수'는 무엇을 말할까요?", ["나라 안에서 사람·기업이 쓰는 소비와 투자", "해외로 파는 수출", "외국인이 사들인 주식", "정부가 빌린 돈"], "내수는 국내에서 쓰는 돈이에요. 수출이 좋아도 내수가 약하면 동네 가게·서비스업은 어려울 수 있어요."],
+];
+const BASICS = BASIC_Q.map(([words, term, q, choices, ex], i) => {
+  const r = i % 4, rot = [...choices.slice(r), ...choices.slice(0, r)]; // 정답 자리를 돌린다
+  return { id: "basic-" + (i + 1), cat: "basic", words, term, quiz: { type: "mc", q, choices: rot, a: (choices.length - r) % choices.length, ex } };
+});
+function withBasics(j) { if (j && !j.concepts.some((c) => c.cat === "basic")) j.concepts.push(...BASICS.map((b) => ({ ...b }))); data.learn = j; ensureCustom(); return j; }
+function basicList() { return (data.learn?.concepts || []).filter((c) => c.cat === "basic"); }
+function hotEvents() { return data.trending?.available ? data.trending.events || [] : []; }
+// 화제 하나에 이어지는 경제 기초 문제 (안 푼 것 먼저)
+function basicFor(ev) {
+  const hit = basicList().filter((b) => b.words.includes(ev.word) || b.words.some((w) => w.length > 1 && ev.title.includes(w)))
+    .sort((a, b) => fit(b) - fit(a)); // 제목에 대표 낱말이 들어간 문제 → 화제 낱말이 대표 낱말인 문제 먼저
+  function fit(b) { return (ev.title.includes(b.words[0]) ? 4 : 0) + (b.words[0] === ev.word ? 2 : 0) + (b.words.includes(ev.word) ? 1 : 0); }
+  return hit.find((b) => !mastered(b)) || hit[0] || null;
+}
+// 공부 방법: basic(경제 기초 · 요즘 화제) / exam(시험 공부 · 수업 자료 4과목). 처음엔 정하지 않음
+function learnMode() { return learnState.mode || (profile?.level === 3 ? "exam" : null); } // 전공자는 처음부터 시험 공부 쪽으로
+
+function homeBlocks() {
+  const m = data.market;
+  const lines = bubbleLines();
+  if (ui.bubble >= lines.length) ui.bubble = 0;
+  const line = lines[ui.bubble];
+
+  // 지수·환율·내 종목을 같은 모양의 작은 타일로
+  const tiles = m
+    ? [tile("코스피", m.kospi?.v, m.kospi?.pct, 2), tile("코스닥", m.kosdaq?.v, m.kosdaq?.pct, 2), tile("원/달러", m.usd?.v, m.usd?.pct, 1),
+       ...[...(m.stocks || [])].sort((a, b) => watchIndex(a.name) - watchIndex(b.name)).map((s) => tile(s.name, s.missing ? null : s.v, s.missing ? null : s.pct, 0))].join("")
+    : ["코스피", "코스닥", "원/달러", ...profile.watch.map((w) => w.name)].map((n) => `<div><span class="k">${esc(n)}</span><span class="v">…</span></div>`).join("");
+  const addTile = profile.watch.length < 10 ? `<button class="add" data-act="go-my" data-focus="watch">+ 종목</button>` : "";
+
+  // 누르면 그 정보를 가져온 곳(환율은 관련 기사, 금리는 한국은행·연준, 종목은 네이버 증권)으로 바로 간다
+  const imp = impacts().map((c) => `<a class="impact" href="${href(c.src[1])}" target="_blank" rel="noopener" style="cursor:pointer;color:inherit;text-decoration:none" aria-label="${esc(c.tag)} · ${esc(c.src[0])} 열기">
+      <span class="badge b-${c.tone}" style="align-self:flex-start">${esc(c.tag)}</span><p>${esc(c.text)}</p><span class="hint" style="margin-top:auto">${c.num && c.num !== c.src[0] ? `출처 ${esc(c.num)} · ` : ""}${esc(c.src[0])} ${ICON.out}</span></a>`).join("");
+
+  // 뉴스: 진짜 중요한 것 두 줄 (오늘의 이슈 1 + 나를 위한 1) + 키워드·뉴스레터 한 줄
+  const n = data.news;
+  const letters = [...LETTERS.filter((l) => profile.letters.includes(l.id)), ...profile.customLetters];
+  const pick = n ? homeNewsPick(n) : { mine: [], rest: [] };
+  const myTags = myInterests(6);
+  const kws = n?.keywords || [];
+  const newsBlock = `<section class="card" id="h-news">
+      <div class="sec-title"><h2>뉴스</h2><div style="display:flex;gap:6px;align-items:center">${n?.sample ? `<span class="badge b-sample">예시</span>` : ""}<button class="plus" data-act="news-more">+ 더보기</button></div></div>
+      <button class="brief-line" data-act="news-brief">${mascot(22)}<span class="bl-t"><b>쉽게 풀이</b> ${briefReady() ? esc(data.brief.mood) : "오늘 경제 정책을 쉬운 말로 풀어드려요"}</span><span aria-hidden="true">›</span></button>
+      <div class="nl-head"><b>나를 위한 뉴스</b>${myTags.length ? `<span class="hint">${esc(myTags.join(" · "))}</span><button class="link-btn" data-act="news-foryou">더보기 ›</button>` : ""}</div>
+      <div class="nl">${!myTags.length ? `<button class="link-btn" data-act="go-my" data-focus="watch" style="padding-left:0">관심 종목이나 관심사를 고르면 맞춤 뉴스를 보여드려요 ›</button>`
+        : n ? pick.mine.map((it) => newsLine(it, true)).join("") || `<p class="hint">지금은 관심사 뉴스를 찾지 못했어요.</p>` : `<p class="hint">불러오는 중…</p>`}</div>
+      <div class="nl-head"><b>오늘의 이슈</b></div>
+      <div class="nl">${n ? pick.rest.map((it) => newsLine(it, true)).join("") : `<p class="hint">불러오는 중…</p>`}</div>
+      ${kws.length || letters.length ? `<div class="strip" style="gap:6px;margin-top:8px;align-items:center">
+        ${kws.map((k) => `<button class="chip small" style="flex-shrink:0" data-act="kw" data-k="${esc(k)}">#${esc(k)}</button>`).join("")}
+        ${letters.length ? `<span aria-hidden="true" style="flex-shrink:0;width:1px;height:20px;background:var(--line)"></span>` : ""}
+        ${letters.map((l) => `<a class="chip small" style="flex-shrink:0" href="${href(l.url)}" target="_blank" rel="noopener">${esc(l.name)} ${ICON.out}</a>`).join("")}
+      </div>` : ""}
+    </section>`;
+
+  // 일정: 오늘·내일(D-1) 것만, 없으면 다음 일정 한 줄
+  const all = upcoming(50);
+  const soon = all.filter((e) => !e.approx && dayDiff(e.d) <= 1);
+  const next = all.find((e) => !e.approx && e.tag !== "금리") || all.find((e) => !e.approx) || all[0]; // 관심사 일정 우선
+  const reg = profile.region || {};
+  const bcount = data.benefitsApi?.items?.length;
+  const ddText = (e) => (e.approx ? e.when : dayDiff(e.d) === 0 ? "오늘" : dayDiff(e.d) === 1 ? "내일" : "D-" + dayDiff(e.d));
+  const calText = soon.length
+    ? `<b>${ddText(soon[0])}</b> ${esc(soon[0].title)}${soon.length > 1 ? ` 외 ${soon.length - 1}개` : ""}`
+    : next ? `다음: <b>${esc(next.title)}</b> ${esc(ddText(next))}` : "다가오는 일정이 없어요";
+  const linksBlock = `<section class="card links" id="h-links">
+      <button class="lrow" data-act="go-schedule"><span class="lk">일정</span><span class="lv">${calText}</span><span aria-hidden="true">›</span></button>
+      <button class="lrow" data-act="go-benefits"><span class="lk">혜택</span><span class="lv">${reg.sido ? `우리 지역 <b>${esc(reg.sigungu || reg.sido)}</b>${bcount ? ` · ${bcount}개` : ""}` : "사는 곳을 알려주면 지자체·정부 혜택을 찾아드려요"}</span><span aria-hidden="true">›</span></button>
+    </section>`;
+
+  const tq = todayQuiz();
+  // 오늘의 퀴즈(요즘 화제에 이어지는 경제 기초 문제). + 를 누르면 경제 공부 탭으로
+  const quizBlock = todayQuizShown(tq) ? `<section class="quiz" id="h-quiz">
+      <button class="quiz-head" data-act="go-learn" aria-label="경제 공부 전체 보기"><span class="hand">${quizLabel(tq.c)} · ${esc(catName(tq.c.cat))}</span><span class="qplus">+ 전체</span></button>
+      ${learnState.today?.hot && learnState.today.word ? `<p class="hint" style="margin:0">요즘 화제 · ${esc(learnState.today.word)}</p>` : ""}
+      ${quizBox(tq.c, tq.lv, true, true, true)}
+    </section>` : `<section class="quiz" id="h-quiz">
+      <button class="quiz-head" data-act="go-learn" aria-label="경제 공부 전체 보기"><span class="hand">경제 공부 · 요즘 화제 퀴즈 · 미션</span><span class="qplus">+</span></button>
+    </section>`;
+
+  const nq = nextQuestion();
+  const moreBlock = nq ? `<section class="more" id="h-more">${moreQuestion(nq)}</section>` : "";
+
+  const blocks = {
+    hero: `<section class="hero" id="h-hero">
+      ${mascot(64, ...lumiMood())}
+      <div class="bubble">
+        <p class="hand" aria-live="polite">${line.text}</p>
+        <div class="bubble-foot">
+          <div class="dots" aria-hidden="true">${lines.map((_, i) => `<span class="dot ${i === ui.bubble ? "on" : ""}"></span>`).join("")}</div>
+          <div style="display:flex">
+            ${line.act ? `<button class="link-btn" data-act="${line.act}">${line.label || "질문하기"} ›</button>` : ""}
+            ${lines.length > 1 ? `<button class="link-btn" data-act="next-line" ${line.act ? 'style="color:var(--sub)"' : ""} aria-label="루미의 다른 말 보기 (화면은 그대로)">루미 다음 말 ›</button>` : ""}
+          </div>
+        </div>
+      </div>
+    </section>`,
+    market: `<section id="h-market">
+      <div class="mkt line bleed">${tiles}${addTile}</div>
+      <div class="hint" style="margin:6px 4px 0;display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+        ${m ? `주가 ${ymdLabel(m.kospi?.date)} 종가${nextCloseNote(m.kospi?.date) ? ` (${nextCloseNote(m.kospi?.date)})` : ""} · 환율 ${ymdLabel(m.usd?.date)} 고시 · 출처 ${m.src?.index === "ecos" ? "한국은행 ECOS" : "금융위원회"}(지수)·${m.src?.usd === "ecos" ? "한국은행 ECOS" : "한국수출입은행"}(환율)·금융위원회(종목)` : ""}
+        ${m?.sample ? `<span class="badge b-sample">예시 데이터</span>` : ""}
+      </div>
+    </section>`,
+    impact: imp ? `<section id="h-impact"><div class="sec-title"><h2>오늘 나에게 중요한 3가지</h2></div><div class="strip bleed">${imp}</div></section>` : "",
+    news: newsBlock,
+    links: linksBlock,
+    quiz: quizBlock,
+    more: moreBlock,
+  };
+  return { blocks, html: layout().order.filter((id) => !layout().hidden.has(id)).map((id) => blocks[id] || "").join("\n") };
+}
+
+function viewHome() {
+  return `${header()}
+  <main class="scroll home">
+    ${homeBlocks().html}
+    <p class="foot">주가는 전일 종가(공공데이터포털), 환율은 한국수출입은행 고시, 뉴스는 네이버 검색 기준이에요.<br>이 앱의 정보는 투자 권유가 아닌 참고용이에요.</p>
+  </main>
+  ${ui.sheet ? viewSheet() : ""}`;
+}
+
+// 홈 화면 칸 목록과 순서 (마이페이지 '홈 화면 꾸미기'에서 바꿈)
+const SECTIONS = [
+  { id: "hero", label: "루미의 한마디" },
+  { id: "market", label: "시세 (코스피·환율·내 종목)" },
+  { id: "impact", label: "오늘, 나에게 미치는 영향" },
+  { id: "news", label: "뉴스" },
+  { id: "links", label: "일정 · 우리 지역 혜택" },
+  { id: "quiz", label: "오늘의 OX 퀴즈" },
+  { id: "more", label: "맞춤 질문 카드" },
+];
+function layout() {
+  const L = profile.layout || {};
+  const order = (L.order || []).filter((id) => SECTIONS.some((x) => x.id === id));
+  SECTIONS.forEach((x) => { if (!order.includes(x.id)) order.push(x.id); });
+  return { order, hidden: new Set(L.hidden || []) };
+}
+// 실제 홈 화면을 작게 줄여서 보여주는 미리보기 (눌러지지 않음)
+// 목차에 있는 항목 전부 (목차와 검색창이 같이 쓴다). 항목은 [이름, 화면, 위치, sub]
+function drawerMenu() {
+  // 아래 탭과 같은 다섯 묶음 + 내 정보. 홈 칸 하나하나(지수·뉴스 등)는 홈에서 바로 보이니 빼서 목차를 짧게
+  return [
+    { title: "홈", route: "home", items: [["홈 첫 화면", "home", ""], ["나를 위한 일정", "schedule", ""], ["우리 지역 혜택", "benefits", ""], ["뉴스 · 쉽게 풀이", "news", ""], ["뉴스레터 TOP 5", "letters", ""], ["홈 화면 꾸미기", "layout", ""]] },
+    { title: "경제 공부", route: "learn", items: [["경제 개념 · 퀴즈", "learn", ""], ["푼 문제", "solved", ""], ["복습할 문제", "review", ""], ["관심 종목", "watch", ""]] },
+    { title: "내 돈", route: "ledger", items: [["가계부 기록하기", "ledger", "m-capture"], ["지출 통계 · 달력", "ledger", "m-summary"], ["자산 · 대출 입력", "assets", "sec-assets"], ["목표 저축", "assets", "sec-goals"], ["투자 점검", "assets", "sec-invcheck"], ["소비 분석 · 머니 프로필", "assets", "sec-analysis"]] },
+    { title: "모의투자", route: "invest", items: [["내 가상 자산 · 주식 시장", "invest", ""]] },
+    { title: "내 정보 · 설정", route: "my", items: [["기본 정보", "my", "sec-basic"], ["투자 성향 진단", "risktest", ""], ["기타 설정", "etc", ""], ["아래 탭 고르기", "etc", "sec-tabs"], ["내 정보 전부 지우기", "etc", "sec-privacy"]] },
+  ].filter((g) => !tabsOff().includes(g.route)); // 없앤 탭의 묶음은 목차에서도 뺀다
+}
+// 목차 검색: 목차 항목 + 검색창 바로 가기(SPOTS)에서 이름·찾는 말로
+function drawerFind(q) {
+  const lc = q.toLowerCase(), seen = new Set(), out = [];
+  const add = (label, route, target, sub) => { const k = route + "#" + (target || ""); if (!seen.has(k)) { seen.add(k); out.push([label, route, target, sub]); } };
+  drawerMenu().forEach((g) => g.items.forEach((it) => { if (it[0].toLowerCase().includes(lc) || g.title.includes(q)) add(...it); }));
+  SPOTS.forEach(([label, route, target, keys, act]) => { if (!act && (label.toLowerCase().includes(lc) || keys.some((k) => k.includes(lc) || (k.length >= 2 && lc.includes(k))))) add(label, route, target); });
+  return out.slice(0, 10);
+}
+function drawerList() {
+  const item = ([label, route, target, sub]) =>
+    `<button class="dr-item" data-act="nav" data-route="${route}" data-target="${target || ""}" ${sub ? `data-sub="${sub}"` : ""}>${esc(label)}</button>`;
+  const q = (ui.drQ || "").trim();
+  if (q) { const r = drawerFind(q); return r.length ? `<div class="dr-group">${r.map(item).join("")}</div>` : `<p class="hint" style="padding:12px 8px">'${esc(q)}'에 맞는 곳이 없어요. 다른 말로 찾아 보세요.</p>`; }
+  const open = ui.drOpen || (ui.drOpen = new Set([drawerMenu().find((g) => g.items.some((it) => it[1] === route()))?.title].filter(Boolean)));
+  return drawerMenu().map((g) => { const on = open.has(g.title); return `<div class="dr-group">
+      <button class="dr-title dr-fold" data-act="dr-fold" data-g="${g.title}" aria-expanded="${on}"><span>${g.title}</span><span class="dr-chev" aria-hidden="true">${on ? "−" : "+"}</span></button>
+      ${on ? g.items.map(item).join("") : ""}</div>`; }).join("");
+}
+function viewDrawer() {
+  return `<div class="drawer-back" data-act="close-drawer">
+    <nav class="drawer" data-stop="1" aria-label="목차">
+      <div class="dr-head">${mascot(40)}<div><b class="hand">${esc(profile.nickname || "나")}님의 경제</b><span>어디로 갈까요?</span></div>
+        <button class="icon-btn" data-act="close-drawer" aria-label="목차 닫기">${ICON.close}</button></div>
+      <div class="searchbox dr-search">${SEARCH_ICON}<label for="dr-q" class="sr">목차에서 찾기</label><input id="dr-q" type="search" autocomplete="off" placeholder="찾기 (예: 예산, 퀴즈, 대출)" value="${esc(ui.drQ || "")}"></div>
+      <div id="dr-list">${drawerList()}</div>
+    </nav></div>`;
+}
+const TARGET_TAB = { "m-capture": ["ledgerTab", "rec"], "m-quick": ["ledgerTab", "rec"], "m-recent": ["ledgerTab", "rec"], "m-summary": ["ledgerTab", "stat"], "m-cal": ["ledgerTab", "stat"], "m-fixed": ["ledgerTab", "rec"], "sec-net": ["assetTab", "invest"], "sec-budget": ["assetTab", "analysis"],
+  "sec-diag": ["assetTab", "invest"], "sec-goals": ["assetTab", "invest"], "sec-assets": ["assetTab", "invest"], "sec-debts": ["assetTab", "invest"], "sec-analysis": ["assetTab", "analysis"], "sec-invcheck": ["assetTab", "invest"] };
+function navTo(to, target, sub) {
+  ui.drawer = false; ui.drQ = ""; ui.drOpen = null;
+  if (to === "news" && profile) { openNews("brief"); return; } // 뉴스는 열 때 받아와야 '불러오는 중'에 멈추지 않는다
+  if (TARGET_TAB[target]) ui[TARGET_TAB[target][0]] = TARGET_TAB[target][1];
+  if (target === "m-quick") ui.modal = { kind: "tx-add", route: "ledger" };
+  if (["sec-assets", "sec-debts"].includes(target) && profile) ui.modal = { kind: "assets", route: "assets", draft: assetDraft() };
+  const hash = to === "home" ? "" : "#" + to;
+  const same = route() === to;
+  if (!same) location.hash = hash; else render();
+  setTimeout(() => {
+    const el = target && document.getElementById(target);
+    if (el) el.scrollIntoView({ behavior: same ? "smooth" : "auto", block: "start" });
+    else window.scrollTo(0, 0);
+    if (sub === "stocks") document.querySelector("#h-market .mkt.line > :nth-child(4)")?.scrollIntoView({ inline: "start", block: "nearest" });
+  }, 60);
+}
+
+function homePreview() {
+  return `<div class="preview" inert aria-hidden="true"><div class="phone pv-inner">${header()}<main class="scroll home">${homeBlocks().html}</main></div></div>`;
+}
+
+// ───────────────────────── 화면: 뉴스 더보기 ─────────────────────────
+function viewNews() {
+  const f = data.newsFull;
+  const N = ui.news;
+  const tags = [...new Set((f?.forYou || []).map((x) => x.tag))];
+  const kws = data.news?.keywords || [];
+  const kwTabs = [...new Set([...kws, ...(N.tab.startsWith("kw:") ? [N.tab.slice(3)] : [])])];
+  const tabs = [["brief", "쉽게 풀이"], ["foryou", "나를 위한 뉴스"], ["issues", "오늘의 이슈"], ["global", "해외 뉴스"], ...tags.map((t) => ["tag:" + t, t]), ...kwTabs.map((k) => ["kw:" + k, "#" + k])];
+  let items = null;
+  if (N.tab.startsWith("kw:")) items = N.kwItems[N.tab.slice(3)];
+  else if (f) items = N.tab === "issues" ? f.issues : N.tab === "foryou" ? f.forYou : N.tab === "global" ? f.global || [] : (f.forYou || []).filter((x) => "tag:" + x.tag === N.tab);
+  const letters = [...LETTERS.filter((l) => profile.letters.includes(l.id)), ...profile.customLetters];
+  return `${pageHead("뉴스", f?.sample ? `<span class="badge b-sample" style="margin-left:8px">예시 데이터</span>` : "")}
+  <main class="scroll">
+    <div class="tabs" role="tablist">${tabs.map(([id, label]) => `<button class="chip ${N.tab === id ? "on" : ""}" role="tab" aria-selected="${N.tab === id}" data-act="news-tab" data-t="${esc(id)}">${esc(label)}</button>`).join("")}</div>
+    ${N.tab === "brief" ? viewBrief() : `<section class="card"><div class="news">${items ? newsList(items, N.tab === "issues") || `<p class="hint">뉴스가 없어요</p>` : `<p class="hint">불러오는 중…</p>`}</div></section>`}
+    ${letters.length ? `<div class="chips"><span class="hint">구독 중</span>${letters.map((l) => `<a class="chip small" href="${href(l.url)}" target="_blank" rel="noopener">${esc(l.name)} ${ICON.out}</a>`).join("")}</div>` : ""}
+    <p class="foot">제목을 누르면 언론사 원문으로 이동해요. 국내 뉴스는 ${esc((f?.providers || []).filter((x) => x !== "GDELT" && x !== "BBC").join("·") || "NewsData·정책브리핑")}에서, 해외 뉴스는 ${esc((f?.providers || []).includes("BBC") ? "BBC 경제 뉴스" : "GDELT(전 세계 뉴스 목록)")}에서 제목과 링크만 가져와요. 해외 뉴스 제목은 AI가 한국어로 옮긴 거예요.</p>
+  </main>`;
+}
+
+function briefCards(b) {
+  return (b.points || []).map((pt) => `<div class="bp">
+      <div class="bp-t">${esc(pt.title)}</div>
+      <p>${esc(pt.easy)}</p>
+      <p class="me"><b>나에게는</b> ${esc(pt.forMe)}</p>
+      ${pt.sources?.length ? `<div class="bp-s">${pt.sources.map((x) => `<a href="${href(x.url)}" target="_blank" rel="noopener">${esc(x.source || "기사")} ${ICON.out}</a>`).join("")}</div>` : ""}
+    </div>`).join("");
+}
+function viewBrief() {
+  const b = data.brief;
+  const L = ui.letter;
+  const today = !b ? `<p class="hint" style="margin:0">풀이를 만드는 중…</p>`
+    : !b.available ? `<p class="hint" style="margin:0">공공데이터포털 키와 AI 키가 연결되면 오늘의 경제 정책을 쉽게 풀어드려요.</p>`
+    : !b.points?.length ? `<p class="hint" style="margin:0">${esc(b.error || "오늘은 풀이할 뉴스가 아직 모이지 않았어요.")}</p>`
+    : `<div class="bp-mood">${mascot(28)}<span>${esc(b.mood)}</span></div>${briefCards(b)}`;
+  return `<section class="card">
+      <div class="sec-title"><h2>오늘의 경제 쉽게 풀이</h2>${b?.count ? `<span>보도자료 ${b.count}개 종합</span>` : ""}</div>
+      ${today}
+      <p class="hint" style="margin:10px 0 0">최근 7일 정부 보도자료(정책브리핑)를 관심사 순으로 골라 AI가 쉬운 말로 정리한 거예요. 정확한 내용은 원문 링크에서 확인하세요.</p>
+    </section>
+    <section class="card form">
+      <div class="sec-title"><h2>뉴스레터 쉽게 풀이</h2><span>저장하지 않아요</span></div>
+      <label class="lb" for="letter-text">구독 중인 뉴스레터(머니레터·뉴닉 등) 내용을 복사해서 붙여넣어 주세요</label>
+      <textarea class="field" id="letter-text" rows="5" maxlength="6000" placeholder="메일에서 본문을 복사해 여기에 붙여넣기">${esc(L.text)}</textarea>
+      <button class="btn" data-act="letter-brief" ${L.loading ? "disabled" : ""}>${L.loading ? "풀이하는 중…" : "쉽게 풀어줘"}</button>
+      <p class="hint" style="margin:0">${fbLeftText()} · 루미에게 물어보기·가계부 피드백과 같이 세요</p>
+      ${L.error ? `<p class="hint" style="margin:0;color:var(--up)">${esc(L.error)}</p>` : ""}${L.limited ? adButton("fb") : ""}
+      ${L.result ? `<div class="bp-mood">${mascot(28)}<span>${esc(L.result.mood)}</span></div>${briefCards(L.result)}` : ""}
+    </section>`;
+}
+
+async function openNews(tab) {
+  ui.news.tab = tab;
+  if (location.hash !== "#news") location.hash = "#news"; else render();
+  const jobs = [];
+  if (tab === "brief" && !data.brief) loadBrief(); // AI 풀이는 볼 때만 만든다 (비용 절약)
+  if (!data.newsFull) {
+    const interests = myInterests(6).join(",");
+    jobs.push(getJson(`/api/news?full=1&interests=${encodeURIComponent(interests)}`).then((j) => (data.newsFull = keepForYou("full", interests, j))).catch(() => (data.newsFull = keepForYou("full", interests, { issues: [], forYou: [] }))));
+  }
+  if (tab.startsWith("kw:") && !ui.news.kwItems[tab.slice(3)]) {
+    const k = tab.slice(3);
+    jobs.push(getJson(`/api/news?full=1&q=${encodeURIComponent(k)}`).then((j) => (ui.news.kwItems[k] = j.items || [])).catch(() => (ui.news.kwItems[k] = [])));
+  }
+  await Promise.all(jobs);
+  if (route() === "news") render();
+}
+
+// ───────────────────────── 화면: 일정 더보기 ─────────────────────────
+function viewSchedule() {
+  const list = upcoming(200, ui.schedAll);
+  const byMonth = new Map();
+  list.forEach((e) => {
+    const k = e.approx ? `${e.d.getMonth() + 1}월 (예상)` : `${e.d.getFullYear() !== today0().getFullYear() ? e.d.getFullYear() + "년 " : ""}${e.d.getMonth() + 1}월`;
+    if (!byMonth.has(k)) byMonth.set(k, []);
+    byMonth.get(k).push(e);
+  });
+  return `${pageHead("나를 위한 일정")}
+  <main class="scroll">
+    <div class="chips">
+      <button class="chip ${!ui.schedAll ? "on" : ""}" data-act="sched-all" data-v="0">내 관심사만</button>
+      <button class="chip ${ui.schedAll ? "on" : ""}" data-act="sched-all" data-v="1">전체 보기</button>
+      <button class="link-btn" data-act="go-my" data-focus="risk">관심사 바꾸기 ›</button>
+    </div>
+    ${[...byMonth.entries()].map(([k, rows]) => `<section class="card"><div class="sec-title" style="margin-bottom:4px"><h2>${esc(k)}</h2></div>${rows.map(calRow).join("")}</section>`).join("")
+      || `<section class="card"><p class="hint" style="margin:0">다가오는 일정이 없어요</p></section>`}
+    <p class="foot">‘예상’은 매년 비슷한 시기에 열리지만 올해 공식 일정이 나오기 전인 행사예요.<br>나의 자산관리에서 월급날·대출 이자일을 넣으면 내 일정도 함께 떠요.</p>
+  </main>`;
+}
+
+// ───────────────────────── 목표 저축 ─────────────────────────
+function goalCalc(g) {
+  const now = new Date();
+  const [y, m] = String(g.due || "").split("-").map(Number);
+  const months = y && m ? Math.max(1, (y - now.getFullYear()) * 12 + (m - (now.getMonth() + 1)) + 1) : null; // 이번 달 포함
+  const left = Math.max(0, (Number(g.target) || 0) - (Number(g.saved) || 0));
+  const pct = g.target ? Math.min(100, Math.round(((Number(g.saved) || 0) / g.target) * 100)) : 0;
+  return { months, left, pct, monthly: months ? Math.ceil(left / months) : null, done: g.target && left === 0 };
+}
+function goalBar(pct) {
+  return `<div class="gbar" role="progressbar" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100"><i style="width:${pct}%"></i></div>`;
+}
+function goalsHome() {
+  const goals = profile.goals || [];
+  if (!goals.length) return `<button class="card line" id="h-goals" data-act="go-my" data-focus="goals"><span><b>목표 저축</b> <span class="hint">여행·쇼핑 목표를 만들면 매달 얼마씩 모을지 알려드려요</span></span><span aria-hidden="true">›</span></button>`;
+  return `<section class="card" id="h-goals">
+      <div class="sec-title"><h2>목표 저축</h2><button class="plus" data-act="go-my" data-focus="goals">+ 관리</button></div>
+      ${goals.slice(0, 2).map((g) => {
+        const c = goalCalc(g);
+        return `<div class="goal">
+          <div class="goal-top"><b>${esc(g.name)}</b><span class="num">${c.pct}%</span></div>
+          ${goalBar(c.pct)}
+          <div class="hint">${c.done ? "목표 달성! 축하해요" : `${man(g.saved || 0)} / ${man(g.target)}${c.monthly ? ` · 매달 <b style="color:var(--green)">${man(c.monthly)}</b>씩 모으면 돼요` : ""}`}</div>
+        </div>`;
+      }).join("")}
+    </section>`;
+}
+// 금액 칸: 숫자 + 단위(만원/억원). 저장은 항상 '만원' 단위
+function amountField(id, label, valueMan, field, i) {
+  const big = Number(valueMan) >= 10000;
+  const shown = valueMan === null || valueMan === undefined || valueMan === "" ? "" : big ? +(valueMan / 10000).toFixed(4) : valueMan;
+  const data = field ? `data-field="${field}" data-i="${i}"` : "";
+  return `<div><label class="lb" for="${id}">${label}</label><div class="amt">
+      <input class="field num" id="${id}" inputmode="decimal" ${data} value="${shown}" placeholder="${field ? "" : "100"}">
+      <label class="sr" for="${id}-u">${label} 단위</label>
+      <select class="field" id="${id}-u" ${data}><option value="1" ${big ? "" : "selected"}>만원</option><option value="10000" ${big ? "selected" : ""}>억원</option></select>
+    </div></div>`;
+}
+function readAmount(id) {
+  const v = parseFloat(String(document.getElementById(id)?.value || "").replace(/[^0-9.]/g, ""));
+  const unit = Number(document.getElementById(id + "-u")?.value || 1);
+  return Number.isFinite(v) ? Math.round(v * unit) : null;
+}
+const GOAL_LAST_YEAR = 2056;
+function dueFields(id, due, field, i) {
+  const [y, m] = String(due || "").split("-").map(Number);
+  const now = new Date().getFullYear();
+  const data = field ? `data-field="${field}" data-i="${i}"` : "";
+  const years = [];
+  for (let yy = now; yy <= GOAL_LAST_YEAR; yy++) years.push(yy);
+  return `<div><span class="lb">언제까지</span><div class="amt">
+      <label class="sr" for="${id}-y">목표 연도</label>
+      <select class="field" id="${id}-y" ${data}><option value="">기한 없음</option>${years.map((yy) => `<option ${yy === y ? "selected" : ""}>${yy}</option>`).join("")}</select>
+      <label class="sr" for="${id}-m">목표 월</label>
+      <select class="field" id="${id}-m" ${data}>${Array.from({ length: 12 }, (_, k) => k + 1).map((mm) => `<option value="${mm}" ${mm === (m || 12) ? "selected" : ""}>${mm}월</option>`).join("")}</select>
+    </div></div>`;
+}
+function readDue(id) {
+  const y = document.getElementById(id + "-y")?.value;
+  const m = document.getElementById(id + "-m")?.value || "12";
+  return y ? `${y}-${String(m).padStart(2, "0")}` : "";
+}
+
+function goalsMy(p) {
+  const goals = p.goals || [];
+  return `<section class="card" id="sec-goals">
+      <div class="sec-title"><h2>목표 저축</h2><button class="plus" data-act="goal-new" aria-label="새 목표 만들기">+ 새 목표</button></div>
+      ${goals.map((g, i) => {
+        const c = goalCalc(g);
+        return `<button class="goal goal-btn" data-act="goal-edit" data-i="${i}" aria-label="${esc(g.name)} 목표 고치기">
+          <div class="goal-top"><b>${esc(g.name)}</b><span class="num">${c.pct}%</span><span class="tx-pen" aria-hidden="true">›</span></div>
+          ${goalBar(c.pct)}
+          <span class="hint">${c.done ? "목표 달성! 🎉" : `${man(g.saved || 0)} / ${man(g.target)} · ${g.due ? `${g.due.split("-")[0]}년 ${Number(g.due.split("-")[1])}월까지 ` : ""}${c.monthly ? `매달 ${man(c.monthly)}씩` : `${man(c.left)} 남음`}`}</span>
+        </button>`;
+      }).join("") || `<p class="hint" style="margin:0">아직 목표가 없어요. 오른쪽 위 ‘+ 새 목표’로 만들어 보세요.</p>`}
+    </section>`;
+}
+function goalLine() {
+  const g = (profile.goals || []).find((x) => !goalCalc(x).done);
+  if (!g) return null;
+  const c = goalCalc(g);
+  return { text: `‘${esc(g.name)}’ 목표까지 ${man(c.left)} 남았어요.${c.monthly ? ` 이번 달은 ${man(c.monthly)}만 모으면 돼요!` : ""}`, act: "go-goals", label: "목표 보기" };
+}
+
+// ───────────────────────── 투자 성향 정밀 진단 ─────────────────────────
+const RISK_TEST = [
+  { q: "투자해 본 경험이 있나요?", a: [["없어요", 1], ["예금·적금만 해봤어요", 2], ["펀드·ETF를 조금 해봤어요", 3], ["주식에 직접 투자해요", 4], ["주식·해외주식·코인 등 다양하게 해요", 5]] },
+  { q: "이 돈을 어떤 목적으로 굴리고 싶나요?", a: [["원금은 꼭 지키고 싶어요", 1], ["예금보다 조금만 더 벌면 돼요", 2], ["물가 오르는 것보다는 더 벌고 싶어요", 3], ["시장 평균보다 높은 수익을 원해요", 4], ["큰 수익이라면 위험도 괜찮아요", 5]] },
+  { q: "이 돈을 얼마 동안 안 쓰고 둘 수 있나요?", a: [["6개월 안에 써야 해요", 1], ["6개월~1년", 2], ["1~2년", 3], ["2~5년", 4], ["5년 이상", 5]] },
+  { q: "100만원을 투자했는데 한 달 만에 90만원이 됐어요. 어떻게 할까요?", a: [["무서워서 바로 다 팔아요", 1], ["일부만 팔아요", 2], ["회복될 때까지 기다려요", 3], ["싸졌으니 더 사요", 5]] },
+  { q: "경제·금융 지식은 어느 정도예요?", a: [["거의 몰라요", 1], ["예금·적금 정도는 알아요", 2], ["주식·펀드가 어떻게 움직이는지 알아요", 3], ["기업 실적이나 차트를 볼 줄 알아요", 4], ["선물·옵션 같은 상품까지 알아요", 5]] },
+  { q: "수입은 얼마나 안정적인가요?", a: [["수입이 없거나 불규칙해요", 1], ["용돈·아르바이트 정도예요", 2], ["월급은 있지만 빠듯해요", 3], ["월급이 일정하고 조금 여유가 있어요", 4], ["여유 자금이 충분해요", 5]] },
+  { q: "전체 자산 중 투자에 쓸 수 있는 비율은?", a: [["10% 미만", 1], ["10~20%", 2], ["20~30%", 3], ["30~50%", 4], ["50% 이상", 5]] },
+];
+const RISK_DESC = {
+  안정형: "원금 손실을 원하지 않는 편이에요. 예금·적금처럼 원금이 지켜지는 상품이 마음 편할 거예요.",
+  안정추구형: "손실은 최소로, 이자보다 조금 더 벌고 싶은 편이에요. 예금을 중심으로 위험이 낮은 상품을 조금 섞는 사람이 많아요.",
+  위험중립형: "수익을 위해 어느 정도 손실은 감수할 수 있어요. 안전한 자산과 투자 자산을 균형 있게 나누는 사람이 많아요.",
+  적극투자형: "손실 위험이 있어도 높은 수익을 원하는 편이에요. 한 곳에 몰지 말고 분산투자로 위험을 관리하는 게 중요해요.",
+  공격투자형: "큰 손실도 감수하고 높은 수익을 노리는 편이에요. 비상금은 꼭 따로 떼어두고 투자하세요.",
+};
+function riskScoreToAvert(score) { // 7~35점 → 위험기피 10~1
+  return Math.min(10, Math.max(1, Math.round(10 - ((score - 7) * 9) / 28)));
+}
+function viewRiskTest() {
+  const T = ui.rt || (ui.rt = { step: 0, picks: [] });
+  if (T.step >= RISK_TEST.length) {
+    const score = T.picks.reduce((s, v) => s + v, 0);
+    const avert = riskScoreToAvert(score);
+    const type = riskType(avert);
+    return `${pageHead("투자 성향 진단")}
+    <main class="scroll">
+      <section class="card" style="text-align:center;display:flex;flex-direction:column;align-items:center;gap:10px;padding:24px 18px">
+        ${mascot(72)}
+        <span class="hint">나의 투자 성향은</span>
+        <h1 style="margin:0;font-size:calc(30px * var(--fs, 1))">${type}</h1>
+        <span class="badge b-green">위험기피 ${avert}/10 · ${score}점 / 35점</span>
+        <p style="margin:6px 0 0;font-size:calc(15px * var(--fs, 1));line-height:1.7">${esc(RISK_DESC[type])}</p>
+      </section>
+      <button class="btn block" data-act="rt-apply" data-v="${avert}" data-s="${score}">내 성향에 반영하기</button>
+      <button class="btn ghost block" data-act="rt-restart">다시 하기</button>
+      <p class="foot">7문항으로 보는 간단한 자가 진단이에요. 은행·증권사에서 상품에 가입할 때는 그곳의 정식 투자성향 진단을 따로 받아요.</p>
+    </main>`;
+  }
+  const q = RISK_TEST[T.step];
+  return `${pageHead("투자 성향 진단")}
+  <main class="scroll">
+    <div class="steps" aria-label="${T.step + 1}/${RISK_TEST.length} 문항">${RISK_TEST.map((_, i) => `<i class="${i <= T.step ? "on" : ""}"></i>`).join("")}</div>
+    <span class="hint">${T.step + 1} / ${RISK_TEST.length}</span>
+    <h1 style="margin:0;font-size:calc(22px * var(--fs, 1));line-height:1.45">${esc(q.q)}</h1>
+    <div class="rt-opts">${q.a.map(([label, v]) => `<button class="rt-opt" data-act="rt-pick" data-v="${v}">${esc(label)}</button>`).join("")}</div>
+    ${T.step > 0 ? `<button class="link-btn" style="align-self:flex-start;padding-left:0" data-act="rt-back">‹ 이전 문항</button>` : ""}
+  </main>`;
+}
+
+// ───────────────────────── 퀴즈 기록 ─────────────────────────
+function dayKey(t) { const d = new Date(t); return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`; }
+
+// ───────────────────────── 내 돈 기록 (가계부) ─────────────────────────
+// 거래는 이 기기(localStorage)에만 저장. 캡처 사진은 AI가 읽는 데만 쓰고 어디에도 저장하지 않는다.
+const LEDGER_KEY = "myeco.ledger.v1";
+const MONEY_CATS = ["식비", "카페·간식", "쇼핑", "교통", "주거·통신", "구독", "의료·건강", "문화·여가", "여행", "교육", "경조사·선물", "금융·수수료", "급여·수입", "내부이체", "기타"];
+const CAT_COLOR = { 식비: "#7C96FF", "카페·간식": "#B69CFF", 쇼핑: "#FF9EBB", 교통: "#6FCFD8", "주거·통신": "#9FB3D9", 구독: "#E5A0F0", "의료·건강": "#8FD6A8",
+  "문화·여가": "#FFC48A", 여행: "#7FC4FF", 교육: "#C9B8F5", "경조사·선물": "#FFB3C7", "금융·수수료": "#AEB8CC", 기타: "#CBD3E6" };
+const CAPTURE_DAILY = 3; // 하루에 AI가 무료로 읽는 캡처 조각 수 (광고를 보면 늘어남, capLimit). 화면에는 %로만 보여준다
+function capPct(n) { return Math.min(100, Math.round((n / capLimit()) * 100)); }
+function loadLedger() {
+  try { const v = JSON.parse(localStorage.getItem(LEDGER_KEY)) || {}; return { tx: v.tx || [], uploads: v.uploads || {}, fixed: v.fixed || [], cats: { added: v.cats?.added || [], hidden: v.cats?.hidden || [] } }; } catch { return { tx: [], uploads: {}, fixed: [], cats: { added: [], hidden: [] } }; }
+}
+function saveLedger() { try { localStorage.setItem(LEDGER_KEY, JSON.stringify(ledger)); } catch {} syncSoon(); }
+const ledger = loadLedger();
+// ── 분류: 기본 분류 + 내가 만든 분류 − 숨긴 분류. 기타·급여·수입·내부이체는 계산에 쓰여서 지울 수 없다
+const CAT_KEEP = ["기타", "급여·수입", "내부이체"];
+const CUSTOM_COLORS = ["#F7A072", "#7BD3C0", "#A3B8FF", "#F2B5D4", "#C5D86D", "#B4A0E5", "#FFD166", "#8ECAE6"];
+function catColor(c) {
+  if (CAT_COLOR[c]) return CAT_COLOR[c];
+  const i = ledger.cats.added.indexOf(c);
+  return i >= 0 ? CUSTOM_COLORS[i % CUSTOM_COLORS.length] : "#CBD3E6";
+}
+// 고를 수 있는 분류 (internal=true면 내부이체도). 기타는 늘 맨 끝
+function catList(internal = false) {
+  const base = MONEY_CATS.filter((c) => c !== "기타" && (internal || c !== "내부이체") && !ledger.cats.hidden.includes(c));
+  return [...base, ...ledger.cats.added, "기타"];
+}
+// 팝업 안의 분류 칸: 누르면 분류 고르기 창이 뜬다 (값은 숨은 칸에)
+function catField(id, value, internal = false) {
+  return `<span class="lb" style="margin:0">분류</span><input type="hidden" id="${id}" value="${esc(value)}">
+    <button class="field cat-field" type="button" data-act="cat-open" data-for="${id}" ${internal ? 'data-internal="1"' : ""}><i class="tx-dot" style="background:${catColor(value)}"></i><span>${esc(value)}</span><span class="cat-arrow" aria-hidden="true">›</span></button>`;
+}
+// 분류 고르기 창. 다른 팝업 위에 따로 띄워서, 적어 둔 금액·메모가 지워지지 않게 한다(화면 전체를 다시 그리지 않음)
+function drawCatPicker() {
+  let el = document.getElementById("cat-pick");
+  const P = ui.catPick;
+  if (!P) { el?.remove(); return; }
+  if (!el) { el = document.createElement("div"); el.id = "cat-pick"; el.className = "modal-back cat-back"; document.body.appendChild(el); }
+  const cur = document.getElementById(P.forId)?.value;
+  if (P.adding) {
+    el.innerHTML = `<div class="modal form" role="dialog" aria-modal="true" aria-label="분류 추가">
+      <div class="sec-title" style="margin:0"><h2>분류 추가</h2></div>
+      <div><label class="lb" for="cat-new">새 분류 이름</label><input class="field" id="cat-new" maxlength="8" placeholder="예: 반려동물, 운동"></div>
+      <div class="inline"><button class="btn ghost" data-act="cat-add-cancel" style="flex:1">취소</button><button class="btn" data-act="cat-add-save" style="flex:2">추가</button></div>
+    </div>`;
+    el.querySelector("#cat-new")?.focus();
+    return;
+  }
+  const list = catList(P.internal);
+  el.innerHTML = `<div class="modal form" role="dialog" aria-modal="true" aria-label="분류 선택">
+      <div class="sec-title" style="margin:0"><h2>${P.edit ? "분류 편집" : "분류 선택"}</h2><button class="link-btn" data-act="cat-edit">${P.edit ? "완료" : "편집"}</button></div>
+      ${P.edit ? `<p class="hint" style="margin:0">× 를 누르면 목록에서 빠져요. 이미 기록된 내역의 분류는 그대로예요. 기타·급여·수입·내부이체는 지울 수 없어요.</p>` : ""}
+      <div class="cat-grid">${list.map((c) => `<button class="cat-chip ${!P.edit && c === cur ? "on" : ""} ${P.edit ? "editing" : ""}" data-act="${P.edit ? "cat-noop" : "cat-pick"}" data-v="${esc(c)}"><i class="tx-dot" style="background:${catColor(c)}"></i>${esc(c)}${P.edit && !CAT_KEEP.includes(c) ? `<span class="cat-x" data-act="cat-rm" data-v="${esc(c)}" role="button" aria-label="${esc(c)} 지우기">×</span>` : ""}</button>`).join("")}
+        <button class="cat-chip cat-add" data-act="cat-add" aria-label="분류 추가">+ 추가</button></div>
+      ${ledger.cats.hidden.length && P.edit ? `<div><span class="lb">뺀 분류 (누르면 다시 넣어요)</span><div class="cat-grid">${ledger.cats.hidden.map((c) => `<button class="cat-chip off" data-act="cat-restore" data-v="${esc(c)}">+ ${esc(c)}</button>`).join("")}</div></div>` : ""}
+      <button class="btn ghost" data-act="cat-close">닫기</button>
+    </div>`;
+}
+// 고정 수입·지출: 규칙(이름·금액·매월 며칠)마다, 등록한 달부터 이번 달까지 그날이 지났으면 기록을 하나씩 만든다.
+// 만든 기록은 보통 기록처럼 고치거나 지울 수 있고, 지워도 다시 만들지 않는다(made에 표시).
+function applyFixed() {
+  const t = today0(), today = ymd(t);
+  let n = 0;
+  for (const f of ledger.fixed) {
+    const [sy, sm] = f.start.split("-").map(Number);
+    for (let y = sy, m = sm; y < t.getFullYear() || (y === t.getFullYear() && m <= t.getMonth() + 1); m === 12 ? (y++, m = 1) : m++) {
+      const key = `${y}-${String(m).padStart(2, "0")}`;
+      if (f.made[key]) continue;
+      const day = Math.min(f.day, new Date(y, m, 0).getDate());
+      const date = `${key}-${String(day).padStart(2, "0")}`;
+      if (date > today) continue;
+      const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+      ledger.tx.push({ id, date, merchant: f.name, amount: f.amount, dir: f.dir, cat: f.cat, src: "고정", fixed: f.id, added: Date.now() });
+      f.made[key] = id;
+      n++;
+    }
+  }
+  if (n) { ledger.tx.sort((a, b) => b.date.localeCompare(a.date)); saveLedger(); }
+}
+applyFixed();
+// 같은 거래로 볼지: 나간/들어온 돈과 금액이 같고 날짜가 하루 안쪽이며,
+// 가게 이름이 비슷하거나(한쪽이 다른 쪽을 품거나 앞 두 글자가 같음) 서로 다른 앱에서 찍힌 경우 (카드앱 '스타벅스' ↔ 은행앱 '스타벅스코리아')
+function normMerchant(m) { return String(m || "").replace(/\(주\)|㈜|주식회사|\s|[^가-힣a-zA-Z0-9]/g, "").toLowerCase(); }
+function sameTx(a, b) {
+  if (a.dir !== b.dir || Number(a.amount) !== Number(b.amount)) return false;
+  if (Math.abs(new Date(a.date) - new Date(b.date)) > 86400e3) return false;
+  const x = normMerchant(a.merchant), y = normMerchant(b.merchant);
+  const similar = x && y && (x.includes(y) || y.includes(x) || (x.length >= 2 && x.slice(0, 2) === y.slice(0, 2)));
+  return similar || (a.date === b.date && !!a.src && !!b.src && a.src !== b.src);
+}
+function txKey(t) { return `${t.date}|${t.amount}|${String(t.merchant).replace(/\s/g, "").slice(0, 10)}|${t.dir}`; }
+function addTx(list) {
+  const have = new Set(ledger.tx.map(txKey));
+  let n = 0;
+  for (const t of list) {
+    if (have.has(txKey(t))) continue;
+    have.add(txKey(t));
+    ledger.tx.push({ ...t, id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6) });
+    n++;
+  }
+  ledger.tx.sort((a, b) => b.date.localeCompare(a.date));
+  saveLedger();
+  if (n) tutDone("ledger");
+  return n;
+}
+function ymd(d) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; }
+// 기간: week = 이번 주(월~일), month = 이번 달. prev = 바로 전 기간
+function periodRange(kind, prev = false) {
+  const t = today0();
+  if (kind === "week") {
+    const start = new Date(t); start.setDate(t.getDate() - ((t.getDay() + 6) % 7));
+    if (prev) start.setDate(start.getDate() - 7);
+    const end = new Date(start); end.setDate(start.getDate() + 6);
+    return [ymd(start), ymd(end)];
+  }
+  const start = new Date(t.getFullYear(), t.getMonth() - (prev ? 1 : 0), 1);
+  const end = new Date(start.getFullYear(), start.getMonth() + 1, 0);
+  return [ymd(start), ymd(end)];
+}
+function spendSummary(kind, prev = false) {
+  const [a, b] = periodRange(kind, prev);
+  const list = ledger.tx.filter((t) => t.date >= a && t.date <= b && t.cat !== "내부이체");
+  const out = list.filter((t) => t.dir === "out");
+  const income = list.filter((t) => t.dir === "in" && t.cat === "급여·수입").reduce((s, t) => s + t.amount, 0);
+  const refund = list.filter((t) => t.dir === "in" && t.cat !== "급여·수입").reduce((s, t) => s + t.amount, 0);
+  const byCat = {};
+  out.forEach((t) => (byCat[t.cat] = (byCat[t.cat] || 0) + t.amount));
+  const byMerchant = {};
+  out.forEach((t) => (byMerchant[t.merchant] = (byMerchant[t.merchant] || 0) + t.amount));
+  const total = Math.max(0, out.reduce((s, t) => s + t.amount, 0) - refund);
+  return { a, b, total, income, count: out.length, byCat, top: Object.entries(byMerchant).sort((x, y) => y[1] - x[1]).slice(0, 3), list };
+}
+function donutStops(cats) {
+  const sum = cats.reduce((a, [, v]) => a + v, 0) || 1;
+  let acc = 0;
+  return cats.map(([c, v]) => { const a = acc; acc += (v / sum) * 360; return `${catColor(c)} ${a.toFixed(1)}deg ${acc.toFixed(1)}deg`; }).join(", ");
+}
+// 지난 기간보다 가장 많이 늘어난 분류 / 줄어든 분류
+function compareLine(cats, prev, kind) {
+  if (!Object.keys(prev).length) return `${kind === "week" ? "지난주" : "지난달"} 기록이 없어서 아직 비교할 수 없어요.`;
+  const now = Object.fromEntries(cats);
+  const names = new Set([...Object.keys(now), ...Object.keys(prev)]);
+  const diffs = [...names].map((c) => [c, (now[c] || 0) - (prev[c] || 0)]).sort((a, b) => b[1] - a[1]);
+  const up = diffs[0], down = diffs[diffs.length - 1];
+  const parts = [];
+  if (up[1] > 0) parts.push(`<b class="up">${esc(up[0])} ${won(up[1])} 늘었어요</b>`);
+  if (down[1] < 0) parts.push(`<b class="down">${esc(down[0])} ${won(-down[1])} 줄었어요</b>`);
+  return parts.join("<br>") || "비슷하게 썼어요.";
+}
+function pctChange(now, before) { return before ? Math.round(((now - before) / before) * 100) : null; }
+
+function moneyHome() {
+  if (!ledger.tx.length) return `<button class="card line" id="h-money" data-act="go-money"><span><b>내 돈 기록</b> <span class="hint">카드·은행 캡처 한 장으로 이번 주 소비를 정리해요</span></span><span aria-hidden="true">›</span></button>`;
+  const s = spendSummary("week"), p = spendSummary("week", true);
+  const ch = pctChange(s.total, p.total);
+  const topCat = Object.entries(s.byCat).sort((x, y) => y[1] - x[1])[0];
+  return `<button class="card money-card" id="h-money" data-act="go-money">
+      <div class="sec-title" style="margin-bottom:6px"><h2>이번 주 지출</h2><span class="plus" aria-hidden="true">기록 ›</span></div>
+      <div class="money-row"><b class="num">${won(s.total)}</b>${ch !== null ? `<span class="badge ${ch > 0 ? "b-up" : "b-down"}">지난주보다 ${ch > 0 ? "+" : ""}${ch}%</span>` : ""}</div>
+      <span class="hint">${topCat ? `가장 많이 쓴 곳: ${esc(topCat[0])} ${won(topCat[1])}` : "이번 주 기록이 아직 없어요"}</span>
+    </button>`;
+}
+function moneyLine() {
+  const last = Math.max(0, ...Object.keys(ledger.uploads).map((d) => new Date(d).getTime()), ...ledger.tx.map((t) => t.added || 0));
+  if (last && Date.now() - last < 6 * 86400e3) return null;
+  return { text: ledger.tx.length ? "이번 주 소비를 기록할 시간이에요. 카드 앱 캡처 한 장이면 돼요!" : "카드·은행 앱 캡처 한 장으로 내 소비를 정리해 볼까요?", act: "go-money", label: "기록하기" };
+}
+
+// 거래 한 줄: 누르면 고치기 팝업이 뜬다
+function txRow(t) {
+  return `<button class="tx-row" data-act="tx-edit" data-id="${t.id}" aria-label="${esc(t.merchant)} 기록 고치기"><span class="tx-dot" style="background:${catColor(t.cat)}"></span><span class="cap-main"><b>${esc(t.merchant)}</b><span class="hint">${esc(t.cat)}${t.src ? " · " + esc(t.src) : ""}</span></span>
+      <span class="num cap-amt ${t.dir === "in" ? "down" : ""} ${t.cat === "내부이체" ? "flat" : ""}">${t.dir === "in" ? "+" : "-"}${fmt(t.amount)}</span><span class="tx-pen" aria-hidden="true">›</span></button>`;
+}
+// 팝업: 취소·저장·닫기를 눌러야만 닫힌다 (바깥을 눌러도, 탭·뒤로가기로도 안 닫힘)
+function routeKey() { const r = route(); return r === "money" ? "ledger" : r; }
+function openModal(kind, extra = {}) { ui.modal = { kind, route: routeKey(), ...extra }; render(); }
+function viewModal() {
+  const m = ui.modal;
+  if (!m) return "";
+  const body = { "tx-edit": modalTxEdit, "tx-add": modalTxAdd, fixed: modalFixed, consent: modalConsent, catDetail: modalCatDetail, quick: modalQuick, concept: modalConcept, badges: modalBadges, notes: modalNotes, budget: modalBudget, assets: modalAssets, goal: modalGoal, quiz: modalQuiz, ad: modalAd, "inv-hints": modalInvHints, "inv-player": modalInvPlayer, "inv-trade": modalInvTrade, "inv-eval": modalInvEval, mcard: modalMoneyCard, kquiz: modalKQuiz }[m.kind]?.(m);
+  if (!body) { ui.modal = null; return ""; }
+  return `<div class="modal-back"><div class="modal form" role="dialog" aria-modal="true">${body}</div></div>`;
+}
+function modalTxEdit(m) {
+  const t = ledger.tx.find((x) => x.id === m.id);
+  if (!t) return "";
+  return `<div class="sec-title" style="margin:0"><h2>기록 고치기</h2><span>${Number(t.date.slice(5, 7))}월 ${Number(t.date.slice(8))}일 · ${esc(t.merchant)}</span></div>
+      <div class="inline">
+        <label class="sr" for="e-dir">나간 돈/들어온 돈</label>
+        <select class="field" id="e-dir" style="flex:0 0 96px"><option value="out" ${t.dir === "out" ? "selected" : ""}>나간 돈</option><option value="in" ${t.dir === "in" ? "selected" : ""}>들어온 돈</option></select>
+        <div class="money" style="flex:1"><label class="sr" for="e-amt">금액</label><input class="field num" id="e-amt" inputmode="numeric" value="${t.amount}"><span class="unit">원</span></div>
+      </div>
+      <div class="inline">
+        <label class="sr" for="e-merch">어디에</label><input class="field" id="e-merch" maxlength="20" value="${esc(t.merchant)}" style="flex:1">
+        <label class="sr" for="e-date">날짜</label><input class="field" id="e-date" type="date" value="${t.date}" style="flex:0 0 140px">
+      </div>
+      ${catField("e-cat", t.cat, true)}
+      <div class="inline"><button class="btn ghost" data-act="tx-rm" data-id="${t.id}" style="flex:1;color:var(--up)">삭제</button><button class="btn ghost" data-act="modal-close" style="flex:1">취소</button><button class="btn" data-act="tx-save" data-id="${t.id}" style="flex:2">저장</button></div>
+    `;
+}
+function modalFixed(m) {
+  const f = m.id ? ledger.fixed.find((x) => x.id === m.id) : null;
+  if (m.id && !f) return "";
+  const dir = f?.dir || "out";
+  return `<div class="sec-title" style="margin:0"><h2>${f ? "고정 수입·지출 고치기" : "고정 수입·지출 추가"}</h2><span>매달 자동으로 기록돼요</span></div>
+      <div class="inline">
+        <label class="sr" for="fx-dir">나간 돈/들어온 돈</label>
+        <select class="field" id="fx-dir" style="flex:0 0 96px"><option value="out" ${dir === "out" ? "selected" : ""}>나간 돈</option><option value="in" ${dir === "in" ? "selected" : ""}>들어온 돈</option></select>
+        <div class="money" style="flex:1"><label class="sr" for="fx-amt">금액</label><input class="field num" id="fx-amt" inputmode="numeric" placeholder="금액" value="${f?.amount ?? ""}"><span class="unit">원</span></div>
+      </div>
+      <div class="inline">
+        <label class="sr" for="fx-name">이름</label><input class="field" id="fx-name" maxlength="20" placeholder="이름 (예: 월급, 월세, 통신비)" value="${esc(f?.name || "")}" style="flex:1">
+        <div class="money" style="flex:0 0 110px"><label class="sr" for="fx-day">매월 며칠</label><span class="unit" style="position:static;padding-right:6px">매월</span><input class="field num" id="fx-day" inputmode="numeric" placeholder="25" value="${f?.day ?? ""}"><span class="unit">일</span></div>
+      </div>
+      ${catField("fx-cat", f?.cat || "주거·통신")}
+      ${f ? `<p class="hint" style="margin:0">고친 내용은 다음 기록부터 적용돼요. 이미 기록된 달의 금액은 그 기록을 눌러 고쳐요.</p>` : ""}
+      <div class="inline">${f ? `<button class="btn ghost" data-act="fixed-rm" data-id="${f.id}" style="flex:1;color:var(--up)">삭제</button>` : ""}<button class="btn ghost" data-act="modal-close" style="flex:1">취소</button><button class="btn" data-act="fixed-save" style="flex:2">저장</button></div>`;
+}
+// 통계의 분류 줄을 누르면: 그 기간 그 분류의 나간 돈을 날짜별로 (누르면 고치기)
+function modalCatDetail(m) {
+  const S = spendSummary(m.period);
+  const list = S.list.filter((t) => t.cat === m.c && t.dir === "out").sort((a, b) => b.date.localeCompare(a.date));
+  const total = list.reduce((a, t) => a + t.amount, 0);
+  const byDate = {};
+  list.forEach((t) => (byDate[t.date] = byDate[t.date] || []).push(t));
+  return `<div class="sec-title" style="margin:0"><h2><i class="tx-dot" style="background:${catColor(m.c)};display:inline-block;margin-right:6px"></i>${esc(m.c)}</h2><span>${m.period === "week" ? "이번 주" : "이번 달"} ${S.a.slice(5).replace("-", "/")} ~ ${S.b.slice(5).replace("-", "/")}</span></div>
+    <div class="money-row"><b class="num" style="font-size:calc(24px * var(--fs, 1))">${won(total)}</b><span class="hint">${list.length}건${S.total ? ` · 전체의 ${Math.round((total / S.total) * 100)}%` : ""}</span></div>
+    <div class="cat-detail">${Object.entries(byDate).map(([d, ts]) => {
+      const dt = new Date(d + "T00:00:00");
+      return `<div class="tx-day" style="display:flex;justify-content:space-between"><span>${dt.getMonth() + 1}월 ${dt.getDate()}일 (${"일월화수목금토"[dt.getDay()]})</span><span class="num">${won(ts.reduce((a, t) => a + t.amount, 0))}</span></div>${ts.map(txRow).join("")}`;
+    }).join("") || `<p class="hint">이 기간에는 내역이 없어요</p>`}</div>
+    <p class="hint" style="margin:0">내역을 누르면 고칠 수 있어요.</p>
+    <button class="btn ghost" data-act="modal-close">닫기</button>`;
+}
+function modalTxAdd() {
+  return `<div class="sec-title" style="margin:0"><h2>직접 기록하기</h2><span>현금·이체·월급 등</span></div>
+      <div class="inline">
+        <label class="sr" for="q-dir">나간 돈/들어온 돈</label>
+        <select class="field" id="q-dir" style="flex:0 0 96px"><option value="out">나간 돈</option><option value="in">들어온 돈</option></select>
+        <div class="money" style="flex:1"><label class="sr" for="q-amt">금액</label><input class="field num" id="q-amt" inputmode="numeric" placeholder="금액"><span class="unit">원</span></div>
+      </div>
+      <div class="inline">
+        <label class="sr" for="q-memo">어디에</label><input class="field" id="q-memo" maxlength="20" placeholder="어디에 (예: 점심, 용돈)" style="flex:1">
+        <label class="sr" for="q-date">날짜</label><input class="field" id="q-date" type="date" value="${ymd(today0())}" style="flex:0 0 140px">
+      </div>
+      ${catField("q-cat", "식비")}
+      <div class="inline"><button class="btn ghost" data-act="modal-close" style="flex:1">취소</button><button class="btn" data-act="q-add" style="flex:2">기록하기</button></div>`;
+}
+// 최근 기록 / 검색 결과 목록 (검색할 땐 이 부분만 다시 그린다)
+function txListHtml() {
+  const q = (ui.txQ || "").trim().toLowerCase();
+  if (q) {
+    const hit = ledger.tx.filter((t) => [t.merchant, t.cat, t.src].some((x) => String(x || "").toLowerCase().includes(q)));
+    const sum = hit.filter((t) => t.dir === "out" && t.cat !== "내부이체").reduce((a, t) => a + t.amount, 0);
+    return `<p class="hint" style="margin:4px 0">‘${esc(ui.txQ.trim())}’ ${hit.length}건${sum ? ` · 쓴 돈 ${won(sum)}` : ""}</p>
+      ${hit.slice(0, 100).map((t) => `<div class="tx-day">${Number(t.date.slice(5, 7))}월 ${Number(t.date.slice(8))}일</div>${txRow(t)}`).join("") || `<p class="hint">찾는 기록이 없어요</p>`}`;
+  }
+  const recent = ledger.tx.slice(0, ui.moneyAll ? 300 : 15);
+  const byDate = {};
+  recent.forEach((t) => (byDate[t.date] = byDate[t.date] || []).push(t));
+  return (Object.entries(byDate).map(([d, list]) => `<div class="tx-day">${Number(d.slice(5, 7))}월 ${Number(d.slice(8))}일</div>${list.map(txRow).join("")}`).join("")
+      || `<p class="hint">기록이 없어요</p>`)
+    + (ledger.tx.length > 15 && !ui.moneyAll ? `<button class="more-btn" data-act="money-all">전체 기록 보기</button>` : "");
+}
+// 달력: 날짜마다 쓴 돈, 누르면 그날 기록
+// 달력 칸용: 항상 '만' 단위 (1,000원 → 0.1만)
+function manShort(n) { const v = n / 1e4; return `${v >= 100 ? fmt(Math.round(v)) : v >= 0.1 ? v.toFixed(1) : v.toFixed(2)}만`; }
+function shortWon(n) { return n >= 1e4 ? `${fmt(n / 1e4, n < 1e5 ? 1 : 0)}만` : fmt(n); }
+function calBlock(kind = "month") {
+  const t = today0();
+  const week = kind === "week";
+  // 보여줄 날짜들: 이번 주(월~일) 또는 이번 달
+  let days, title, lead = 0;
+  if (week) {
+    const mon = new Date(t); mon.setDate(t.getDate() - ((t.getDay() + 6) % 7) + 7 * (ui.calWOff || 0));
+    days = Array.from({ length: 7 }, (_, i) => { const d = new Date(mon); d.setDate(mon.getDate() + i); return d; });
+    title = `${days[0].getMonth() + 1}/${days[0].getDate()} ~ ${days[6].getMonth() + 1}/${days[6].getDate()}`;
+  } else {
+    const first = new Date(t.getFullYear(), t.getMonth() + (ui.calOff || 0), 1);
+    const last = new Date(first.getFullYear(), first.getMonth() + 1, 0);
+    days = Array.from({ length: last.getDate() }, (_, i) => new Date(first.getFullYear(), first.getMonth(), i + 1));
+    title = `${first.getFullYear()}년 ${first.getMonth() + 1}월`;
+    lead = first.getDay();
+  }
+  const keys = new Set(days.map(ymd));
+  const perDay = {};
+  ledger.tx.forEach((x) => {
+    if (!keys.has(x.date) || x.cat === "내부이체") return;
+    const d = (perDay[x.date] = perDay[x.date] || { out: 0, in: 0, fout: 0, fin: 0 });
+    d[(x.fixed ? "f" : "") + x.dir] += x.amount;
+  });
+  const vals = Object.values(perDay);
+  const max = Math.max(1, ...vals.map((d) => d.out + d.fout));
+  const sumOut = vals.reduce((a, d) => a + d.out + d.fout, 0);
+  const sumIn = vals.reduce((a, d) => a + d.in + d.fin, 0);
+  const cells = [];
+  for (let i = 0; i < lead; i++) cells.push(`<span></span>`);
+  for (const dt of days) {
+    const key = ymd(dt), v = perDay[key];
+    const heat = v?.out + v?.fout ? 0.08 + 0.27 * ((v.out + v.fout) / max) : 0;
+    const lines = v ? [v.in && `<span class="num c-in">+${manShort(v.in)}</span>`, v.out && `<span class="num c-out">-${manShort(v.out)}</span>`,
+      v.fin && `<span class="num c-fix">+${manShort(v.fin)}</span>`, v.fout && `<span class="num c-fix">-${manShort(v.fout)}</span>`].filter(Boolean).join("") : "";
+    cells.push(`<button class="cal-d ${ui.calDay === key ? "on" : ""} ${key === ymd(t) ? "today" : ""}" data-act="cal-day" data-d="${key}" style="${heat ? `background:rgba(124,150,255,${heat.toFixed(2)})` : ""}" aria-label="${dt.getDate()}일${v?.in + v?.fin ? ` 들어온 돈 ${won(v.in + v.fin)}` : ""}${v?.out + v?.fout ? ` 쓴 돈 ${won(v.out + v.fout)}` : ""}"><b>${dt.getDate()}</b>${lines}</button>`);
+  }
+  const dayList = ui.calDay && keys.has(ui.calDay) ? ledger.tx.filter((x) => x.date === ui.calDay) : null;
+  const off = week ? ui.calWOff || 0 : ui.calOff || 0;
+  return `<section class="card" id="m-cal">
+      <div class="sec-title"><h2>달력으로 보기</h2><span>${sumIn ? `<b class="c-in">+${won(sumIn)}</b> · ` : ""}<b class="c-out">-${won(sumOut)}</b></span></div>
+      <div class="cal-nav"><button class="icon-btn" data-act="cal-move" data-v="-1" aria-label="${week ? "이전 주" : "이전 달"}">‹</button><b>${title}</b><button class="icon-btn" data-act="cal-move" data-v="1" aria-label="${week ? "다음 주" : "다음 달"}" ${off >= 0 ? "disabled" : ""}>›</button></div>
+      <div class="cal-grid">${(week ? ["월", "화", "수", "목", "금", "토", "일"] : ["일", "월", "화", "수", "목", "금", "토"]).map((w) => `<i>${w}</i>`).join("")}${cells.join("")}</div>
+      <div class="cal-legend"><span class="c-in">+ 들어온 돈</span><span class="c-out">- 나간 돈</span><span class="c-fix">고정 수입·지출</span></div>
+      ${dayList ? `<div class="cal-list"><div class="tx-day">${Number(ui.calDay.slice(5, 7))}월 ${Number(ui.calDay.slice(8))}일 기록 ${dayList.length}건</div>${dayList.map(txRow).join("") || `<p class="hint" style="margin:6px 0">이날은 기록이 없어요</p>`}</div>` : `<p class="hint" style="margin:8px 0 0">날짜를 누르면 그날 기록이 나와요.</p>`}
+    </section>`;
+}
+
+function moneyBody() {
+  const kind = ui.moneyKind || "week";
+  const s = spendSummary(kind), p = spendSummary(kind, true);
+  const ch = pctChange(s.total, p.total);
+  const cats = Object.entries(s.byCat).sort((x, y) => y[1] - x[1]);
+  const max = cats[0]?.[1] || 1;
+  const sumCats = cats.reduce((a, [, v]) => a + v, 0) || 1;
+  const C = ui.capture;
+  const usedToday = ledger.uploads[ymd(today0())] || 0;
+
+  const captureBlock = `<section class="card form" id="m-capture">
+      <div class="sec-title"><h2>캡처로 기록하기</h2><span>오늘 사용량 ${capPct(usedToday)}%</span></div>
+      <p class="hint" style="margin:0">카드·은행·토스·카카오페이 앱의 <b>이용내역 화면</b>을 캡처해서 올려요. 여러 장을 한 번에 골라도 되고(최대 8장), 스크롤해서 길게 찍은 캡처도 읽어요. 계좌번호·잔액은 가려도 괜찮아요.</p>
+      <label class="btn block" for="cap-files" style="display:flex;align-items:center;justify-content:center;cursor:pointer">${C?.loading ? "읽는 중… 잠시만요" : "캡처 사진 고르기"}</label>
+      <input id="cap-files" type="file" accept="image/*" multiple class="sr" ${C?.loading ? "disabled" : ""}>
+      ${C?.error ? `<p class="hint" style="margin:0;color:var(--up)">${esc(C.error)}</p>` : ""}${C?.limited ? adButton("cap") : ""}
+      ${C?.items ? `<div class="cap-list">
+          <div class="sec-title" style="margin:6px 0"><h2>${C.items.length}건을 찾았어요</h2><span>틀린 건 고치고 체크를 빼요</span></div>
+          ${C.items.map((t, i) => `<div class="cap-row ${t.skip ? "off" : ""}">
+            <label class="sr" for="cap-c-${i}">${esc(t.merchant)} 포함</label>
+            <input type="checkbox" id="cap-c-${i}" data-cap="skip" data-i="${i}" ${t.skip ? "" : "checked"}>
+            <div class="cap-main"><b>${esc(t.merchant)}</b><span class="hint">${t.date.slice(5).replace("-", "/")}${t.src ? " · " + esc(t.src) : ""}${t.dup ? ` · <b class="dup-tag">${esc(t.dup)}</b>` : ""}</span></div>
+            <label class="sr" for="cap-k-${i}">분류</label>
+            <select class="field cap-cat" id="cap-k-${i}" data-cap="cat" data-i="${i}">${[...new Set([...catList(true), t.cat])].map((c) => `<option ${c === t.cat ? "selected" : ""}>${esc(c)}</option>`).join("")}</select>
+            <span class="num cap-amt ${t.dir === "in" ? "down" : ""}">${t.dir === "in" ? "+" : "-"}${fmt(t.amount)}</span>
+          </div>`).join("")}
+          <p class="hint" style="margin:4px 0 0">‘내부이체’(카드대금·내 계좌 이동)는 지출로 세지 않아요. 이미 기록된 거래나 여러 앱에서 찍혀 겹치는 거래(같은 날·같은 금액)는 체크를 빼뒀어요. 다른 거래면 다시 체크하세요.</p>
+          <div class="inline"><button class="btn ghost" data-act="cap-cancel" style="flex:1">취소</button><button class="btn" data-act="cap-save" style="flex:2">${C.items.filter((t) => !t.skip).length}건 기록하기</button></div>
+        </div>` : ""}
+    </section>`;
+
+  const tab = ui.ledgerTab || "rec";
+  const seg = moneySeg();
+  if (tab === "rec") return `${seg}
+    ${captureBlock}
+    <button class="card line" id="m-quick" data-act="tx-add"><span><b>직접 기록하기</b> <span class="hint">현금·이체·월급 등</span></span><span class="plus line-plus" aria-hidden="true">+</span></button>
+    <section class="card" id="m-fixed" style="padding:8px 16px">
+      <div class="sec-title" style="margin:6px 0"><h2>고정 수입·지출</h2><button class="plus" data-act="fixed-new">+ 추가</button></div>
+      ${ledger.fixed.map((f) => `<button class="tx-row" data-act="fixed-edit" data-id="${f.id}" aria-label="${esc(f.name)} 고치기"><span class="tx-dot" style="background:${catColor(f.cat)}"></span><span class="cap-main"><b>${esc(f.name)}</b><span class="hint">매월 ${f.day}일 · ${esc(f.cat)}</span></span>
+          <span class="num cap-amt">${f.dir === "in" ? "+" : "-"}${fmt(f.amount)}</span><span class="tx-pen" aria-hidden="true">›</span></button>`).join("")
+        || `<p class="hint" style="margin:0 0 8px">월급·용돈·월세·통신비·교통비처럼 매달 들어오고 나가는 돈을 넣으면, 매달 그날 자동으로 기록돼요. 달마다 금액이 다르면 그 달 기록을 눌러 고치면 돼요.</p>`}
+    </section>
+    <section class="card" id="m-recent" style="padding:8px 16px">
+      <div class="sec-title" style="margin:6px 0"><h2>최근 기록</h2><span>${ledger.tx.length}건 · 누르면 고칠 수 있어요</span></div>
+      ${ledger.tx.length ? `<label class="sr" for="tx-q">기록 검색</label><input class="field" id="tx-q" type="search" placeholder="가게 이름이나 분류로 찾기 (예: 편의점, 식비)" value="${esc(ui.txQ || "")}" style="margin-bottom:4px">` : ""}
+      <div id="m-list">${txListHtml()}</div>
+    </section>
+        <p class="foot">기록은 이 기기에만 저장돼요. 캡처 사진은 AI가 읽는 데만 쓰고 저장하지 않아요(읽을 때 Google Gemini 무료 등급(구글이 서비스 개선에 쓸 수 있음) 또는 OpenAI로 전송돼요).</p>`;
+  return `${seg}
+    <div class="sortbar" role="group" aria-label="기간">
+      <button class="${kind === "week" ? "on" : ""}" data-act="money-kind" data-v="week">이번 주</button>
+      <button class="${kind === "month" ? "on" : ""}" data-act="money-kind" data-v="month">이번 달</button>
+    </div>
+    <section class="card" id="m-summary">
+      <div class="sec-title" style="margin-bottom:4px"><h2>${kind === "week" ? "이번 주" : "이번 달"} 쓴 돈</h2><span>${s.a.slice(5).replace("-", "/")} ~ ${s.b.slice(5).replace("-", "/")}</span></div>
+      <div class="money-row"><b class="num" style="font-size:calc(28px * var(--fs, 1))">${won(s.total)}</b>${ch !== null ? `<span class="badge ${ch > 0 ? "b-up" : "b-down"}">${kind === "week" ? "지난주" : "지난달"}보다 ${ch > 0 ? "+" : ""}${ch}%</span>` : ""}</div>
+      <div class="hint" style="margin-bottom:10px">${s.count}건${s.income ? ` · 들어온 돈 ${won(s.income)}` : ""}</div>
+      ${cats.length ? `<div class="donut-wrap"><div class="donut" style="background:conic-gradient(${donutStops(cats)})" role="img" aria-label="분류별 지출 비율"><span>${esc(cats[0][0])}<b class="num">${Math.round((cats[0][1] / sumCats) * 100)}%</b></span></div>
+          <p class="hint" style="margin:0">${kind === "week" ? "지난주" : "지난달"}와 비교하면<br>${compareLine(cats, p.byCat, kind)}</p></div>`
+        + cats.map(([c, v]) => { const d = v - (p.byCat[c] || 0); return `<button class="cat-row cat-row-btn" data-act="cat-detail" data-c="${esc(c)}" aria-label="${esc(c)} 내역 보기"><span class="cat-name"><i class="tx-dot" style="background:${catColor(c)}"></i>${esc(c)}</span><div class="cat-bar"><i style="width:${Math.max(4, (v / max) * 100)}%;background:${catColor(c)}"></i></div><span class="num cat-v">${won(v)}<small class="${d > 0 ? "up" : d < 0 ? "down" : "flat"}">${Math.round((v / sumCats) * 100)}% · ${!p.byCat[c] ? "새로 씀" : d === 0 ? "같음" : `${d > 0 ? "▲" : "▼"}${shortWon(Math.abs(d))}`}</small></span><span class="tx-pen" aria-hidden="true">›</span></button>`; }).join("")
+        : `<p class="hint" style="margin:0">${s.list.length ? `${kind === "week" ? "이번 주" : "이번 달"}에 쓴 돈 기록이 없어요.` : "아직 기록이 없어요."} '기록' 탭에서 캡처를 올리거나 직접 기록하면, 여기서 루미에게 피드백도 받을 수 있어요.</p>`}
+      ${s.top.length ? `<div class="hint" style="margin-top:10px">많이 쓴 곳: ${s.top.map(([m, v]) => `${esc(m)} ${won(v)}`).join(" · ")}</div>` : ""}
+      ${s.count ? `<button class="btn ghost" style="margin-top:12px;width:100%" data-act="money-feedback" ${ui.moneyFb?.loading || !aiLeft() ? "disabled" : ""}>${ui.moneyFb?.loading ? "생각하는 중…" : "루미에게 피드백 받기"}</button>
+        <p class="hint" style="margin:6px 0 0">${fbLeftText()}</p>${!aiLeft() && !ui.moneyFb?.loading ? `<p class="hint" style="margin:4px 0 8px">${outOfFb()}</p>${adButton("fb")}` : ""}` : ""}
+      ${ui.moneyFb?.text ? `<div class="ans" style="display:flex;gap:10px;margin-top:10px;align-items:flex-start">${mascot(36)}${moneyFbHtml(ui.moneyFb, kind)}</div>` : ""}
+      ${ui.moneyFb?.error ? `<p class="hint" style="color:var(--up)">${esc(ui.moneyFb.error)}</p>` : ""}
+    </section>
+    ${calBlock(kind)}
+    <p class="foot">기록은 이 기기에만 저장돼요. 캡처 사진은 AI가 읽는 데만 쓰고 저장하지 않아요(읽을 때 Google Gemini 무료 등급(구글이 서비스 개선에 쓸 수 있음) 또는 OpenAI로 전송돼요).</p>`;
+}
+
+// ───────────────────────── 화면: 가계부 (하단 탭) ─────────────────────────
+function viewLedger() {
+  return `${tabHead("내 돈")}
+  <main class="scroll">
+    ${moneyBody()}
+  </main>`;
+}
+
+// ───────────────────────── 화면: 나의 자산관리 (하단 탭) ─────────────────────────
+// 순자산을 달마다 하나씩 기록 (만원). 자산을 고치면 그달 값이 바뀐다
+function netNow(p = profile) {
+  const a = p.assets;
+  if (a.cash == null && a.invest == null && a.other == null) return null;
+  const debt = (p.debts || []).reduce((s2, d) => s2 + (Number(d.amount) || 0), 0);
+  return (Number(a.cash) || 0) + (Number(a.invest) || 0) + (Number(a.other) || 0) - debt;
+}
+function recordNet() {
+  const n = netNow();
+  if (n === null) return;
+  const key = ymd(today0()).slice(0, 7);
+  profile.netHist = profile.netHist || {};
+  if (profile.netHist[key] === n) return;
+  profile.netHist[key] = n;
+  saveProfile();
+}
+// 선 그래프 하나(한 가지 색, 2px 선, 점을 누르면 값). 최근 12달
+function netChart() {
+  const hist = Object.entries(profile.netHist || {}).sort(([x], [y]) => x.localeCompare(y)).slice(-12);
+  const hide = ui.hideMoney;
+  if (hist.length < 2) return `<section class="card" id="sec-net">
+      <div class="sec-title"><h2>순자산 변화</h2><span>달마다 기록</span></div>
+      <p class="hint" style="margin:0">이번 달 순자산을 기록했어요${hist.length ? ` (${hide ? "••••" : man(hist[0][1])})` : ""}. 다음 달에도 자산을 고치거나 이 화면을 열면 한 점씩 늘어 선 그래프가 그려져요.</p>
+    </section>`;
+  const W = 320, H = 150, L = 46, R = 12, T = 14, B = 26;
+  const vals = hist.map(([, v]) => v);
+  let lo = Math.min(...vals), hi = Math.max(...vals);
+  if (lo === hi) { lo -= 10; hi += 10; }
+  const pad = (hi - lo) * 0.15; lo -= pad; hi += pad;
+  const x = (i) => L + (i * (W - L - R)) / (hist.length - 1);
+  const y = (v) => T + ((hi - v) * (H - T - B)) / (hi - lo);
+  const ticks = [lo + (hi - lo) * 0.1, (lo + hi) / 2, hi - (hi - lo) * 0.1];
+  const sel = Math.min(ui.netSel ?? hist.length - 1, hist.length - 1);
+  const first = vals[0], last = vals[vals.length - 1], diff = last - first;
+  const short = (v) => (Math.abs(v) >= 10000 ? `${fmt(v / 10000, 1)}억` : `${fmt(Math.round(v))}만`);
+  return `<section class="card" id="sec-net">
+      <div class="sec-title"><h2>순자산 변화</h2><span>최근 ${hist.length}달</span></div>
+      <div class="net-head"><b class="num">${hide ? "••••" : man(hist[sel][1])}</b><span class="hint">${Number(hist[sel][0].slice(5))}월 순자산</span>
+        ${hide ? "" : `<span class="badge ${diff >= 0 ? "b-up" : "b-down"}">${Number(hist[0][0].slice(5))}월보다 ${diff >= 0 ? "▲" : "▼"} ${man(Math.abs(diff))}</span>`}</div>
+      <svg class="net-svg" viewBox="0 0 ${W} ${H}" role="img" aria-label="최근 ${hist.length}달 순자산 선 그래프">
+        ${ticks.map((t) => `<line x1="${L}" x2="${W - R}" y1="${y(t).toFixed(1)}" y2="${y(t).toFixed(1)}" class="net-grid"/><text x="${L - 6}" y="${(y(t) + 4).toFixed(1)}" text-anchor="end" class="net-ax">${hide ? "" : short(t)}</text>`).join("")}
+        <polyline points="${hist.map(([, v], i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ")}" class="net-line"/>
+        ${hist.map(([m, v], i) => `<text x="${x(i).toFixed(1)}" y="${H - 6}" text-anchor="middle" class="net-ax">${Number(m.slice(5))}월</text>
+          <circle cx="${x(i).toFixed(1)}" cy="${y(v).toFixed(1)}" r="${i === sel ? 6 : 4.5}" class="net-dot ${i === sel ? "on" : ""}"/>
+          <circle cx="${x(i).toFixed(1)}" cy="${y(v).toFixed(1)}" r="16" class="net-hit" data-act="net-sel" data-i="${i}"><title>${Number(m.slice(5))}월 ${hide ? "" : man(v)}</title></circle>`).join("")}
+      </svg>
+      <p class="hint" style="margin:0">점을 누르면 그달 순자산을 보여줘요. 자산을 고치면 이번 달 값이 바뀌어요.</p>
+    </section>`;
+}
+// ───────── 투자 점검: 내 투자 성향 vs 지금 실제로 하는 투자 (휴대폰에서 계산, AI 안 씀) ─────────
+// 기준: 예금·현금 + 투자 중 투자 비중을 성향별 참고 범위(investGuide)와 비교. 보증금 같은 기타 자산은 뺀다.
+// 관심 종목 보유 수량 × 전일 종가로 주식 쏠림을, 모의투자 비중으로 '게임 속 나'를 함께 본다. 일반 참고 기준이고 투자 권유가 아니다.
+function investCheckHtml() {
+  const p = profile, a = p.assets, hide = ui.hideMoney;
+  const M = (v) => (hide ? "••••" : man(Math.round(v)));
+  const cash = Number(a.cash) || 0, invest = Number(a.invest) || 0, liquid = cash + invest;
+  const type = riskType(p.avert), [lo, hi] = investGuide(p.avert), mid = (lo + hi) / 2;
+  const head = `<div class="sec-title"><h2>투자 점검</h2><span>${type} 기준</span></div>`;
+  if (!liquid) return `<section class="card" id="sec-invcheck">${head}<p class="hint" style="margin:0">'자산 · 대출 입력'에서 예금·현금과 투자 금액을 넣으면, ${type}에 맞게 투자하고 있는지 점검해 드려요.</p></section>`;
+  const ir = Math.round((invest / liquid) * 100);
+  const state = ir < lo ? "low" : ir > hi ? "high" : "ok";
+  // 최근 30일 쓴 돈(가계부) → 비상금 몇 달 치, 매달 남는 돈
+  const from = ymd(new Date(today0().getTime() - 29 * 86400e3));
+  const spend = ledger.tx.filter((t) => t.date >= from && MX.kind(t) === "spend").reduce((s, t) => s + t.amount, 0) / 1e4;
+  const months = spend > 0 ? cash / spend : null;
+  const surplus = incomeMonthly(p) && spend > 0 ? incomeMonthly(p) - spend : null;
+  // 관심 종목 보유분 (수량 × 전일 종가)
+  const px = Object.fromEntries((data.market?.stocks || []).filter((s) => !s.missing).map((s) => [s.name, s.v]));
+  const held = p.watch.filter((w) => Number(w.qty) > 0 && px[w.name]).map((w) => [w.name, (Number(w.qty) * px[w.name]) / 1e4]).sort((x, y) => y[1] - x[1]);
+  const stockSum = held.reduce((s, x) => s + x[1], 0), top = held[0], topShare = top && stockSum ? Math.round((top[1] / stockSum) * 100) : 0;
+  // 모의투자 속 나: 주식 비중이 가장 가까운 성향
+  let game = null;
+  if (inv.trades?.length) {
+    const g = invGroups(), tot = invTotal() || 1, sp = Math.round((g.주식 / tot) * 100);
+    const like = Object.entries(INV_MIX).sort((x, y) => Math.abs(x[1].주식 - sp) - Math.abs(y[1].주식 - sp))[0][0];
+    game = { sp, like };
+  }
+  // 그림: 0~100% 막대에 성향 참고 범위(옅은 파랑)와 내 위치(점)
+  const range = `<div class="ic-range"><span class="ic-band" style="left:${lo}%;width:${hi - lo}%"></span><span class="ic-me ${state}" style="left:${Math.min(98, Math.max(2, ir))}%"></span></div>
+      <div class="mp-row hint"><span>0%</span><span>${type} 참고 ${lo}~${hi}%</span><span>100%</span></div>`;
+  const verdict = state === "ok" ? `<span class="ic-badge ok">성향에 맞아요</span>` : state === "low" ? `<span class="ic-badge low">성향보다 조심스러워요</span>` : `<span class="ic-badge high">성향보다 과감해요</span>`;
+  // 루미의 처방 2~3개
+  const rx = [];
+  if (months !== null && months < 3 && state !== "high") rx.push(`<b>투자보다 비상금 먼저.</b> 예금·현금이 쓰는 돈의 약 ${fmt(months, 1)}개월 치예요. 3개월 치(${M(spend * 3)})까지 ${M(Math.max(0, spend * 3 - cash))} 더 모은 뒤 투자를 늘려요.`);
+  if (state === "low") {
+    const gap = (liquid * lo) / 100 - invest, per = surplus > 0 ? Math.max(5, Math.round(surplus * 0.3)) : null;
+    rx.push(`<b>투자 비중을 ${lo}%까지 천천히.</b> 약 ${M(gap)}을 더 투자하면 ${type} 참고 범위에 들어와요.${per ? ` 매달 남는 돈의 30%쯤(${M(per)})씩이면 약 ${Math.ceil(gap / per)}달 걸려요.` : " 한 번에 넣기보다 몇 달에 나눠 넣는 게 덜 흔들려요."}`);
+  }
+  if (state === "high") rx.push(`<b>투자 일부를 안전한 쪽으로.</b> 약 ${M(invest - (liquid * hi) / 100)}을 예금·채권으로 옮기면 ${hi}% 안쪽이 돼요. 크게 떨어지는 날 견디기 쉬워져요.`);
+  if (top && (held.length === 1 || topShare >= 50) && stockSum >= 30) rx.push(`<b>${esc(top[0])}에 쏠림 줄이기.</b> 관심 종목으로 확인되는 주식의 ${topShare}%가 한 종목이에요. 여러 종목이나 지수를 따라가는 ETF로 나누면 한 회사 소식에 덜 흔들려요.`);
+  if (state === "ok") rx.push(`<b>지금 비중 유지하고 석 달에 한 번 점검.</b> 주가가 오르내리면 비중이 저절로 바뀌어요. 범위를 벗어나면 그때 조금씩 맞춰요.`);
+  if (game && Math.abs(INV_MIX[game.like].주식 - INV_MIX[type].주식) >= 20) rx.push(`<b>게임 속 나와 진짜 나 비교하기.</b> 모의투자에서는 주식 ${game.sp}%로 ${game.like}처럼 하고 있어요. 진짜 돈이라면 그만큼 오르내려도 괜찮을지 생각해 봐요.`);
+  if (rx.length < 3 && !p.riskTest) rx.push(`<b>투자 성향 정밀 진단 해 보기.</b> 7문항이면 지금 성향(${type})이 맞는지 더 정확히 알 수 있어요.`);
+  if (rx.length < 2) rx.push(`<b>남는 돈의 일부를 정해진 날 자동으로.</b> 월급날 같은 날에 같은 금액을 넣으면 사는 가격이 고르게 나뉘어요.`);
+  return `<section class="card" id="sec-invcheck">${head}
+      <div class="mp-flow">
+        <div class="mp-row"><span>내 투자 비중</span><b class="num">${ir}%</b></div>
+        ${range}
+        <div style="margin-top:8px">${verdict}</div>
+        <p class="hint" style="margin:6px 0 0">예금·현금 ${M(cash)} + 투자 ${M(invest)} 가운데 투자 비율이에요 (보증금 같은 기타 자산은 빼요).</p>
+      </div>
+      <div class="mp-tiles">
+        <div class="mp-tile"><span class="hint">관심 종목 주식</span>${held.length ? `<b class="num">${M(stockSum)}</b><span class="hint">${held.length}종목 · 가장 큰 ${esc(top[0])} ${topShare}%</span>${stockSum > invest * 1.1 ? `<span class="hint" style="color:#B3261E">입력한 투자 금액보다 커요. '자산 · 대출 입력'을 고쳐 주세요</span>` : ""}` : `<b style="font-size:calc(15px * var(--fs, 1))">-</b><span class="hint">관심 종목에 보유 수량을 넣으면 쏠림을 봐 드려요</span>`}</div>
+        <div class="mp-tile"><span class="hint">모의투자 속 나</span>${game ? `<b>${game.like}</b><span class="hint">주식 ${game.sp}% · 진단은 ${type}</span>` : `<b style="font-size:calc(15px * var(--fs, 1))">-</b><span class="hint">모의투자를 해 보면 비교해 드려요</span>`}</div>
+      </div>
+      <h3 class="mp-h">루미의 처방</h3>
+      <ol class="mp-rx">${rx.slice(0, 3).map((x, i) => `<li><span class="mp-no">${i + 1}</span><span>${x}</span></li>`).join("")}</ol>
+      <p class="hint" style="margin:10px 0 0">성향별 범위는 일반적인 참고 기준이에요. 투자 권유가 아니에요.</p>
+    </section>`;
+}
+function investHtml() {
+  const p = profile, a = p.assets, hide = ui.hideMoney;
+  const debtSum = (p.debts || []).reduce((s, d) => s + (Number(d.amount) || 0), 0);
+  const parts = [["예금·현금", Number(a.cash) || 0, "#12B5A2"], ["투자", Number(a.invest) || 0, "#2DB4E0"], ["기타 자산", Number(a.other) || 0, "#8B7CF6"]];
+  const total = parts.reduce((s, x) => s + x[1], 0);
+  const net = total - debtSum;
+  const has = a.cash !== null || a.invest !== null || a.other !== null;
+  const g = (p.goals || [])[0];
+  const gc = g ? goalCalc(g) : null;
+  return `    <section class="card asset-card">
+      <div class="ac-top">
+        <div><span class="hint">${esc(p.nickname || "나")}님의 순자산</span><b class="big num">${has ? (hide ? "••••••원" : fmt(net * 10000) + "원") : "-"}</b></div>
+        <button class="btn ghost sm" data-act="assets-edit">편집</button>
+      </div>
+      ${has ? `<div class="bar thick" aria-hidden="true">${parts.filter((x) => x[1]).map(([, v, c]) => `<div style="width:${(v / (total || 1)) * 100}%;background:${c}"></div>`).join("")}</div>
+      <div class="legend2">${parts.map(([n, v, c]) => `<div><i style="background:${c}"></i><span>${n}</span><b class="num">${total ? Math.round((v / total) * 100) : 0}%</b></div>`).join("")}
+        <div><i style="background:#D1D6DB"></i><span>부채</span><b class="num">${hide ? "••••" : man(debtSum)}</b></div></div>
+      <div class="ac-links"><button class="link-btn" data-act="go-my" data-focus="diag">자산 진단 보기 ›</button><button class="link-btn" style="color:var(--sub)" data-act="toggle-hide">${hide ? "금액 보이기" : "금액 숨기기"}</button></div>`
+      : `<p class="hint" style="margin:8px 0 0">예금·투자·대출을 입력하면 순자산과 진단을 보여드려요.</p><button class="btn" style="margin-top:12px" data-act="assets-edit">자산 입력하기</button>`}
+    </section>
+    <div class="grid2">
+      <button class="card mini-card" data-act="go-goals"><span class="mc-t">목표 저축 ›</span>
+        ${g ? `<b class="num">${gc.pct}%</b><span class="hint">${esc(g.name)} · ${man(gc.left)} 남음</span>` : `<b>시작하기</b><span class="hint">여행·내 집 마련 목표</span>`}</button>
+      <button class="card mini-card" data-act="go-my" data-focus="risk"><span class="mc-t">투자 성향 ›</span>
+        <b>${riskType(p.avert)}</b><span class="hint">${p.riskTest ? "정밀 진단 결과" : "위험기피 " + p.avert + "/10"}</span></button>
+    </div>
+    ${netChart()}
+    ${mySections().diag}
+    ${investCheckHtml()}
+    ${goalsMy(p)}`;
+}
+function viewAssets() {
+  const tab = ui.assetTab || "invest";
+  return `${tabHead("내 돈")}
+  <main class="scroll">
+    ${moneySeg()}
+    ${tab === "analysis" ? budgetHtml() + intelHtml() + analysisHtml() : (recordNet(), investHtml())}
+  </main>`;
+}
+
+// 자산·부채 고치기 팝업 (저장을 누를 때만 반영)
+function assetDraft() {
+  const p = profile, a = p.assets;
+  return { cash: a.cash, invest: a.invest, other: a.other, payday: p.payday ?? null, monthlyIncome: p.monthlyIncome ?? null, extraIncome: p.extraIncome ?? null, debts: (p.debts || []).map((d) => ({ ...d })) };
+}
+function syncAssetDraft() {
+  const D = ui.modal?.draft;
+  if (!D) return;
+  const int = (id) => { const n = parseInt(String(document.getElementById(id)?.value ?? "").replace(/[^0-9]/g, ""), 10); return Number.isFinite(n) ? n : null; };
+  D.cash = int("a-cash"); D.invest = int("a-invest"); D.other = int("a-other");
+  const pd = int("a-payday"); D.payday = pd >= 1 && pd <= 31 ? pd : null;
+  D.monthlyIncome = int("a-minc"); D.extraIncome = int("a-xinc");
+  D.debts.forEach((d, i) => {
+    d.name = (document.getElementById(`md-n-${i}`)?.value || "").trim().slice(0, 20);
+    d.amount = int(`md-a-${i}`);
+    const r = parseFloat(document.getElementById(`md-r-${i}`)?.value); d.rate = Number.isFinite(r) ? r : null;
+    d.kind = document.getElementById(`md-k-${i}`)?.value || "변동";
+    const dd = int(`md-d-${i}`); d.day = dd >= 1 && dd <= 31 ? dd : null;
+  });
+}
+function modalAssets(m) {
+  const D = m.draft;
+  const f = (id, label, v, unit) => `<div><label class="lb" for="${id}">${label}</label><div class="money"><input class="field num" id="${id}" inputmode="numeric" value="${v ?? ""}"><span class="unit">${unit}</span></div></div>`;
+  return `<div class="sec-title" style="margin:0"><h2>내 자산·부채</h2><span>대략적인 금액도 괜찮아요</span></div>
+    <div class="modal-scroll">
+      <div class="grid2">${f("a-cash", "예금·현금", D.cash, "만원")}${f("a-invest", "주식·펀드 등 투자", D.invest, "만원")}${f("a-other", "기타 (보증금 등)", D.other, "만원")}${f("a-payday", "월급날", D.payday, "일")}</div>
+      <span class="lb" style="margin-top:6px">소득</span>
+      <div class="grid2">${f("a-minc", "월 소득 (매달 들어오는 돈)", D.monthlyIncome, "만원")}${f("a-xinc", "비정기 소득 (1년에 대략)", D.extraIncome, "만원")}</div>
+      <p class="hint" style="margin:0">${salaryFixed() ? `월 소득은 가계부 고정 수입 ‘${esc(salaryFixed().name)}’과 이어져 있어요.` : "알바·상여·용돈처럼 들쑥날쑥한 돈은 비정기 소득에 1년치를 대략 적어요. 가계부 고정 수입에 월급을 넣으면 월 소득도 같이 채워져요."}</p>
+      <span class="lb" style="margin-top:6px">부채</span>
+      ${D.debts.map((d, i) => `<div class="debt">
+        <div class="inline"><label for="md-n-${i}" class="sr">대출 이름</label><input class="field" id="md-n-${i}" placeholder="대출 이름 (예: 신용대출)" value="${esc(d.name || "")}">
+          <button class="icon-btn" data-act="asset-debt-rm" data-i="${i}" aria-label="대출 삭제">${ICON.x}</button></div>
+        <div class="grid2">
+          <div class="money"><label for="md-a-${i}" class="sr">대출 잔액 (만원)</label><input class="field num" id="md-a-${i}" inputmode="numeric" placeholder="잔액" value="${d.amount ?? ""}"><span class="unit">만원</span></div>
+          <div class="money"><label for="md-r-${i}" class="sr">금리 (%)</label><input class="field num" id="md-r-${i}" inputmode="decimal" placeholder="금리" value="${d.rate ?? ""}"><span class="unit">%</span></div>
+          <div><label for="md-k-${i}" class="sr">금리 종류</label><select class="field" id="md-k-${i}">${["변동", "고정"].map((k) => `<option ${d.kind === k ? "selected" : ""}>${k}</option>`).join("")}</select></div>
+          <div class="money"><label for="md-d-${i}" class="sr">이자 납부일</label><input class="field num" id="md-d-${i}" inputmode="numeric" placeholder="이자일" value="${d.day ?? ""}"><span class="unit">일</span></div>
+        </div></div>`).join("") || `<p class="hint" style="margin:0">대출이 없으면 비워두고 저장하세요.</p>`}
+      <button class="btn ghost" data-act="asset-debt-add">+ 대출 추가</button>
+    </div>
+    <div class="inline"><button class="btn ghost" data-act="modal-close" style="flex:1">취소</button><button class="btn" data-act="assets-save" style="flex:2">저장</button></div>`;
+}
+function modalGoal(m) {
+  const g = m.i !== undefined ? profile.goals?.[m.i] : null;
+  if (m.i !== undefined && !g) return "";
+  return `<div class="sec-title" style="margin:0"><h2>${g ? "목표 고치기" : "새 목표 만들기"}</h2></div>
+    <div><label class="lb" for="g-name">목표 이름</label><input class="field" id="g-name" maxlength="20" placeholder="예: 제주 여행, 새 노트북" value="${esc(g?.name || "")}"></div>
+    ${g ? amountField("g-saved", "지금까지 모은 돈", g.saved ?? 0, "", "") : ""}
+    ${amountField("g-target", "목표 금액", g?.target ?? "", "", "")}
+    ${dueFields("g-due", g?.due || "", "", "")}
+    <div class="inline">${g ? `<button class="btn ghost" data-act="goal-rm" data-i="${m.i}" style="flex:1;color:var(--up)">삭제</button>` : ""}<button class="btn ghost" data-act="modal-close" style="flex:1">취소</button><button class="btn" data-act="goal-save" style="flex:2">저장</button></div>`;
+}
+
+// ───────── 분류별 한 달 예산 (만원). 가계부의 이번 달 나간 돈과 이어서 남은 돈을 보여준다 ─────────
+function budgetCats() { return catList().filter((c) => c !== "급여·수입"); }
+function budgetHtml() {
+  const B = profile.budgets || {};
+  const set = Object.entries(B).filter(([, v]) => v > 0);
+  const S = spendSummary("month");
+  const t = today0(), last = new Date(t.getFullYear(), t.getMonth() + 1, 0).getDate(), left = last - t.getDate() + 1;
+  if (!set.length) return `<section class="card" id="sec-budget">
+      <div class="sec-title"><h2>이번 달 예산</h2></div>
+      <p class="hint" style="margin:0">식비·카페처럼 분류마다 한 달에 쓸 돈을 정하면, 가계부 기록과 이어서 얼마나 남았는지 보여드려요.</p>
+      <button class="btn" style="margin-top:10px" data-act="budget-edit">예산 정하기</button>
+    </section>`;
+  const totB = set.reduce((a, [, v]) => a + v * 1e4, 0);
+  const totS = set.reduce((a, [c]) => a + (S.byCat[c] || 0), 0);
+  return `<section class="card" id="sec-budget">
+      <div class="sec-title"><h2>이번 달 예산</h2><button class="link-btn" data-act="budget-edit">고치기</button></div>
+      <div class="bud-total"><span>예산 ${won(totB)} 중 <b class="num">${won(totS)}</b> 썼어요</span><span class="hint">${totS <= totB ? `남은 ${won(totB - totS)} · 하루 약 ${won((totB - totS) / left)}` : `${won(totS - totB)} 넘었어요`}</span></div>
+      ${set.map(([c, v]) => {
+        const b = v * 1e4, sp = S.byCat[c] || 0, pct = Math.round((sp / b) * 100), over = sp > b;
+        return `<div class="bud-row">
+          <div class="bud-top"><span class="cat-name"><i class="tx-dot" style="background:${catColor(c)}"></i>${esc(c)}</span><span class="num">${won(sp)} / ${won(b)}</span></div>
+          <div class="bud-bar"><i style="width:${Math.min(100, pct)}%;background:${over ? "var(--up)" : catColor(c)}"></i></div>
+          <span class="bud-note ${over ? "over" : ""}">${over ? `⚠ 초과 ${won(sp - b)} (${pct}%)` : `${pct}% · 남은 ${won(b - sp)}`}</span>
+        </div>`;
+      }).join("")}
+    </section>`;
+}
+function modalBudget() {
+  const B = profile.budgets || {};
+  const S = spendSummary("month"), P = spendSummary("month", true);
+  return `<div class="sec-title" style="margin:0"><h2>분류별 한 달 예산</h2><span>만원 단위</span></div>
+    <p class="hint" style="margin:0">비워두면 그 분류는 예산 없이 둬요. 옆의 숫자는 지난달·이번 달에 쓴 돈이에요.</p>
+    <div class="modal-scroll bud-form">${budgetCats().map((c, i) => `<div class="bud-in">
+        <label for="bud-${i}"><i class="tx-dot" style="background:${catColor(c)}"></i>${esc(c)}<small class="hint">지난달 ${won(P.byCat[c] || 0)} · 이번 달 ${won(S.byCat[c] || 0)}</small></label>
+        <div class="money" style="width:120px"><input class="field num" id="bud-${i}" data-c="${esc(c)}" inputmode="numeric" value="${B[c] || ""}" placeholder="0"><span class="unit">만원</span></div>
+      </div>`).join("")}</div>
+    <div class="inline"><button class="btn ghost" data-act="modal-close" style="flex:1">취소</button><button class="btn" data-act="budget-save" style="flex:2">저장</button></div>`;
+}
+// ───────── 소비 분석: 입력한 자산 + 가계부(최근 30일)로 소비가 합리적인지 본다 ─────────
+// 기준은 흔히 쓰는 생활 재무 참고값이에요. 수입이 있으면 수입 대비, 없으면 전체 지출 대비로 본다.
+const GUIDE_INCOME = { 식비: 15, "카페·간식": 5, 쇼핑: 10, "문화·여가": 8, 여행: 10, 교통: 8, 구독: 3 };
+const GUIDE_SPEND = { 식비: 30, "카페·간식": 10, 쇼핑: 20, "문화·여가": 15, 여행: 20, 교통: 15, 구독: 5 };
+// ── METRICS:START ── 소비 인텔리전스 1단계 계산 (analysis/sql의 05·06·08과 같은 규칙)
+// 이 블록은 거래 목록만 읽고 앱의 다른 값에 기대지 않는다. scripts/check-metrics.mjs가 이 블록만 꺼내 SQL 결과와 비교한다.
+// 세는 기준(analysis/sql/00_schema.sql의 tx_class와 같음): 지출=나간 돈·내부이체 아님 / 수입=들어온 돈·급여·수입 /
+// 환불=들어온 돈·그 밖(총지출에서만 뺌) / 내부이체=뺌 / 고정비=src '고정' 또는 fixed 있음
+const MX = {
+  kind(t) { return t.cat === "내부이체" ? "transfer" : t.dir === "out" ? "spend" : t.cat === "급여·수입" ? "income" : "refund"; },
+  fixed(t) { return t.src === "고정" || !!(t.fixed || t.fixed_id); },
+  dn(s) { const [y, m, d] = s.split("-").map(Number); return Date.UTC(y, m - 1, d) / 864e5; },   // 날짜 → 날 번호
+  ds(n) { return new Date(n * 864e5).toISOString().slice(0, 10); },
+  // DuckDB quantile_cont와 같은 선형 보간 백분위수
+  q(arr, p) { const a = [...arr].sort((x, y) => x - y); if (!a.length) return null; const pos = (a.length - 1) * p, lo = Math.floor(pos), hi = Math.ceil(pos); return a[lo] + (a[hi] - a[lo]) * (pos - lo); },
+  sd(arr) { if (arr.length < 2) return 0; const m = arr.reduce((x, y) => x + y, 0) / arr.length; return Math.sqrt(arr.reduce((x, y) => x + (y - m) ** 2, 0) / arr.length); },
+};
+// 이번 달 1일~오늘 vs 지난달 같은 기간 (analysis/sql/08_month_to_date.sql)
+function monthToDate(tx, asOf) {
+  const [y, m, d] = asOf.split("-").map(Number);
+  const curStart = `${asOf.slice(0, 8)}01`;
+  const py = m === 1 ? y - 1 : y, pm = m === 1 ? 12 : m - 1;
+  const prevStart = `${py}-${String(pm).padStart(2, "0")}-01`;
+  const prevLast = new Date(Date.UTC(py, pm, 0)).getUTCDate();
+  const prevEnd = `${prevStart.slice(0, 8)}${String(Math.min(d, prevLast)).padStart(2, "0")}`;
+  const cats = {}, tot = { cur: 0, prev: 0, curRefund: 0, prevRefund: 0, curFixed: 0 };
+  for (const t of tx) {
+    const k = MX.kind(t);
+    if (k !== "spend" && k !== "refund") continue;
+    const per = t.date >= curStart && t.date <= asOf ? "cur" : t.date >= prevStart && t.date <= prevEnd ? "prev" : null;
+    if (!per) continue;
+    if (k === "refund") { tot[per + "Refund"] += t.amount; continue; }
+    const c = (cats[t.cat] = cats[t.cat] || { cat: t.cat, cur: 0, prev: 0, curFixed: 0 });
+    c[per] += t.amount; tot[per] += t.amount;
+    if (per === "cur" && MX.fixed(t)) { c.curFixed += t.amount; tot.curFixed += t.amount; }
+  }
+  return {
+    cur: Math.max(tot.cur - tot.curRefund, 0), prev: Math.max(tot.prev - tot.prevRefund, 0), curFixed: tot.curFixed,
+    curStart, prevStart, prevEnd,
+    cats: Object.values(cats).sort((a, b) => b.cur - a.cur || a.cat.localeCompare(b.cat)),
+  };
+}
+// 반복 결제: 최근 180일, 같은 가게 3번 이상, 금액이 중앙값 ±10%, 간격이 매주(6~8일)·매달(27~33일)로 일정 (analysis/sql/05_recurring.sql)
+function recurringPayments(tx, asOf) {
+  const end = MX.dn(asOf), start = end - 179, by = {};
+  const list = tx.filter((t) => MX.kind(t) === "spend" && MX.dn(t.date) >= start && MX.dn(t.date) <= end)
+    .sort((a, b) => a.date.localeCompare(b.date) || String(a.id).localeCompare(String(b.id)));
+  for (const t of list) (by[t.merchant] = by[t.merchant] || []).push(t);
+  const out = [];
+  for (const [merchant, ts] of Object.entries(by)) {
+    if (ts.length < 3) continue;
+    const amts = ts.map((t) => t.amount), typical = MX.q(amts, 0.5);
+    if (Math.min(...amts) < typical * 0.9 || Math.max(...amts) > typical * 1.1) continue;
+    const gaps = ts.slice(1).map((t, i) => MX.dn(t.date) - MX.dn(ts[i].date));
+    const mg = MX.q(gaps, 0.5), sd = MX.sd(gaps);
+    if (!((mg >= 6 && mg <= 8) || (mg >= 27 && mg <= 33)) || sd > 3) continue;
+    const last = ts[ts.length - 1].date;
+    out.push({ merchant, cat: ts[0].cat, n: ts.length, typical, cycle: mg <= 8 ? "매주" : "매달", medianGap: mg,
+      last, next: MX.ds(MX.dn(last) + Math.round(mg)), isFixed: ts.some(MX.fixed) });
+  }
+  return out.sort((a, b) => b.typical - a.typical || a.merchant.localeCompare(b.merchant));
+}
+// 평소보다 큰 지출: 같은 분류의 그 전날까지 90일 기록이 3번 이상, 3만원 이상, 금액 > 그 기록의 P95 × 2 (analysis/sql/06_anomaly.sql)
+function unusualSpends(tx, from = "0000-00-00") {
+  const spend = tx.filter((t) => MX.kind(t) === "spend"), byCat = {};
+  for (const t of spend) (byCat[t.cat] = byCat[t.cat] || []).push(t);
+  const out = [];
+  for (const t of spend) {
+    if (t.date < from || t.amount < 30000) continue;
+    const d = MX.dn(t.date);
+    const prior = byCat[t.cat].filter((x) => { const k = MX.dn(x.date); return k >= d - 90 && k <= d - 1; }).map((x) => x.amount);
+    if (prior.length < 3) continue;
+    const p95 = MX.q(prior, 0.95);
+    if (t.amount > p95 * 2) out.push({ id: t.id, date: t.date, merchant: t.merchant, cat: t.cat, amount: t.amount, nPrior: prior.length, median: MX.q(prior, 0.5), p95 });
+  }
+  return out.sort((a, b) => a.date.localeCompare(b.date) || String(a.id).localeCompare(String(b.id)));
+}
+// ── 2단계: 월말 예상 (analysis/python/forecast.py의 B4 혼합 · 분류별 예측 · 예산 초과 가능성과 같은 규칙)
+// 이번 달 c일 뒤에 나갈 고정 지출 (내부이체 제외, 말일보다 큰 날은 말일로, 이번 달에 이미 기록됐으면 제외)
+function fixedRemaining(fixed, asOf, cats) {
+  const [y, m, c] = asOf.split("-").map(Number), last = new Date(Date.UTC(y, m, 0)).getUTCDate(), ym = asOf.slice(0, 7);
+  return (fixed || []).filter((f) => f.dir === "out" && f.cat !== "내부이체" && (!cats || cats.includes(f.cat))
+    && (!f.start || f.start <= ym) && !(f.made && f.made[ym]) && Math.min(Number(f.day), last) > c)
+    .reduce((a, f) => a + Number(f.amount), 0);
+}
+// 기간의 쓴 돈 = 지출 − 환불 (0 아래로 내려가지 않음)
+function spentBetween(tx, a, b) {
+  let out = 0, ref = 0;
+  for (const t of tx) { if (t.date < a || t.date > b) continue; const k = MX.kind(t); if (k === "spend") out += t.amount; else if (k === "refund") ref += t.amount; }
+  return Math.max(out - ref, 0);
+}
+// 변동비(고정 아닌 지출) 합: 날짜 a~b, cats가 있으면 그 분류만
+function varBetween(tx, a, b, cats) {
+  return tx.reduce((s2, t) => s2 + (t.date >= a && t.date <= b && MX.kind(t) === "spend" && !MX.fixed(t) && (!cats || cats.includes(t.cat)) ? t.amount : 0), 0);
+}
+// 월말 예상 = (지난 날 비율) × [지금까지 + 최근 28일 하루 평균 변동비 × 남은 날 + 남은 고정비] + (남은 날 비율) × 최근 3달 평균
+// 기록이 1일부터 다 있는 지난달이 하나도 없으면 앞부분(B3)만 쓴다
+function monthEndForecast(tx, fixed, asOf) {
+  if (!tx.length) return null;
+  const first = tx.reduce((m, t) => (t.date < m ? t.date : m), asOf);
+  const [y, m, c] = asOf.split("-").map(Number), dim = new Date(Date.UTC(y, m, 0)).getUTCDate(), rem = dim - c;
+  const mstart = `${asOf.slice(0, 8)}01`, end = MX.dn(asOf);
+  const toDate = spentBetween(tx, mstart, asOf);
+  const rate28 = varBetween(tx, MX.ds(end - 27), asOf) / 28;
+  const fr = fixedRemaining(fixed, asOf);
+  const prev = [];
+  for (let k = 1; k <= 3; k++) {
+    const yy = m - k <= 0 ? y - 1 : y, mm = ((m - k - 1 + 12) % 12) + 1;
+    const ps = `${yy}-${String(mm).padStart(2, "0")}-01`, pe = `${ps.slice(0, 8)}${String(new Date(Date.UTC(yy, mm, 0)).getUTCDate()).padStart(2, "0")}`;
+    if (ps >= first) prev.push(spentBetween(tx, ps, pe));
+  }
+  const b3 = toDate + rate28 * rem + fr;
+  const prev3 = prev.length ? prev.reduce((a, b) => a + b, 0) / prev.length : null;
+  const w = c / dim;
+  return { asOf, toDate, rate28, remaining: rem, daysInMonth: dim, fixedRemaining: fr, prev3, nPrev: prev.length, b3,
+    forecast: prev3 === null ? b3 : w * b3 + (1 - w) * prev3, historyDays: end - MX.dn(first) + 1 };
+}
+// 분류별 예상 = 이번 달 지금까지 + 그 분류 최근 28일 하루 평균 변동비 × 남은 날 + 그 분류 남은 고정비
+function categoryForecast(tx, fixed, asOf) {
+  const [y, m, c] = asOf.split("-").map(Number), rem = new Date(Date.UTC(y, m, 0)).getUTCDate() - c;
+  const mstart = `${asOf.slice(0, 8)}01`, from = MX.ds(MX.dn(asOf) - 27), cur = {}, win = {};
+  for (const t of tx) {
+    if (MX.kind(t) !== "spend") continue;
+    if (t.date >= mstart && t.date <= asOf) cur[t.cat] = (cur[t.cat] || 0) + t.amount;
+    if (t.date >= from && t.date <= asOf && !MX.fixed(t)) win[t.cat] = (win[t.cat] || 0) + t.amount;
+  }
+  return [...new Set([...Object.keys(cur), ...Object.keys(win)])].sort().map((cat) => ({
+    cat, toDate: cur[cat] || 0, forecast: (cur[cat] || 0) + (win[cat] || 0) / 28 * rem + fixedRemaining(fixed, asOf, [cat]) }))
+    .sort((a, b) => b.forecast - a.forecast || a.cat.localeCompare(b.cat));
+}
+// 예산 초과 가능성: 예산이 있는 분류들의 합계가 예산 합계를 넘을 비율.
+// 최근 84일에서 '남은 날 수만큼 이어진 기간'의 변동비 합을 하나씩 대입해 센다 (budgets: { 분류: 만원 })
+function overrunProbability(tx, fixed, budgets, asOf) {
+  const cats = Object.keys(budgets || {}).filter((k) => Number(budgets[k]) > 0);
+  if (!cats.length) return null;
+  const budget = cats.reduce((a, k) => a + Number(budgets[k]) * 10000, 0);
+  const [y, m, c] = asOf.split("-").map(Number), rem = new Date(Date.UTC(y, m, 0)).getUTCDate() - c;
+  const mstart = `${asOf.slice(0, 8)}01`, end = MX.dn(asOf);
+  const toDate = tx.reduce((s2, t) => s2 + (t.date >= mstart && t.date <= asOf && MX.kind(t) === "spend" && cats.includes(t.cat) ? t.amount : 0), 0);
+  const fr = fixedRemaining(fixed, asOf, cats);
+  const v = Array.from({ length: 84 }, (_, i) => varBetween(tx, MX.ds(end - 83 + i), MX.ds(end - 83 + i), cats));
+  const sums = rem === 0 ? [0] : Array.from({ length: 84 - rem + 1 }, (_, i) => v.slice(i, i + rem).reduce((a, b) => a + b, 0));
+  return { budget, toDate, fixedRemaining: fr, remainingDays: rem, nWindows: sums.length,
+    prob: sums.filter((x) => toDate + x + fr > budget).length / sums.length };
+}
+// 최근 12주(월~일) 변동비 합 — 화면 그래프용
+function weeklyVariable(tx, asOf) {
+  const end = MX.dn(asOf), dow = (new Date(end * 864e5).getUTCDay() + 6) % 7, monday = end - dow;
+  return Array.from({ length: 12 }, (_, i) => { const a = monday - (11 - i) * 7; return { start: MX.ds(a), sum: varBetween(tx, MX.ds(a), MX.ds(Math.min(a + 6, end))), partial: a + 6 > end }; });
+}
+// ── METRICS:END
+// 나의 자산관리 → 분석 탭: 소비 인텔리전스 1단계 (이번 달 현황 · 반복 결제 · 평소보다 큰 지출 · 내보내기)
+// 거래는 읽기만 한다(저장·삭제 없음). 기록이 모자라면 숫자를 지어내지 않고 안내만 보여준다
+function intelHtml() {
+  const tx = ledger.tx, asOf = ymd(today0());
+  if (!tx.length) return "";
+  const firstDay = tx.reduce((m, t) => (t.date < m ? t.date : m), asOf);
+  const spanDays = MX.dn(asOf) - MX.dn(firstDay) + 1;
+  const M = monthToDate(tx, asOf);
+  const md = (s) => `${Number(s.slice(5, 7))}/${Number(s.slice(8, 10))}`;
+  // 이번 달 현황
+  let status;
+  if (!M.cur && !M.prev) status = `<p class="hint" style="margin:0">이번 달과 지난달 같은 기간에 쓴 돈 기록이 아직 없어요.</p>`;
+  else {
+    const diff = M.cur - M.prev;
+    const cmp = M.prev ? `지난달 같은 기간(${md(M.prevStart)}~${md(M.prevEnd)})보다 <b class="${diff > 0 ? "up" : diff < 0 ? "down" : ""}">${won(Math.abs(diff))} ${diff >= 0 ? "더" : "덜"}</b> 썼어요${diff ? ` (${diff > 0 ? "+" : "−"}${Math.round(Math.abs(diff) / M.prev * 100)}%)` : ""}.`
+      : `지난달 같은 기간 기록이 없어서 비교는 다음 달부터 보여드려요.`;
+    const rise = M.cats.filter((c) => c.cur - c.prev >= 10000).sort((a, b) => (b.cur - b.prev) - (a.cur - a.prev))[0];
+    status = `<div class="flow3">
+        <div><span>이번 달 쓴 돈</span><b class="num">${won(M.cur)}</b></div>
+        <div><span>고정비</span><b class="num">${won(M.curFixed)}</b></div>
+        <div><span>변동비</span><b class="num">${won(Math.max(M.cur - M.curFixed, 0))}</b></div>
+      </div>
+      <p class="hint" style="margin:8px 0 0">${md(M.curStart)}~${md(asOf)} 기준 · ${cmp}${M.prev && rise ? ` 가장 많이 늘어난 곳은 <b>${esc(rise.cat)}</b>(+${won(rise.cur - rise.prev)})예요.` : ""}</p>
+      ${M.cats.length ? `<div class="diag" style="margin-top:10px">${M.cats.slice(0, 5).map((c) => { const dd = c.cur - c.prev; return `<div class="diag-line"><span class="badge ${dd > 0 ? "b-up" : dd < 0 ? "b-down" : "b-flat"}">${esc(c.cat)}</span><span>${won(c.cur)}${M.prev ? ` · 지난달 같은 기간 ${won(c.prev)}` : ""}</span></div>`; }).join("")}</div>` : ""}`;
+  }
+  // 월말 예상 (2단계)
+  const F = monthEndForecast(tx, ledger.fixed, asOf);
+  const P = overrunProbability(tx, ledger.fixed, profile.budgets || {}, asOf);
+  const CF = categoryForecast(tx, ledger.fixed, asOf).slice(0, 5);
+  const B = profile.budgets || {};
+  let fc;
+  if (!F || F.historyDays < 28) fc = `<p class="hint" style="margin:0">가계부 기록이 28일 이상 쌓이면 월말 예상 지출을 보여드려요. 지금은 ${F ? F.historyDays : 0}일치예요.</p>`;
+  else {
+    const r1000 = (v) => Math.round(v / 1000) * 1000;
+    const pr = P ? (P.prob >= 0.995 ? "거의 확실해요" : P.prob <= 0.005 ? "거의 없어요" : `약 ${Math.round(P.prob * 100)}%예요`) : "";
+    const maxV = Math.max(...CF.map((x) => Math.max(x.forecast, (B[x.cat] || 0) * 1e4)), 1);
+    fc = `<div class="mp-story" style="margin:0">이번 달은 <b>약 ${won(r1000(F.forecast))}</b> 쓸 것으로 보여요 <span class="badge b-flat">추정</span></div>
+      <div class="flow3" style="margin-top:10px">
+        <div><span>지금까지</span><b class="num">${won(F.toDate)}</b></div>
+        <div><span>남은 ${F.remaining}일 변동비</span><b class="num">${won(r1000(F.rate28 * F.remaining))}</b></div>
+        <div><span>남은 고정비</span><b class="num">${won(F.fixedRemaining)}</b></div>
+      </div>
+      ${P ? `<p class="hint" style="margin:8px 0 0">예산을 정한 분류(${Object.keys(B).filter((k) => B[k] > 0).map(esc).join("·")})의 합계 예산 ${won(P.budget)}을 넘을 가능성은 <b class="${P.prob >= 0.5 ? "up" : ""}">${pr}</b>. 최근 84일 중 남은 ${P.remainingDays}일과 같은 길이의 기간 ${P.nWindows}개를 대입해 본 비율이에요.</p>` : `<p class="hint" style="margin:8px 0 0">위 '이번 달 예산'에서 분류별 예산을 정하면 넘을 가능성도 알려드려요.</p>`}
+      <div class="fc-bars">${CF.map((x) => { const bud = (B[x.cat] || 0) * 1e4; return `<div class="fc-row"><span class="fc-name">${esc(x.cat)}</span>
+          <span class="fc-track"><i class="fc-now" style="width:${(x.toDate / maxV) * 100}%"></i><i class="fc-pred" style="width:${(Math.max(x.forecast - x.toDate, 0) / maxV) * 100}%"></i>${bud ? `<i class="fc-bud" style="left:${(bud / maxV) * 100}%"></i>` : ""}</span>
+          <span class="fc-val">${won(r1000(x.forecast))}</span></div>`; }).join("")}</div>
+      <p class="hint" style="margin:6px 0 0"><i class="fc-key"></i>지금까지 <i class="fc-key pred"></i>예상 더 쓸 돈${CF.some((x) => B[x.cat]) ? " · 세로선은 예산" : ""}</p>
+      <p class="hint" style="margin:6px 0 0">달 초반엔 지난 ${F.nPrev ? `${F.nPrev}달 평균` : "기록"}을, 날이 갈수록 최근 28일 쓰는 속도를 더 반영한 추정이라 실제와 다를 수 있어요.</p>`;
+  }
+  // 최근 12주 변동비 그래프
+  const WK = weeklyVariable(tx, asOf), wmax = Math.max(...WK.map((w) => w.sum), 1);
+  const weekly = spanDays < 14 ? "" : `<section class="card">
+      <div class="sec-title"><h2>최근 소비 흐름</h2><span>12주 · 변동비</span></div>
+      <svg viewBox="0 0 312 108" class="wk-chart" role="img" aria-label="최근 12주 주별 변동비 그래프">
+        ${WK.map((w, i) => { const h = Math.round((w.sum / wmax) * 76); return `<rect x="${i * 26 + 4}" y="${84 - h}" width="18" height="${Math.max(h, 1)}" rx="4" class="${w.partial ? "wk-now" : "wk-bar"}"></rect>`; }).join("")}
+        <text x="4" y="102" class="wk-t">${md(WK[0].start)}</text><text x="308" y="102" class="wk-t" text-anchor="end">이번 주</text>
+      </svg>
+      <p class="hint" style="margin:4px 0 0">가장 많이 쓴 주 ${won(wmax)} · 이번 주는 아직 진행 중이에요.</p>
+    </section>`;
+  // 반복 결제
+  const R = recurringPayments(tx, asOf);
+  const rec = spanDays < 60 ? `<p class="hint" style="margin:0">반복 결제를 찾으려면 두 달 이상 기록이 필요해요. 지금은 ${spanDays}일치예요.</p>`
+    : !R.length ? `<p class="hint" style="margin:0">최근 180일에서 매주·매달 같은 금액으로 반복되는 결제를 찾지 못했어요.</p>`
+    : `<div class="diag">${R.map((r) => `<div class="diag-line"><span class="badge ${r.isFixed ? "b-flat" : "b-down"}">${r.cycle}</span><span><b>${esc(r.merchant)}</b> ${won(r.typical)} · ${r.n}번 · 다음 예상 ${md(r.next)}${r.isFixed ? " · 고정 등록됨" : ""}</span></div>`).join("")}</div>
+      <p class="hint" style="margin:8px 0 0">고정으로 등록하지 않은 구독이 있다면 가계부 '고정 수입·지출'에 넣어 두면 매달 자동으로 기록돼요.</p>`;
+  // 평소보다 큰 지출 (이번 달)
+  const U = unusualSpends(tx, M.curStart);
+  const unusual = spanDays < 30 ? `<p class="hint" style="margin:0">분류마다 지난 90일 기록이 3번 이상 쌓이면 평소보다 큰 지출을 알려드려요.</p>`
+    : !U.length ? `<p class="hint" style="margin:0">이번 달엔 평소보다 크게 쓴 지출이 없어요.</p>`
+    : `<div class="diag">${U.map((u) => `<div class="diag-line"><span class="badge b-up">${md(u.date)}</span><span><b>${esc(u.merchant)}</b> ${won(u.amount)} · ${esc(u.cat)} 평소(중앙값) ${won(u.median)}의 약 ${fmt(u.amount / u.median, 1)}배</span></div>`).join("")}</div>
+      <p class="hint" style="margin:8px 0 0">같은 분류의 최근 90일 기록 중 큰 쪽(상위 5%) 금액의 2배가 넘는 지출이에요. 꼭 잘못 쓴 건 아니니 확인만 해 보세요.</p>`;
+  // 루미의 소비 인사이트 (3단계): 숫자는 위에서 계산한 값, 루미(AI)는 설명만
+  const facts = insightFacts({ M, F, P, CF, R, U, asOf });
+  ui.insightFacts = facts;
+  const saved = lastGet().insight;
+  const I = ui.insight?.loading ? null : (saved && saved.ym === asOf.slice(0, 7) && saved.key === factsKey(facts) ? saved.data : null);
+  const ruleLines = ruleInsight(facts);
+  const insight = `<section class="card" id="sec-insight">
+      <div class="sec-title"><h2>루미의 소비 인사이트</h2><span>${I ? "루미 설명" : "계산한 요약"}</span></div>
+      <div class="ans" style="display:flex;gap:10px;align-items:flex-start">${mascot(36, facts.overProb >= 0.5 ? "reassure" : "happy")}
+        <ul class="mp-list" style="margin:0;flex:1">${(I ? [I.summary, I.change, I.risk, I.save, I.action] : ruleLines).filter(Boolean).map((x) => `<li>${esc(x)}</li>`).join("")}</ul></div>
+      ${ui.insight?.note ? `<p class="hint" style="margin:8px 0 0">${esc(ui.insight.note)}</p>` : ""}
+      <button class="btn ghost" style="margin-top:12px;width:100%" data-act="insight-ask" ${ui.insight?.loading || !aiLeft() ? "disabled" : ""}>${ui.insight?.loading ? "루미가 정리하는 중…" : I ? "루미에게 다시 설명 듣기" : "루미에게 쉬운 말로 설명 듣기"}</button>
+      <p class="hint" style="margin:6px 0 0">${fbLeftText()} · 숫자는 앱이 계산하고, 루미는 그 숫자로 설명만 해요. 가게 이름이나 거래 내역은 보내지 않아요.</p>
+      ${!aiLeft() && !ui.insight?.loading ? `<p class="hint" style="margin:4px 0 8px">${outOfFb()}</p>${adButton("fb")}` : ""}
+    </section>`;
+  return `<section class="card" id="sec-intel">
+      <div class="sec-title"><h2>이번 달 소비 현황</h2><span>가계부 기준</span></div>
+      ${status}
+    </section>
+    <section class="card" id="sec-forecast">
+      <div class="sec-title"><h2>월말 예상 지출</h2><span>${md(asOf)} 기준</span></div>
+      ${fc}
+    </section>
+    ${weekly}
+    <section class="card">
+      <div class="sec-title"><h2>반복 결제</h2><span>최근 180일</span></div>
+      ${rec}
+    </section>
+    <section class="card">
+      <div class="sec-title"><h2>평소보다 큰 지출</h2><span>이번 달</span></div>
+      ${unusual}
+    </section>
+    ${insight}
+    ${moneyCardSection()}`;
+}
+// AI에 보낼 숫자 묶음 (집계값만. 가게 이름·개별 거래 없음). 서버(api/receipts.js cleanFacts)가 한 번 더 거른다
+function insightFacts({ M, F, P, CF, R, U, asOf }) {
+  const rise = M.prev ? M.cats.filter((c) => c.cur - c.prev >= 10000).sort((a, b) => (b.cur - b.prev) - (a.cur - a.prev))[0] : null;
+  const prevBy = Object.fromEntries(M.cats.map((c) => [c.cat, c.prev]));
+  const ok = F && F.historyDays >= 28;
+  return {
+    period: `${M.curStart}~${asOf}`, daysLeft: F ? F.remaining : null,
+    spentToDate: M.cur, prevSamePeriod: M.prev || null, fixedToDate: M.curFixed,
+    forecast: ok ? Math.round(F.forecast / 1000) * 1000 : null,
+    budget: ok && P ? P.budget : null, overProb: ok && P ? P.prob : null,
+    rise: rise ? { cat: rise.cat, diff: rise.cur - rise.prev } : null,
+    categories: ok ? CF.map((c) => ({ cat: c.cat, toDate: c.toDate, prev: prevBy[c.cat] || 0, forecast: Math.round(c.forecast / 1000) * 1000 })) : [],
+    recurringCount: R.length, unusualCount: U.length,
+  };
+}
+function factsKey(f) { return JSON.stringify([f.spentToDate, f.prevSamePeriod, f.forecast, f.budget, f.overProb, f.recurringCount, f.unusualCount]); }
+// AI 없이도 보이는 요약 (같은 숫자로 만든 문장)
+function ruleInsight(f) {
+  const r = (v) => won(v);
+  const lines = [`이번 달 지금까지 ${r(f.spentToDate)}${josa(r(f.spentToDate), "을", "를")} 썼어요.${f.forecast ? ` 지금 흐름이면 월말엔 약 ${r(f.forecast)}${josa(r(f.forecast), "으로", "로")} 추정돼요.` : ""}`];
+  if (f.prevSamePeriod) {
+    const d = f.spentToDate - f.prevSamePeriod;
+    lines.push(`지난달 같은 기간보다 ${r(Math.abs(d))} ${d >= 0 ? "더" : "덜"} 썼어요.${f.rise ? ` 가장 많이 늘어난 곳은 ${f.rise.cat}(+${r(f.rise.diff)})예요.` : ""}`);
+  }
+  if (f.budget) lines.push(f.overProb >= 0.5 ? `예산 ${r(f.budget)}을 넘을 가능성이 높아요(약 ${Math.round(f.overProb * 100)}%). 남은 ${f.daysLeft}일은 조금 아껴 봐요.` : `예산 ${r(f.budget)} 안에서 쓸 가능성이 높아요.`);
+  const big = (f.categories || []).filter((c) => !["주거·통신", "구독", "급여·수입"].includes(c.cat))[0];
+  if (big) lines.push(`이번 달 가장 많이 쓸 것 같은 곳은 ${big.cat}(약 ${r(big.forecast)})예요. 여기부터 살펴보면 효과가 커요.`);
+  if (f.unusualCount) lines.push(`이번 달 평소보다 큰 지출이 ${f.unusualCount}건 있어요. 위 '평소보다 큰 지출'에서 확인해 보세요.`);
+  return lines;
+}
+async function askInsight() {
+  const facts = ui.insightFacts;
+  if (!facts || ui.insight?.loading) return;
+  if (!lastGet().insightOk) {
+    if (!confirm("이번 달 소비 숫자 요약(쓴 돈·예상·예산·분류별 합계)만 AI(Google Gemini 무료 등급 또는 OpenAI)로 보내요.\n가게 이름이나 거래 내역은 보내지 않아요. 보낼까요?")) return;
+    lastSet("insightOk", true);
+  }
+  if (!aiLeft()) { render(); return; }
+  ui.insight = { loading: true }; render();
+  try {
+    const j = await getJson("/api/receipts", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode: "insight", facts }) });
+    if (j.insight) {
+      aiCount();
+      lastSet("insight", { ym: facts.period.slice(0, 7), key: factsKey(facts), data: j.insight });
+      ui.insight = null;
+    } else ui.insight = { note: "새로 받은 루미 설명에 앱이 계산하지 않은 숫자가 섞여 있어서 쓰지 않았어요. 횟수는 쓰지 않았어요." };
+  } catch (err) { ui.insight = { note: err.body?.error || "지금은 설명을 만들지 못했어요. 계산한 요약을 보여드려요." }; }
+  if (["assets"].includes(route())) render();
+}
+// 가계부 CSV 내보내기: 동의를 받은 뒤 이 기기에만 파일로 저장 (어디에도 보내지 않음). analysis/python/run_sql.py --tx 로 바로 분석 가능
+function exportLedgerCsv() {
+  if (!ledger.tx.length) { toast("내보낼 가계부 기록이 없어요"); return; }
+  if (!confirm(`가계부 거래 ${ledger.tx.length}건을 이 기기에 CSV 파일로 저장해요.\n파일에는 날짜·가게 이름·금액·분류가 들어 있어요. 다른 곳으로 보내지 않아요.\n저장할까요?`)) return;
+  const cell = (v) => { const s2 = String(v ?? ""); return /[",\n]/.test(s2) ? `"${s2.replace(/"/g, '""')}"` : s2; };
+  const head = ["user_id", "id", "date", "merchant", "amount", "dir", "cat", "src", "fixed_id"];
+  const rows = [...ledger.tx].sort((a, b) => a.date.localeCompare(b.date)).map((t) => ["me", t.id, t.date, t.merchant, t.amount, t.dir, t.cat, t.src || "", t.fixed || ""].map(cell).join(","));
+  const blob = new Blob(["\ufeff" + [head.join(","), ...rows].join("\n")], { type: "text/csv;charset=utf-8" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob); a.download = `가계부_${ymd(today0())}.csv`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  toast("가계부를 CSV로 저장했어요");
+}
+
+// ───────── 한 달 돈 정리 카드 (인스타 스토리 9:16 그림) ─────────
+// 금액은 넣지 않고 %와 횟수만 담는다. 그림은 이 기기에서 canvas로 그리고 어디에도 보내지 않는다.
+// 1인 가구 평균 소비지출: 국가데이터처 「2025 통계로 보는 1인가구」(2024년, 월평균 168만 9천 원). 해마다 새 발표로 바꾼다
+const PEER_SPEND = { amount: 1689000, label: "1인 가구 평균", src: "1인 가구 평균: 국가데이터처 2025 통계로 보는 1인가구" };
+// 소비 유형 16가지: S 모으기/Y 쓰기 · H 집/O 밖 · P 계획/I 즉흥 · F 한우물/V 골고루
+const MC_TYPES = {
+  SHPF: ["집밥 장인", "장보기 한 우물"], SHPV: ["알뜰 살림꾼", "골고루 계획 소비"], SHIF: ["야식 참새", "가끔 배달 한 메뉴"], SHIV: ["쿠폰 사냥꾼", "할인 보면 못 참아"],
+  SOPF: ["가성비 미식가", "맛집도 가성비로"], SOPV: ["짠내 투어러", "계획 짠 외출"], SOIF: ["단골집 지킴이", "번개는 늘 그 집"], SOIV: ["할인 탐험가", "세일 따라 어디든"],
+  YHPF: ["구독 마니아", "좋아하는 건 정기로"], YHPV: ["홈카페 사장님", "집 꾸미기 진심"], YHIF: ["새벽 배달왕", "최애 메뉴 직진"], YHIV: ["장바구니 폭주러", "새벽 쇼핑 결제"],
+  YOPF: ["맛집 순례자", "저장한 맛집 정복"], YOPV: ["주말 플렉서", "주말은 다 쓴다"], YOIF: ["최애 메뉴 직진러", "오늘도 그 메뉴"], YOIV: ["소비팍팍 인싸", "약속이 곧 지출"],
+};
+// 그림 품목: 가게 이름에 낱말이 들어가면 그 그림. 없으면 분류 기본 그림
+const MC_ITEMS = [
+  ["mara", "마라탕", /마라|탕화|라화/], ["coffee", "커피", /커피|카페|스타벅스|메가|컴포즈|이디야|투썸|빽다방|폴바셋|할리스|coffee|cafe/i],
+  ["boba", "버블티", /공차|버블티|팔공티|흑당/], ["chicken", "치킨", /치킨|교촌|bhc|bbq|굽네|처갓집|푸라닭/i], ["tteok", "떡볶이", /떡볶이|엽떡|신전|청년다방|죠스/],
+  ["burger", "버거", /버거|맥도날드|롯데리아|맘스터치|kfc|쉐이크쉑/i], ["pizza", "피자", /피자|도미노|파파존스/], ["sushi", "초밥", /초밥|스시|오마카세/],
+  ["bread", "빵", /베이커리|빵|파리바게뜨|뚜레쥬르|성심당|도넛|던킨|노티드/], ["store", "편의점", /편의점|gs25|cu |씨유|세븐일레븐|이마트24/i],
+  ["delivery", "배달", /배달의민족|배민|요기요|쿠팡이츠|땡겨요/], ["beer", "술", /호프|포차|이자카야|맥주|술집|와인|bar/i],
+  ["taxi", "택시", /택시|카카오t|우티|타다/i], ["clothes", "옷", /무신사|지그재그|에이블리|29cm|유니클로|자라|zara|spao|탑텐|옷/i],
+  ["cosme", "화장품", /올리브영|화장품|이니스프리|아리따움|시코르/], ["book", "책", /교보|yes24|알라딘|서점|문고|밀리/i],
+  ["movie", "영화", /cgv|메가박스|롯데시네마|영화/i], ["game", "게임", /게임|steam|스팀|닌텐도|pc방|피시방/i],
+];
+const MC_CAT_ITEM = { "식비": ["rice", "밥"], "카페·간식": ["coffee", "카페"], "쇼핑": ["bag", "쇼핑"], "교통": ["bus", "교통"], "문화·여가": ["movie", "문화"], "여행": ["plane", "여행"], "구독": ["play", "구독"], "의료·건강": ["pill", "건강"], "교육": ["book", "공부"], "경조사·선물": ["gift", "선물"], "주거·통신": ["house", "집"] };
+const NV = "#0B308D";
+const svgIcon = (body, vb = "0 0 40 40") => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${vb}" stroke-linejoin="round" stroke-linecap="round">${body}</svg>`;
+const MC_SVG = {
+  mara: `<path d="M16 8q-2-3 0-6M22 8q-2-3 0-6" stroke="#B5BCC8" stroke-width="1.6" fill="none"/><path d="M25 3L30 17M29 2L33 16" stroke="#C98E5A" stroke-width="2"/><path d="M4 18H36Q34 35 20 35Q6 35 4 18Z" fill="#fff" stroke="${NV}" stroke-width="2.4"/><ellipse cx="20" cy="18" rx="16" ry="4.5" fill="#E5533D" stroke="${NV}" stroke-width="2.4"/><ellipse cx="14" cy="17.5" rx="2.4" ry="1.2" fill="#FFD36B"/><ellipse cx="24" cy="18.5" rx="2" ry="1" fill="#7CC47F"/>`,
+  coffee: `<path d="M22 9L26 1" stroke="${NV}" stroke-width="2"/><path d="M12 12H28L26 37H14Z" fill="#fff" stroke="${NV}" stroke-width="2.4"/><path d="M13 20H27L26.3 29H13.7Z" fill="#C98E5A"/><rect x="10" y="8" width="20" height="5" rx="2" fill="${NV}"/>`,
+  boba: `<path d="M21 10L24 1" stroke="${NV}" stroke-width="2.4"/><path d="M11 10H29L27 37H13Z" fill="#F3E3D0" stroke="${NV}" stroke-width="2.4"/><circle cx="16" cy="32" r="2" fill="${NV}"/><circle cx="21" cy="33" r="2" fill="${NV}"/><circle cx="25" cy="31" r="2" fill="${NV}"/><path d="M10 10H30" stroke="${NV}" stroke-width="2.4"/>`,
+  chicken: `<path d="M10 30Q4 20 12 12Q22 4 30 14Q34 22 24 28Z" fill="#E8A54B" stroke="${NV}" stroke-width="2.4"/><path d="M22 27L30 35" stroke="${NV}" stroke-width="2.4"/><circle cx="31" cy="36" r="2.6" fill="#fff" stroke="${NV}" stroke-width="2"/>`,
+  tteok: `<path d="M4 20H36Q34 35 20 35Q6 35 4 20Z" fill="#fff" stroke="${NV}" stroke-width="2.4"/><ellipse cx="20" cy="20" rx="16" ry="5" fill="#E5533D" stroke="${NV}" stroke-width="2.4"/><rect x="11" y="13" width="9" height="4" rx="2" fill="#fff" stroke="${NV}" stroke-width="1.6"/><rect x="20" y="15" width="9" height="4" rx="2" fill="#fff" stroke="${NV}" stroke-width="1.6"/>`,
+  burger: `<path d="M7 18Q7 7 20 7Q33 7 33 18Z" fill="#E8A54B" stroke="${NV}" stroke-width="2.4"/><rect x="6" y="20" width="28" height="4" rx="2" fill="#7CC47F"/><rect x="6" y="24" width="28" height="5" rx="2" fill="#8A4B2A"/><path d="M7 30H33Q33 35 28 35H12Q7 35 7 30Z" fill="#E8A54B" stroke="${NV}" stroke-width="2.4"/>`,
+  pizza: `<path d="M6 8Q20 2 34 8L20 37Z" fill="#FFD36B" stroke="${NV}" stroke-width="2.4"/><path d="M6 8Q20 2 34 8" stroke="#E8A54B" stroke-width="4" fill="none"/><circle cx="18" cy="15" r="2.6" fill="#E5533D"/><circle cx="23" cy="22" r="2.4" fill="#E5533D"/>`,
+  sushi: `<rect x="6" y="20" width="28" height="12" rx="6" fill="#fff" stroke="${NV}" stroke-width="2.4"/><path d="M8 20Q20 10 32 20Z" fill="#F28A5B" stroke="${NV}" stroke-width="2.4"/><path d="M14 16L16 20M20 14L21 19M26 16L25 20" stroke="#fff" stroke-width="1.6"/>`,
+  bread: `<path d="M6 22Q6 10 20 10Q34 10 34 22V32H6Z" fill="#E8A54B" stroke="${NV}" stroke-width="2.4"/><path d="M13 16L15 20M20 15V19M27 16L25 20" stroke="${NV}" stroke-width="2"/>`,
+  store: `<path d="M8 34L20 6L32 34Z" fill="#fff" stroke="${NV}" stroke-width="2.4"/><path d="M12 25H28L32 34H8Z" fill="#1D2433"/>`,
+  delivery: `<rect x="6" y="12" width="28" height="22" rx="3" fill="#7FD3C7" stroke="${NV}" stroke-width="2.4"/><path d="M6 19H34" stroke="${NV}" stroke-width="2.4"/><path d="M16 6H24V12H16Z" fill="#fff" stroke="${NV}" stroke-width="2"/>`,
+  beer: `<path d="M9 10H27V35H9Z" fill="#FFD36B" stroke="${NV}" stroke-width="2.4"/><path d="M27 15H32V28H27" fill="none" stroke="${NV}" stroke-width="2.4"/><path d="M8 10Q8 4 14 5Q18 2 22 5Q28 4 28 10Z" fill="#fff" stroke="${NV}" stroke-width="2.4"/>`,
+  taxi: `<path d="M5 24L9 14H31L35 24V31H5Z" fill="#FFD36B" stroke="${NV}" stroke-width="2.4"/><rect x="16" y="8" width="8" height="5" rx="1" fill="${NV}"/><circle cx="12" cy="31" r="3.4" fill="#1D2433"/><circle cx="28" cy="31" r="3.4" fill="#1D2433"/>`,
+  clothes: `<path d="M14 5L6 10L9 17L12 15V35H28V15L31 17L34 10L26 5Q20 10 14 5Z" fill="#F28AA6" stroke="${NV}" stroke-width="2.4"/>`,
+  cosme: `<rect x="13" y="18" width="14" height="18" rx="2" fill="#1D2433" stroke="${NV}" stroke-width="2.4"/><path d="M15 18V9L25 5V18Z" fill="#E5533D" stroke="${NV}" stroke-width="2.4"/>`,
+  book: `<path d="M5 9Q12 6 20 10Q28 6 35 9V33Q28 30 20 34Q12 30 5 33Z" fill="#fff" stroke="${NV}" stroke-width="2.4"/><path d="M20 10V34" stroke="${NV}" stroke-width="2.4"/><path d="M9 15H16M9 20H16M24 15H31" stroke="#2F6FDA" stroke-width="1.8"/>`,
+  movie: `<path d="M9 14H31L28 36H12Z" fill="#fff" stroke="${NV}" stroke-width="2.4"/><path d="M14 14L15 36M20 14V36M26 14L25 36" stroke="#E5533D" stroke-width="2.4"/><circle cx="13" cy="11" r="4" fill="#FFF3C4" stroke="${NV}" stroke-width="2"/><circle cx="20" cy="9" r="4.5" fill="#FFF3C4" stroke="${NV}" stroke-width="2"/><circle cx="27" cy="11" r="4" fill="#FFF3C4" stroke="${NV}" stroke-width="2"/>`,
+  game: `<path d="M8 14H32Q37 14 37 24Q37 32 32 32Q28 32 26 27H14Q12 32 8 32Q3 32 3 24Q3 14 8 14Z" fill="#7FA6E6" stroke="${NV}" stroke-width="2.4"/><path d="M10 20V26M7 23H13" stroke="${NV}" stroke-width="2.4"/><circle cx="28" cy="21" r="2" fill="${NV}"/><circle cx="31" cy="25" r="2" fill="${NV}"/>`,
+  rice: `<path d="M4 19H36Q34 35 20 35Q6 35 4 19Z" fill="#7FA6E6" stroke="${NV}" stroke-width="2.4"/><path d="M7 19Q8 9 20 9Q32 9 33 19Z" fill="#fff" stroke="${NV}" stroke-width="2.4"/>`,
+  bag: `<path d="M14 15Q14 5 20 5Q26 5 26 15" stroke="${NV}" stroke-width="2.4" fill="none"/><path d="M8 14H32L30 37H10Z" fill="#2F6FDA" stroke="${NV}" stroke-width="2.4"/><circle cx="20" cy="24" r="3" fill="#fff"/>`,
+  bus: `<rect x="7" y="5" width="26" height="27" rx="5" fill="#7CC47F" stroke="${NV}" stroke-width="2.4"/><rect x="11" y="9" width="18" height="10" rx="2" fill="#fff" stroke="${NV}" stroke-width="2"/><circle cx="13" cy="26" r="2" fill="#fff"/><circle cx="27" cy="26" r="2" fill="#fff"/><path d="M11 32V36M29 32V36" stroke="${NV}" stroke-width="2.4"/>`,
+  plane: `<path d="M4 22L36 8L30 32L20 25L14 32V22Z" fill="#fff" stroke="${NV}" stroke-width="2.4"/><path d="M14 22L36 8" stroke="#2F6FDA" stroke-width="2"/>`,
+  play: `<rect x="4" y="8" width="32" height="24" rx="6" fill="#E5533D" stroke="${NV}" stroke-width="2.4"/><path d="M17 14L26 20L17 26Z" fill="#fff"/>`,
+  pill: `<rect x="5" y="14" width="30" height="13" rx="6.5" fill="#fff" stroke="${NV}" stroke-width="2.4" transform="rotate(-30 20 20)"/><path d="M20 12V28" stroke="${NV}" stroke-width="2.4" transform="rotate(-30 20 20)"/>`,
+  gift: `<rect x="6" y="15" width="28" height="20" rx="2" fill="#F28AA6" stroke="${NV}" stroke-width="2.4"/><path d="M20 15V35M6 22H34" stroke="#fff" stroke-width="3"/><path d="M20 15Q12 4 10 12Q10 15 20 15Q30 15 30 12Q28 4 20 15Z" fill="#FFD36B" stroke="${NV}" stroke-width="2"/>`,
+  house: `<path d="M5 19L20 6L35 19V35H5Z" fill="#fff" stroke="${NV}" stroke-width="2.4"/><rect x="16" y="23" width="8" height="12" fill="#7FA6E6"/>`,
+  // 루미 소품
+  coin: `<circle cx="20" cy="20" r="15" fill="#FFD36B" stroke="${NV}" stroke-width="3"/><path d="M13 14L16 27L20 18L24 27L27 14M12 20H28" stroke="${NV}" stroke-width="2.4" fill="none"/>`,
+  shades: `<rect x="2" y="13" width="15" height="11" rx="5" fill="#1D2433"/><rect x="23" y="13" width="15" height="11" rx="5" fill="#1D2433"/><path d="M17 17Q20 14 23 17" stroke="#1D2433" stroke-width="2.4" fill="none"/>`,
+  note: `<rect x="8" y="4" width="25" height="32" rx="4" fill="#fff" stroke="${NV}" stroke-width="3"/><path d="M13 13H28M13 20H28M13 27H22" stroke="#2F6FDA" stroke-width="2.6"/>`,
+  bolt: `<path d="M23 2L8 22H19L16 38L33 15H22Z" fill="#FFD36B" stroke="${NV}" stroke-width="2.8"/>`,
+  heart: `<path d="M20 35C6 25 4 17 8 11C12 6 18 8 20 13C22 8 28 6 32 11C36 17 34 25 20 35Z" fill="#F28AA6" stroke="${NV}" stroke-width="3"/>`,
+  dots: `<circle cx="11" cy="27" r="7" fill="#7CC47F" stroke="${NV}" stroke-width="2.6"/><circle cx="26" cy="13" r="7" fill="#7FA6E6" stroke="${NV}" stroke-width="2.6"/><circle cx="29" cy="30" r="5.5" fill="#F28AA6" stroke="${NV}" stroke-width="2.6"/>`,
+};
+function mcItemOf(t) {
+  const name = String(t.merchant || "");
+  const hit = MC_ITEMS.find(([, , re]) => re.test(name));
+  if (hit) return { key: hit[0], label: hit[1] };
+  const c = MC_CAT_ITEM[t.cat];
+  return c ? { key: c[0], label: c[1] } : { key: "bag", label: t.cat || "기타" };
+}
+const HOME_KEYS = new Set(["delivery", "store", "book", "game"]);
+const HOME_CATS = new Set(["주거·통신", "구독"]);
+const OUT_CATS = new Set(["카페·간식", "문화·여가", "여행", "교통"]);
+// per: "last" 지난달 전체 / "cur" 이번 달 1일~오늘. 숫자가 모자라면 null
+function moneyCardData(per) {
+  const tx = ledger.tx, t0 = today0();
+  const asOf = per === "last" ? ymd(new Date(t0.getFullYear(), t0.getMonth(), 0)) : ymd(t0);
+  const M = monthToDate(tx, asOf);
+  const inPer = (t) => t.date >= M.curStart && t.date <= asOf;
+  const spends = tx.filter((t) => inPer(t) && MX.kind(t) === "spend");
+  if (spends.length < 3 || !M.cur) return null;
+  const income = tx.filter((t) => inPer(t) && MX.kind(t) === "income").reduce((a, t) => a + t.amount, 0);
+  const [y, m, d] = asOf.split("-").map(Number), days = new Date(y, m, 0).getDate();
+  const peer = PEER_SPEND.amount * (per === "last" ? 1 : d / days);   // 이번 달은 오늘까지 날 수만큼만
+  const saveRate = income > 0 ? Math.round(((income - M.cur) / income) * 100) : null;
+  // 그림 품목 (횟수): 월세·통신 같은 고정 지출은 빼고 내가 고른 소비만
+  const variable = spends.filter((t) => !MX.fixed(t));
+  const items = {};
+  for (const t of variable) { const it = mcItemOf(t); (items[it.key] = items[it.key] || { ...it, n: 0 }).n++; }
+  const itemList = Object.values(items).sort((a, b) => b.n - a.n);
+  // 네 가지 기준
+  const varSum = variable.reduce((a, t) => a + t.amount, 0);
+  let home = 0, out = 0;
+  for (const t of variable) {
+    const k = mcItemOf(t).key;
+    if (HOME_KEYS.has(k) || HOME_CATS.has(t.cat) || t.cat === "쇼핑") home += t.amount;
+    else if (OUT_CATS.has(t.cat) || t.cat === "식비") out += t.amount;
+  }
+  const biggest = variable.reduce((mx, t) => Math.max(mx, t.amount), 0);
+  const unusual = unusualSpends(tx, M.curStart).filter((u) => u.date <= asOf).length;
+  const byCat = {};
+  for (const t of variable) byCat[t.cat] = (byCat[t.cat] || 0) + t.amount;
+  const topShare = varSum ? Math.max(...Object.values(byCat)) / varSum : 0;
+  const S = saveRate !== null ? saveRate >= 20 : M.cur <= peer;
+  const code = (S ? "S" : "Y") + (home > out ? "H" : "O") + (unusual > 0 || (biggest >= 50000 && biggest >= varSum * 0.25) ? "I" : "P") + (topShare >= 0.35 ? "F" : "V");
+  const pct = (a, b) => (b > 0 ? Math.round(((a - b) / b) * 100) : null);
+  const cats = Object.entries(byCat).sort((a, b) => b[1] - a[1]).map(([cat, v]) => ({ cat, share: Math.round((v / varSum) * 100) }));
+  return { per, month: m, code, name: MC_TYPES[code][0], desc: MC_TYPES[code][1], vsPrev: M.prev ? pct(M.cur, M.prev) : null, vsPeer: pct(M.cur, peer), saveRate, items: itemList, cats };
+}
+function mcLoad(src) { return new Promise((ok, no) => { const im = new Image(); im.onload = () => ok(im); im.onerror = no; im.src = src; }); }
+const mcSvgSrc = (k) => "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svgIcon(MC_SVG[k] || MC_SVG.bag));
+function mcRound(c, x, y, w, h, r, fill) { c.beginPath(); c.roundRect(x, y, w, h, r); c.fillStyle = fill; c.fill(); }
+// 유형별 루미: 자세(그림 4장 × 좌우 뒤집기·기울기) · 몸 색 · 선 색 · 표정 · 든 물건이 16가지 모두 다르다
+// 자세마다 눈·입·손 자리(그림 크기에 대한 비율). 표정은 원래 얼굴을 몸 색으로 덮고 새로 그린다
+const LUMI_POSES = {
+  main: { src: "main", eL: [0.35, 0.47], eR: [0.61, 0.49], mouth: 0.07, hand: [0.8, 0.7] },
+  wave: { src: "wave", eL: [0.42, 0.43], eR: [0.64, 0.41], mouth: 0.07, hand: [0.84, 0.42] },
+  lookup: { src: "lookup", eL: [0.44, 0.43], eR: [0.58, 0.43], mouth: 0.05, hand: [0.2, 0.62] },
+  sit: { src: "sit", eL: [0.35, 0.47], eR: [0.61, 0.47], mouth: 0.06, hand: [0.82, 0.72] },
+};
+const LUMI_LOOKS = {
+  SHPF: { pose: "main", tilt: -4, body: "#CDEBBE", line: "#2E7D32", bg: "#F1F8EC", face: "proud", prop: "pan" },
+  SHPV: { pose: "sit", tilt: 0, body: "#BDEBDF", line: "#0F7A69", bg: "#EBF8F5", face: "focused", prop: "calc" },
+  SHIF: { pose: "lookup", tilt: 3, body: "#D3CCF7", line: "#3C2F9A", bg: "#EDEAFB", face: "sleepy", prop: "noodle" },
+  SHIV: { pose: "wave", tilt: -3, body: "#FFE9A3", line: "#A86F00", bg: "#FFF8E1", face: "sparkle", prop: "coupon" },
+  SOPF: { pose: "main", flip: 1, tilt: 4, body: "#FFD2B3", line: "#C2410C", bg: "#FFF1E6", face: "wink", prop: "magnifier" },
+  SOPV: { pose: "wave", flip: 1, tilt: 3, body: "#C6E2FB", line: "#1565C0", bg: "#EAF4FD", face: "excited", prop: "map" },
+  SOIF: { pose: "sit", flip: 1, tilt: -3, body: "#FFCBC2", line: "#C2413A", bg: "#FFEFEC", face: "smug", prop: "stamp" },
+  SOIV: { pose: "lookup", flip: 1, tilt: -4, body: "#DDE5B5", line: "#5F6B1E", bg: "#F3F5E6", face: "surprised", prop: "scope" },
+  YHPF: { pose: "sit", tilt: 4, body: "#E2CCF8", line: "#7B3FC4", bg: "#F5EEFD", face: "hearts", prop: "remote" },
+  YHPV: { pose: "main", tilt: 2, body: "#EBD3B5", line: "#8A5A2B", bg: "#F8F0E6", face: "content", prop: "mug" },
+  YHIF: { pose: "lookup", tilt: -2, body: "#C3CDEE", line: "#1E2A6E", bg: "#E4E8F6", face: "dizzy", prop: "phone" },
+  YHIV: { pose: "wave", tilt: 5, body: "#FBC6DD", line: "#C2185B", bg: "#FDEBF3", face: "money", prop: "cart" },
+  YOPF: { pose: "main", flip: 1, tilt: -3, body: "#FAC4BE", line: "#B3261E", bg: "#FDEDEB", face: "drool", prop: "pin" },
+  YOPV: { pose: "wave", flip: 1, tilt: -5, body: "#FFE29A", line: "#9A5B00", bg: "#FFF6DB", face: "cool", prop: "bags" },
+  YOIF: { pose: "sit", flip: 1, tilt: 5, body: "#FFC2D8", line: "#D6336C", bg: "#FFEAF2", face: "laugh", prop: "fav" },
+  YOIV: { pose: "lookup", flip: 1, tilt: 4, body: "#EBC4F4", line: "#9C27B0", bg: "#F8EAFB", face: "stars", prop: "popper" },
+};
+// 유형마다 든 물건
+Object.assign(MC_SVG, {
+  pan: `<circle cx="16" cy="22" r="12" fill="#3A3F4B" stroke="${NV}" stroke-width="2.4"/><circle cx="16" cy="22" r="7" fill="#FFD36B"/><circle cx="16" cy="22" r="3" fill="#fff"/><path d="M27 18L38 10" stroke="#8A4B2A" stroke-width="4.5"/>`,
+  calc: `<rect x="8" y="3" width="24" height="34" rx="4" fill="#fff" stroke="${NV}" stroke-width="2.4"/><rect x="12" y="7" width="16" height="8" rx="1.5" fill="#BFE8DD"/><g fill="${NV}"><circle cx="14" cy="21" r="2"/><circle cx="20" cy="21" r="2"/><circle cx="26" cy="21" r="2"/><circle cx="14" cy="27" r="2"/><circle cx="20" cy="27" r="2"/><circle cx="14" cy="33" r="2"/><circle cx="20" cy="33" r="2"/></g><rect x="24" y="25" width="4" height="10" rx="2" fill="#E5533D"/>`,
+  noodle: `<path d="M6 14H34L30 37H10Z" fill="#fff" stroke="${NV}" stroke-width="2.4"/><path d="M7 20H33L32 27H8Z" fill="#E5533D"/><path d="M14 14Q16 6 20 10Q24 4 26 14" stroke="#FFD36B" stroke-width="2.4" fill="none"/><path d="M23 1L30 13" stroke="#C98E5A" stroke-width="2"/>`,
+  coupon: `<path d="M3 11H37V17Q33 20 37 23V29H3V23Q7 20 3 17Z" fill="#FFD36B" stroke="${NV}" stroke-width="2.4"/><path d="M13 11V29" stroke="${NV}" stroke-width="1.8" stroke-dasharray="2 2"/><text x="25" y="24" text-anchor="middle" font-size="10" font-weight="700" fill="#C2185B" font-family="sans-serif">%</text>`,
+  magnifier: `<circle cx="16" cy="16" r="11" fill="#E1F0FD" stroke="${NV}" stroke-width="3"/><path d="M11 12Q13 9 17 9" stroke="#fff" stroke-width="2.4" fill="none"/><path d="M24 24L36 36" stroke="#8A4B2A" stroke-width="5"/>`,
+  map: `<path d="M3 8L14 4L26 8L37 4V32L26 36L14 32L3 36Z" fill="#FFF3C4" stroke="${NV}" stroke-width="2.4"/><path d="M14 4V32M26 8V36" stroke="${NV}" stroke-width="1.6"/><path d="M8 26Q14 14 20 22T33 12" stroke="#E5533D" stroke-width="2" fill="none" stroke-dasharray="3 2"/><circle cx="33" cy="12" r="2.6" fill="#E5533D"/>`,
+  stamp: `<rect x="3" y="8" width="34" height="24" rx="3" fill="#fff" stroke="${NV}" stroke-width="2.4"/><g fill="#E5533D"><circle cx="11" cy="16" r="3.2"/><circle cx="20" cy="16" r="3.2"/><circle cx="29" cy="16" r="3.2"/><circle cx="11" cy="25" r="3.2"/></g><g fill="none" stroke="#B5BCC8" stroke-width="1.6"><circle cx="20" cy="25" r="3.2"/><circle cx="29" cy="25" r="3.2"/></g>`,
+  scope: `<path d="M5 24L30 9L34 17L9 32Z" fill="#C98E5A" stroke="${NV}" stroke-width="2.4"/><rect x="29" y="5" width="8" height="15" rx="2" fill="#5F6B1E" stroke="${NV}" stroke-width="2.4" transform="rotate(-30 33 12)"/><path d="M14 28L10 38M18 26L22 38" stroke="${NV}" stroke-width="2.4"/>`,
+  remote: `<rect x="12" y="3" width="16" height="34" rx="6" fill="#3A3F4B" stroke="${NV}" stroke-width="2.4"/><circle cx="20" cy="11" r="3.4" fill="#E5533D"/><path d="M17 19L24 23L17 27Z" fill="#fff"/><circle cx="17" cy="32" r="1.6" fill="#fff"/><circle cx="23" cy="32" r="1.6" fill="#fff"/>`,
+  mug: `<path d="M8 12H28V31Q28 36 23 36H13Q8 36 8 31Z" fill="#fff" stroke="${NV}" stroke-width="2.4"/><path d="M28 16H32Q36 16 36 21Q36 26 31 26H28" fill="none" stroke="${NV}" stroke-width="2.4"/><ellipse cx="18" cy="14" rx="8" ry="2.4" fill="#C98E5A"/><path d="M15 14Q18 11 21 14Q18 16 15 14Z" fill="#fff"/><path d="M14 8Q12 5 14 2M21 8Q19 5 21 2" stroke="#B5BCC8" stroke-width="1.6" fill="none"/>`,
+  phone: `<rect x="10" y="2" width="20" height="36" rx="5" fill="#1D2433" stroke="${NV}" stroke-width="2.4"/><rect x="13" y="7" width="14" height="24" rx="2" fill="#7FD3C7"/><path d="M16 19H24V27H16Z" fill="#fff"/><path d="M18 19V16H22V19" stroke="#fff" stroke-width="1.6" fill="none"/>`,
+  cart: `<path d="M2 6H8L13 27H32L36 12H10" fill="none" stroke="${NV}" stroke-width="2.6"/><path d="M11 12H35L32 23H13Z" fill="#F28AA6"/><rect x="14" y="4" width="7" height="9" rx="1" fill="#7FA6E6" stroke="${NV}" stroke-width="1.6"/><rect x="22" y="2" width="8" height="11" rx="1" fill="#FFD36B" stroke="${NV}" stroke-width="1.6"/><circle cx="15" cy="33" r="3" fill="${NV}"/><circle cx="30" cy="33" r="3" fill="${NV}"/>`,
+  pin: `<path d="M20 38Q6 22 6 15Q6 3 20 3Q34 3 34 15Q34 22 20 38Z" fill="#E5533D" stroke="${NV}" stroke-width="2.4"/><circle cx="20" cy="15" r="6" fill="#fff"/><path d="M17 13V18M23 13V18M17 13Q20 11 23 13" stroke="#E5533D" stroke-width="1.6" fill="none"/>`,
+  popper: `<path d="M4 37L14 13L27 26Z" fill="#FFD36B" stroke="${NV}" stroke-width="2.4"/><path d="M9 25L17 31M12 18L22 26" stroke="#E5533D" stroke-width="2"/><circle cx="25" cy="8" r="2.4" fill="#F28AA6"/><circle cx="33" cy="14" r="2.4" fill="#7FA6E6"/><path d="M30 4L32 8M36 20L38 22M20 4L21 1" stroke="#7CC47F" stroke-width="2.4"/>`,
+});
+const lumiPoseCache = {};
+// 루미 그림을 한 번 불러 canvas로 둔다. 원본에는 선 바깥에 흰 네모 자국이 있어서,
+// 흰 칸마다 8방향을 보고 6방향 이상이 선에 막혀 있을 때만 몸 안쪽으로 남긴다 (나머지 흰 칸은 지움)
+async function lumiPose(name) {
+  if (lumiPoseCache[name]) return lumiPoseCache[name];
+  const img = await mcLoad(`/img/lumi/${LUMI_POSES[name].src}.png`), cv = document.createElement("canvas");
+  const w = img.naturalWidth, h = img.naturalHeight;
+  cv.width = w; cv.height = h;
+  const c = cv.getContext("2d"); c.drawImage(img, 0, 0);
+  const d = c.getImageData(0, 0, w, h), p = d.data, n = w * h;
+  const kind = new Int8Array(n);   // 0 투명 · 1 선(색 있는 칸) · 2 흰 칸
+  for (let i = 0; i < n; i++) kind[i] = p[i * 4 + 3] < 128 ? 0 : Math.min(p[i * 4], p[i * 4 + 1], p[i * 4 + 2]) > 205 ? 2 : 1;
+  const hits = new Uint8Array(n), st = new Int8Array(n);
+  for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, -1], [1, -1], [-1, 1]]) {
+    const ys = dy >= 0 ? [0, h, 1] : [h - 1, -1, -1], xs = dx >= 0 ? [0, w, 1] : [w - 1, -1, -1];
+    for (let y = ys[0]; y !== ys[1]; y += ys[2]) for (let x = xs[0]; x !== xs[1]; x += xs[2]) {
+      const px = x - dx, py = y - dy, i = y * w + x;
+      if (px < 0 || py < 0 || px >= w || py >= h) { st[i] = 0; continue; }
+      const j = py * w + px;
+      st[i] = kind[j] === 1 ? 1 : kind[j] === 0 ? 0 : st[j];   // 이 방향으로 가장 가까운 것이 선이면 1
+      if (kind[i] === 2 && st[i]) hits[i]++;
+    }
+  }
+  for (let i = 0; i < n; i++) if (kind[i] === 2 && hits[i] < 6) p[i * 4 + 3] = 0;
+  c.putImageData(d, 0, 0);
+  return (lumiPoseCache[name] = cv);
+}
+const hexRgb = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+// 밝은 칸은 몸 색, 어두운 칸은 선 색으로 (그 사이는 섞음)
+function lumiTint(src, body, line) {
+  const w = src.width, h = src.height, cv = document.createElement("canvas");
+  cv.width = w; cv.height = h;
+  const c = cv.getContext("2d"); c.drawImage(src, 0, 0);
+  const d = c.getImageData(0, 0, w, h), p = d.data, B = hexRgb(body), L = hexRgb(line);
+  for (let i = 0; i < p.length; i += 4) {
+    if (!p[i + 3]) continue;
+    const mx = Math.max(p[i], p[i + 1], p[i + 2]), mn = Math.min(p[i], p[i + 1], p[i + 2]);
+    if (mn > 205 && p[i + 3] < 224) { p[i + 3] = 0; continue; }   // 원본 그림의 반투명 흰 네모 자국은 지운다
+    const t = Math.min(Math.max(((mx + mn) / 510 - 0.3) / 0.55, 0), 1);
+    for (let k = 0; k < 3; k++) p[i + k] = Math.round(L[k] + (B[k] - L[k]) * t);
+  }
+  c.putImageData(d, 0, 0);
+  return cv;
+}
+// 표정: 눈 사이 가운데를 0으로 두고 그린다. u = 두 눈 사이 거리
+function lumiFace(c, face, u, line, flip) {
+  const lw = u * 0.1, eye = u / 2, my = u * 0.32;
+  c.lineWidth = lw; c.lineCap = "round"; c.lineJoin = "round"; c.strokeStyle = line; c.fillStyle = line;
+  const arc = (x, y, r, a0, a1, fill) => { c.beginPath(); c.arc(x, y, r, a0, a1); fill ? c.fill() : c.stroke(); };
+  const line2 = (pts) => { c.beginPath(); pts.forEach(([x, y], i) => (i ? c.lineTo(x, y) : c.moveTo(x, y))); c.stroke(); };
+  const dot = (x, y, r = u * 0.075) => arc(x, y, r, 0, Math.PI * 2, true);
+  const happyEye = (x) => arc(x, u * 0.06, u * 0.12, Math.PI * 1.1, Math.PI * 1.9);
+  const relaxEye = (x) => arc(x, -u * 0.05, u * 0.12, Math.PI * 0.15, Math.PI * 0.85);
+  const smile = (r = 0.12) => arc(0, my - u * r, u * r, Math.PI * 0.2, Math.PI * 0.8);
+  const openMouth = (r = 0.13, tongue) => { c.beginPath(); c.moveTo(-u * r, my - u * 0.04); c.quadraticCurveTo(0, my + u * r * 1.6, u * r, my - u * 0.04); c.closePath(); c.fill(); if (tongue) { c.fillStyle = "#F28AA6"; arc(0, my + u * r * 0.55, u * r * 0.5, 0, Math.PI, true); c.fillStyle = line; } };
+  const cheeks = (col = "rgba(242,138,166,.55)", r = 0.11) => { c.fillStyle = col; [-1, 1].forEach((s) => { c.beginPath(); c.ellipse(s * u * 0.72, u * 0.2, u * r * 1.4, u * r, 0, 0, Math.PI * 2); c.fill(); }); c.fillStyle = line; };
+  const star = (x, y, r, col) => { c.beginPath(); for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + (i * Math.PI) / 5, rr = i % 2 ? r * 0.45 : r; c.lineTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr); } c.closePath(); c.fillStyle = col; c.fill(); c.lineWidth = lw * 0.6; c.stroke(); c.lineWidth = lw; c.fillStyle = line; };
+  const heart = (x, y, r, col) => { c.beginPath(); c.moveTo(x, y + r * 0.9); c.bezierCurveTo(x - r * 1.6, y - r * 0.2, x - r * 0.7, y - r * 1.3, x, y - r * 0.4); c.bezierCurveTo(x + r * 0.7, y - r * 1.3, x + r * 1.6, y - r * 0.2, x, y + r * 0.9); c.fillStyle = col; c.fill(); c.fillStyle = line; };
+  const txt = (s, x, y, size, col) => { c.save(); c.translate(x, y); if (flip) c.scale(-1, 1); c.font = `700 ${size}px 'Pretendard Variable', Pretendard, sans-serif`; c.textAlign = "center"; c.textBaseline = "middle"; c.fillStyle = col; c.fillText(s, 0, 0); c.restore(); };
+  switch (face) {
+    case "proud": cheeks(); happyEye(-eye); happyEye(eye); smile(0.14); break;
+    case "focused": cheeks(); dot(-eye, 0); dot(eye, 0); [-eye, eye].forEach((x) => arc(x, 0, u * 0.22, 0, Math.PI * 2)); line2([[-eye + u * 0.22, 0], [eye - u * 0.22, 0]]); line2([[-u * 0.1, my], [u * 0.1, my]]); break;
+    case "sleepy": cheeks("rgba(160,150,230,.45)"); line2([[-eye - u * 0.12, 0], [-eye + u * 0.12, 0]]); line2([[eye - u * 0.12, 0], [eye + u * 0.12, 0]]); arc(0, my, u * 0.06, 0, Math.PI * 2); txt("z", eye + u * 0.55, -u * 0.45, u * 0.32, line); txt("z", eye + u * 0.85, -u * 0.75, u * 0.24, line); break;
+    case "sparkle": cheeks(); [-eye, eye].forEach((x) => { dot(x, 0, u * 0.13); c.fillStyle = "#fff"; arc(x + u * 0.04, -u * 0.05, u * 0.045, 0, Math.PI * 2, true); c.fillStyle = line; }); openMouth(0.1); break;
+    case "wink": cheeks(); dot(-eye, 0, u * 0.09); happyEye(eye); openMouth(0.11, true); break;
+    case "excited": cheeks(); line2([[-eye - u * 0.11, -u * 0.09], [-eye + u * 0.08, 0], [-eye - u * 0.11, u * 0.09]]); line2([[eye + u * 0.11, -u * 0.09], [eye - u * 0.08, 0], [eye + u * 0.11, u * 0.09]]); openMouth(0.15, true); break;
+    case "smug": cheeks(); [-eye, eye].forEach((x) => { line2([[x - u * 0.13, -u * 0.02], [x + u * 0.13, -u * 0.02]]); arc(x, -u * 0.02, u * 0.09, 0, Math.PI, true); }); c.beginPath(); c.moveTo(-u * 0.12, my); c.quadraticCurveTo(u * 0.05, my + u * 0.1, u * 0.16, my - u * 0.06); c.stroke(); break;
+    case "surprised": cheeks(); [-eye, eye].forEach((x) => { c.fillStyle = "#fff"; arc(x, 0, u * 0.15, 0, Math.PI * 2, true); c.fillStyle = line; arc(x, 0, u * 0.15, 0, Math.PI * 2); dot(x, u * 0.02, u * 0.065); }); arc(0, my + u * 0.04, u * 0.07, 0, Math.PI * 2); break;
+    case "hearts": cheeks(); heart(-eye, 0, u * 0.16, "#E5533D"); heart(eye, 0, u * 0.16, "#E5533D"); smile(0.13); break;
+    case "content": cheeks("rgba(242,138,166,.75)", 0.13); relaxEye(-eye); relaxEye(eye); smile(0.1); break;
+    case "dizzy": cheeks("rgba(160,170,230,.45)"); [-eye, eye].forEach((x) => { c.beginPath(); for (let a = 0; a < Math.PI * 4; a += 0.2) c.lineTo(x + Math.cos(a) * u * 0.035 * a / 2, Math.sin(a) * u * 0.035 * a / 2); c.lineWidth = lw * 0.7; c.stroke(); c.lineWidth = lw; }); c.beginPath(); c.moveTo(-u * 0.16, my); for (let i = 1; i <= 4; i++) c.lineTo(-u * 0.16 + i * u * 0.08, my + (i % 2 ? -1 : 1) * u * 0.05); c.stroke(); break;
+    case "money": cheeks(); [-eye, eye].forEach((x) => { c.fillStyle = "#FFD36B"; arc(x, 0, u * 0.17, 0, Math.PI * 2, true); c.fillStyle = line; arc(x, 0, u * 0.17, 0, Math.PI * 2); txt("₩", x, u * 0.01, u * 0.22, line); }); openMouth(0.13); break;
+    case "drool": cheeks(); happyEye(-eye); happyEye(eye); openMouth(0.12); c.fillStyle = "#8EC9F5"; c.beginPath(); c.ellipse(u * 0.12, my + u * 0.22, u * 0.045, u * 0.08, 0, 0, Math.PI * 2); c.fill(); c.fillStyle = line; break;
+    case "cool": c.fillStyle = "#1D2433"; [-eye, eye].forEach((x) => { c.beginPath(); c.roundRect(x - u * 0.24, -u * 0.13, u * 0.48, u * 0.28, u * 0.1); c.fill(); }); c.strokeStyle = "#1D2433"; line2([[-eye + u * 0.24, -u * 0.06], [eye - u * 0.24, -u * 0.06]]); c.strokeStyle = line; c.fillStyle = "#fff"; c.beginPath(); c.roundRect(-eye - u * 0.16, -u * 0.08, u * 0.1, u * 0.05, 2); c.fill(); c.fillStyle = line; c.beginPath(); c.moveTo(-u * 0.12, my); c.quadraticCurveTo(u * 0.05, my + u * 0.1, u * 0.16, my - u * 0.06); c.stroke(); break;
+    case "laugh": cheeks("rgba(242,138,166,.7)"); line2([[-eye - u * 0.11, -u * 0.08], [-eye + u * 0.08, 0], [-eye - u * 0.11, u * 0.08]]); line2([[eye + u * 0.11, -u * 0.08], [eye - u * 0.08, 0], [eye + u * 0.11, u * 0.08]]); openMouth(0.17, true); c.fillStyle = "#8EC9F5"; [-1, 1].forEach((s) => { c.beginPath(); c.ellipse(s * (eye + u * 0.24), u * 0.08, u * 0.04, u * 0.07, 0, 0, Math.PI * 2); c.fill(); }); c.fillStyle = line; break;
+    case "stars": cheeks(); star(-eye, 0, u * 0.19, "#FFD36B"); star(eye, 0, u * 0.19, "#FFD36B"); openMouth(0.12, true); break;
+  }
+}
+// 유형 code의 루미를 size 크기 정사각 canvas로. favKey: '최애 메뉴' 유형이 들 물건(가장 많이 산 것)
+async function drawLumiLook(code, size, favKey) {
+  const L = LUMI_LOOKS[code], P = LUMI_POSES[L.pose];
+  const base = await lumiPose(L.pose), tinted = lumiTint(base, L.body, L.line);
+  const props = L.prop === "bags" ? ["bag", "bag"] : L.prop === "fav" ? [favKey && MC_SVG[favKey] ? favKey : "heart", "heart"] : [L.prop];
+  const pimgs = await Promise.all(props.map((k) => mcLoad(mcSvgSrc(k))));
+  const cv = document.createElement("canvas"); cv.width = cv.height = size;
+  const c = cv.getContext("2d"), m = size * 0.1, s = size - m * 2;   // 물건이 삐져나올 자리
+  c.translate(size / 2, size / 2); c.rotate((L.tilt * Math.PI) / 180); c.translate(-size / 2, -size / 2);
+  const fx = (x) => (L.flip ? 1 - x : x);
+  c.save();
+  if (L.flip) { c.translate(size, 0); c.scale(-1, 1); }
+  c.drawImage(tinted, m, m, s, s);
+  // 원래 얼굴을 몸 색으로 덮고 새 표정
+  const [x1, y1] = P.eL, [x2, y2] = P.eR, cx = m + ((x1 + x2) / 2) * s, cy = m + ((y1 + y2) / 2) * s;
+  const ang = Math.atan2((y2 - y1) * s, (x2 - x1) * s), u = Math.hypot((x2 - x1) * s, (y2 - y1) * s);
+  c.save(); c.translate(cx, cy); c.rotate(ang);
+  c.fillStyle = L.body; c.beginPath(); c.ellipse(0, u * 0.12, u * 0.9, u * (0.3 + P.mouth * 2.2), 0, 0, Math.PI * 2); c.fill();
+  lumiFace(c, L.face, u, L.line, L.flip);
+  c.restore(); c.restore();
+  // 든 물건 (뒤집지 않고 손 자리에)
+  const [hx, hy] = P.hand, ps = s * 0.34;
+  pimgs.forEach((im, i) => c.drawImage(im, m + fx(hx) * s - ps / 2 + (i ? (L.flip ? -1 : 1) * ps * 0.45 : 0), m + hy * s - ps / 2 + (i ? ps * 0.3 : 0), i ? ps * 0.8 : ps, i ? ps * 0.8 : ps));
+  return cv;
+}
+// 360×640 크기로 그리고 3배로 키워 1080×1920 그림을 만든다
+async function drawMoneyCard(D) {
+  const W = 360, H = 640, K = 3, cv = document.createElement("canvas");
+  cv.width = W * K; cv.height = H * K;
+  const c = cv.getContext("2d"); c.scale(K, K);
+  // 웹 글꼴은 글자 묶음별로 나뉘어 있어서, 카드에 쓸 한글을 넘겨야 그 글자 묶음까지 받아진다
+  const glyphs = [D.name, D.desc, D.code, "월의 나는 나만의 경제 이번 달 지난달 같은 기간보다 더 덜 똑같아요 남긴 돈 번 돈보다 썼어요 어디에 그 밖 기록이 필요해요 진심이었네 알뜰하게 지냈어 신나게 썼네 다음 엔 한 번만 참아볼까 조금만 아껴볼까 이대로만 가자 0123456789%×!?·", PEER_SPEND.label, ...D.items.slice(0, 2).map((i) => i.label), ...D.cats.slice(0, 4).map((x) => x.cat)].join("");
+  try { await Promise.all([document.fonts.load("700 20px 'Pretendard Variable'", glyphs), document.fonts.load("14px 'Pretendard Variable'", glyphs)]); } catch {}
+  const keys = [...new Set(D.items.slice(0, 6).map((i) => i.key))];
+  const [lumi, ...imgs] = await Promise.all([drawLumiLook(D.code, 630, D.items[0]?.key), ...keys.map((k) => mcLoad(mcSvgSrc(k)))]);
+  const LOOK = LUMI_LOOKS[D.code];
+  const I = Object.fromEntries(keys.map((k, i) => [k, imgs[i]]));
+  const BLUE = "#2F6FDA", RED = "#D6453D", INK = "#2B2F36", SUB = "#5C6270", MUTE = "#8F95A1", GRAY = "#F3F4F6";
+  const S = D.code[0] === "S", bold = (px) => `700 ${px}px 'Pretendard Variable', Pretendard, sans-serif`, pre = (px, w = 400) => `${w} ${px}px 'Pretendard Variable', Pretendard, sans-serif`;
+  const text = (s, x, y, font, color, align = "left") => { c.font = font; c.fillStyle = color; c.textAlign = align; c.fillText(s, x, y); };
+  c.fillStyle = "#fff"; c.fillRect(0, 0, W, H);
+  text(`${D.month}월의 나는`, 24, 44, pre(14), SUB);
+  text("나만의 경제", W - 24, 44, bold(13), MUTE, "right");
+  text(D.code, 24, 74, bold(16), LOOK.line);
+  c.font = bold(16); const cw = c.measureText(D.code).width;
+  text(D.desc, 24 + cw + 8, 74, pre(13), MUTE);
+  text(D.name, 24, 112, bold(34), INK);
+  // 그림 상자: 산 것들 + 루미
+  const bx = 24, by = 128, bw = 312, bh = 276;
+  mcRound(c, bx, by, bw, bh, 20, LOOK.bg);
+  c.save(); c.beginPath(); c.roundRect(bx, by, bw, bh, 20); c.clip();
+  const slots = [[14, 12, 44], [62, 6, 34], [200, 8, 40], [250, 30, 34], [8, 70, 38], [262, 80, 36], [10, 126, 32], [268, 128, 30], [16, 172, 44], [62, 214, 30], [222, 196, 34], [150, 4, 30], [104, 220, 28], [272, 168, 28]];
+  const total = D.items.reduce((a, i) => a + i.n, 0), drawList = [];
+  D.items.slice(0, 6).forEach((it) => { const k = Math.max(1, Math.round((it.n / total) * slots.length)); for (let j = 0; j < k; j++) drawList.push(it.key); });
+  slots.forEach(([x, y, s], i) => { const k = drawList[i]; if (k) c.drawImage(I[k], bx + x, by + y, s, s); });
+  c.drawImage(lumi, bx + (bw - 220) / 2, by + 22, 220, 220);   // 유형별 루미 (자세·색·표정·물건)
+  c.restore();
+  // 많이 산 것 두 가지: 횟수만
+  c.font = bold(13); let tx0 = bx + 12;
+  for (const it of D.items.slice(0, 2)) {
+    const s = `${it.label} ×${it.n}`, w = c.measureText(s).width + 20;
+    mcRound(c, tx0, by + bh - 36, w, 26, 13, "#fff");
+    text(s, tx0 + 10, by + bh - 18, bold(13), INK); tx0 += w + 6;
+  }
+  // 루미의 한마디
+  const top = D.items[0];
+  const l1 = top && top.n >= 3 ? `이번 달 ${top.label}에 진심이었네!` : S ? "이번 달 알뜰하게 지냈어!" : "이번 달 신나게 썼네!";
+  const l2 = S ? "이대로만 가자!" : top && top.n >= 3 ? `다음 달엔 ${top.label} 한 번만 참아볼까?` : "다음 달엔 조금만 아껴볼까?";
+  c.drawImage(lumi, 16, 412, 52, 52);
+  text(l1, 70, 437, bold(17), INK); text(l2, 70, 458, bold(14), MUTE);
+  // 지난달 · 1인 가구 평균과 비교 (%만)
+  const tile = (x, label, v) => {
+    mcRound(c, x, 476, 152, 70, 16, GRAY);
+    text(label, x + 14, 498, pre(12), SUB);
+    if (v === null) text("기록이 더 필요해요", x + 14, 530, bold(15), MUTE);
+    else text(v === 0 ? "똑같아요" : `${Math.abs(v)}% ${v > 0 ? "더" : "덜"}`, x + 14, 532, bold(24), v > 0 ? RED : BLUE);
+  };
+  tile(24, D.per === "last" ? "지난달보다" : "지난달 같은 기간보다", D.vsPrev);
+  tile(184, `${PEER_SPEND.label}보다`, D.vsPeer);
+  // 어디에 썼을까 (비율 막대)
+  mcRound(c, 24, 556, 312, 62, 16, GRAY);
+  text("어디에 썼을까 (고정비 빼고)", 38, 576, pre(12), SUB);
+  if (D.saveRate !== null) text(D.saveRate >= 0 ? `남긴 돈 ${D.saveRate}%` : "번 돈보다 더 썼어요", 322, 576, bold(13), D.saveRate >= 0 ? BLUE : RED, "right");
+  const COL = ["#E5533D", "#2F6FDA", "#C98E5A", "#7CC47F", "#D5D9E0"];
+  const top4 = D.cats.slice(0, 4), rest = 100 - top4.reduce((a, x) => a + x.share, 0);
+  const parts = rest > 0 ? [...top4, { cat: "그 밖", share: rest }] : top4;
+  c.save(); c.beginPath(); c.roundRect(38, 584, 284, 10, 5); c.clip();
+  let px = 38; parts.forEach((p, i) => { const w = (284 * p.share) / 100; c.fillStyle = COL[i] || COL[4]; c.fillRect(px, 584, Math.max(w - 1.5, 0), 10); px += w; });
+  c.restore();
+  let lx2 = 38;
+  top4.slice(0, 3).forEach((p, i) => { const s = `${p.cat} ${p.share}%`; c.fillStyle = COL[i]; c.beginPath(); c.arc(lx2 + 3, 606, 3, 0, Math.PI * 2); c.fill(); text(s, lx2 + 10, 610, pre(11), SUB); c.font = pre(11); lx2 += c.measureText(s).width + 22; });
+  text(`${PEER_SPEND.src} · 금액 없이 %와 횟수만`, W / 2, 632, pre(9), "#B5BCC8", "center");
+  return cv;
+}
+function moneyCardSection() {
+  return `<section class="card" id="sec-moneycard">
+      <div class="sec-title"><h2>한 달 돈 정리 카드</h2><span>인스타 공유용</span></div>
+      <p class="hint" style="margin:0 0 10px">이번 달 나의 소비 유형과 많이 산 것을 루미가 그림 한 장으로 정리해요. 금액은 넣지 않아요.</p>
+      <button class="btn" data-act="mcard-open" style="width:100%">카드 만들기</button>
+      <button class="link-btn hint" data-act="ledger-export" style="display:block;margin:10px auto 0;background:none;border:none;text-decoration:underline;cursor:pointer">분석용 CSV로 내보내기</button>
+    </section>`;
+}
+function modalMoneyCard(m) {
+  const tabs = [["last", "지난달"], ["cur", "이번 달"]].map(([k, l]) => `<button class="chip ${m.per === k ? "on" : ""}" data-act="mcard-per" data-p="${k}">${l}</button>`).join("");
+  const D = moneyCardData(m.per);
+  let body;
+  if (!D) body = `<p class="hint" style="margin:12px 0">${m.per === "last" ? "지난달" : "이번 달"} 가계부 기록이 3건 이상 있어야 카드를 만들 수 있어요.</p>`;
+  else {
+    if (!m.url && !m.busy) {
+      m.busy = true;
+      drawMoneyCard(D).then((cv) => { m.canvas = cv; m.url = cv.toDataURL("image/png"); }).catch(() => { m.err = true; }).then(() => { m.busy = false; if (ui.modal === m) render(); });
+    }
+    body = m.url ? `<img src="${m.url}" alt="${esc(`${D.month}월 돈 정리 카드: ${D.code} ${D.name}`)}" style="display:block;width:100%;max-width:300px;margin:0 auto;border-radius:16px;border:1px solid var(--line)">`
+      : m.err ? `<p class="hint" style="margin:12px 0">카드를 그리지 못했어요. 잠시 뒤에 다시 열어 주세요.</p>`
+      : `<p class="hint" style="margin:40px 0;text-align:center">루미가 카드를 그리고 있어요…</p>`;
+  }
+  return `<div class="sec-title" style="margin:0"><h2>한 달 돈 정리 카드</h2><span>금액 없이 %만</span></div>
+    <div class="tabs">${tabs}</div>
+    <div class="modal-scroll">${body}</div>
+    <div class="inline"><button class="btn ghost" data-act="modal-close" style="flex:1">닫기</button>${D && m.url ? `<button class="btn ghost" data-act="mcard-save" style="flex:1">저장</button><button class="btn" data-act="mcard-share" style="flex:1">공유</button>` : ""}</div>`;
+}
+async function moneyCardOut(share) {
+  const m = ui.modal;
+  if (!m?.canvas) return;
+  const name = `나만의경제_${m.per === "last" ? "지난달" : "이번달"}_돈정리.png`;
+  const blob = await new Promise((ok) => m.canvas.toBlob(ok, "image/png"));
+  const file = new File([blob], name, { type: "image/png" });
+  if (share && navigator.canShare?.({ files: [file] })) {
+    try { await navigator.share({ files: [file] }); } catch {}
+    return;
+  }
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob); a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  toast(share ? "이 기기에서는 바로 공유가 안 돼서 그림으로 저장했어요" : "카드를 그림으로 저장했어요");
+}
+function analysisHtml() {
+  const p = profile, a = p.assets;
+  const t = today0();
+  const from = new Date(t); from.setDate(t.getDate() - 29);
+  const A = ymd(from), B = ymd(t);
+  const list = ledger.tx.filter((x) => x.date >= A && x.date <= B && x.cat !== "내부이체");
+  const foot = `<p class="foot">가계부 기록과 입력한 자산으로 계산한 일반적인 참고 기준이에요. 투자 권유가 아니에요.</p>`;
+  if (!list.length) return `<section class="card" id="sec-analysis">
+      <div class="sec-title"><h2>소비 분석</h2><span>최근 30일</span></div>
+      <div class="ans" style="display:flex;gap:10px">${mascot(40, "curious")}<p style="margin:0;font-size:calc(14px * var(--fs, 1));line-height:1.7">최근 30일 가계부 기록이 없어요. 가계부에 쓴 돈과 들어온 돈을 기록하면, 내 자산에 비해 소비가 괜찮은지 분석해 드릴게요.</p></div>
+      <div class="inline" style="margin-top:12px"><button class="btn ghost" style="flex:1" data-act="fb-need-ledger">루미에게 피드백 받기</button><button class="btn" style="flex:1" data-act="nav" data-route="ledger" data-target="m-capture">가계부에 기록하기</button></div>
+    </section>${foot}`;
+  const sum = (arr) => arr.reduce((s2, x) => s2 + x.amount, 0);
+  const outs = list.filter((x) => x.dir === "out");
+  const refund = sum(list.filter((x) => x.dir === "in" && x.cat !== "급여·수입"));
+  const spend = Math.max(0, sum(outs) - refund);
+  const incomeRec = sum(list.filter((x) => x.dir === "in" && x.cat === "급여·수입"));
+  const incomeEst = incomeMonthly(p) * 1e4;
+  const income = incomeRec || incomeEst;
+  const first = list.reduce((m, x) => (x.date < m ? x.date : m), B);
+  const span = Math.round((t - new Date(first + "T00:00:00")) / 86400e3) + 1;
+  const byCat = {};
+  outs.forEach((x) => (byCat[x.cat] = (byCat[x.cat] || 0) + x.amount));
+  const items = [];
+
+  // 1) 남는 돈(저축률)
+  if (income) {
+    const left = income - spend, r = Math.round((left / income) * 100);
+    items.push(r >= 20 ? ["good", "남는 돈", `수입의 ${r}%(${won(left)})를 남기고 있어요. 흔히 권하는 20% 이상이라 잘하고 있어요.`]
+      : r >= 10 ? ["ok", "남는 돈", `수입의 ${r}%(${won(left)})를 남기고 있어요. 20%까지 올리면 목표 저축이 훨씬 쉬워져요.`]
+      : r >= 0 ? ["warn", "남는 돈", `수입의 ${r}%(${won(left)})만 남아요. 아래 '점검' 항목부터 줄여 보세요.`]
+      : ["warn", "남는 돈", `쓴 돈이 수입보다 ${won(-left)} 많아요. 모아둔 돈을 꺼내 쓰고 있는 상태예요.`]);
+  } else items.push(["ok", "남는 돈", "가계부에 월급·용돈 같은 수입을 기록하거나 마이페이지에 연 소득을 넣으면 저축률을 알려드려요."]);
+
+  // 2) 비상금으로 버틸 수 있는 기간
+  if (a.cash !== null && a.cash !== undefined && spend > 0) {
+    const mo = (a.cash * 1e4) / spend;
+    items.push(mo >= 6 ? ["good", "비상금", `지금처럼 쓰면 예금·현금만으로 약 ${fmt(mo, 1)}개월을 버틸 수 있어요. 비상금은 충분해요.`]
+      : mo >= 3 ? ["ok", "비상금", `지금처럼 쓰면 약 ${fmt(mo, 1)}개월을 버틸 수 있어요. 보통 3~6개월 치를 권해요.`]
+      : ["warn", "비상금", `지금처럼 쓰면 예금·현금으로 약 ${fmt(mo, 1)}개월밖에 못 버텨요. 먼저 3개월 치(${won(spend * 3)})를 모아 보세요.`]);
+  } else if (a.cash === null || a.cash === undefined) items.push(["ok", "비상금", "‘투자’ 탭에서 예금·현금을 입력하면 지금 소비로 몇 달을 버틸 수 있는지 알려드려요."]);
+
+  // 3) 내 자산에 비해 1년 소비가 어느 정도인지
+  const total = (Number(a.cash) || 0) + (Number(a.invest) || 0) + (Number(a.other) || 0);
+  if (total > 0 && spend > 0) {
+    const r = ((spend * 12) / (total * 1e4)) * 100;
+    items.push(r <= 30 ? ["good", "자산 대비", `1년 동안 지금처럼 써도 내 자산의 ${Math.round(r)}% 정도예요. 자산에 비해 여유 있게 쓰고 있어요.`]
+      : r <= 100 ? ["ok", "자산 대비", `1년 동안 지금처럼 쓰면 내 자산의 ${Math.round(r)}%에 해당해요. 수입이 끊기면 1년 안쪽으로 버틸 수 있는 수준이에요.`]
+      : ["warn", "자산 대비", `1년 소비(${won(spend * 12)})가 모은 자산보다 커요. 수입이 끊기면 1년을 버티기 어려워요.`]);
+  }
+
+  // 4) 분류별로 많이 쓴 곳 / 적정한 곳
+  const base = income || spend, guide = income ? GUIDE_INCOME : GUIDE_SPEND, baseName = income ? "수입" : "전체 지출";
+  const over = [], fine = [];
+  Object.entries(guide).forEach(([c, lim]) => {
+    const v = byCat[c] || 0;
+    if (!v) return;
+    if ((v / base) * 100 > lim) over.push([c, v, lim, v - (base * lim) / 100]); else fine.push(c);
+  });
+  over.sort((x, y) => y[3] - x[3]).forEach(([c, v, lim, cut]) =>
+    items.push(["warn", c, `${c}에 ${won(v)}, ${baseName}의 ${Math.round((v / base) * 100)}%를 썼어요. 보통 ${lim}% 안쪽을 권해요. 한 달 ${won(cut)}쯤 줄이면 기준에 맞아요.`]));
+  if (fine.length) items.push(["good", "적정 소비", `${fine.join(", ")}${josa(fine[fine.length - 1], "은", "는")} ${baseName}에 비해 적정한 범위로 쓰고 있어요.`]);
+
+  // 5) 작은 지출이 모인 정도
+  const small = outs.filter((x) => x.amount < 10000);
+  if (small.length >= 5 && spend) {
+    const ss = sum(small);
+    items.push([ss > spend * 0.15 ? "warn" : "ok", "작은 지출", `1만원 미만 결제가 ${small.length}건, 합계 ${won(ss)}이에요. 커피·편의점 같은 작은 지출이 모여 지출의 ${Math.round((ss / spend) * 100)}%가 됐어요.`]);
+  }
+
+  // 6) 목표 저축을 지금 남는 돈으로 감당할 수 있는지
+  const need = (p.goals || []).filter((g) => !goalCalc(g).done).reduce((s2, g) => s2 + (goalCalc(g).monthly || 0), 0) * 1e4;
+  if (need && income) {
+    const left = income - spend;
+    items.push(left >= need ? ["good", "목표 저축", `목표 저축에 매달 ${won(need)}이 필요한데, 지금 남는 돈(${won(left)})으로 충분해요.`]
+      : ["warn", "목표 저축", `목표 저축에 매달 ${won(need)}이 필요한데 지금 남는 돈은 ${won(Math.max(0, left))}이에요. 지출을 ${won(need - Math.max(0, left))} 줄이거나 기한을 늘려 보세요.`]);
+  }
+
+  // 7) 대출 이자 부담
+  const interest = (p.debts || []).reduce((s2, d) => s2 + ((Number(d.amount) || 0) * 1e4 * (Number(d.rate) || 0)) / 100 / 12, 0);
+  if (interest && income) {
+    const r = (interest / income) * 100;
+    items.push([r < 10 ? "good" : r < 20 ? "ok" : "warn", "대출 이자", `대출 이자가 한 달 약 ${won(interest)}, 수입의 ${fmt(r, 1)}%예요.${r >= 20 ? " 금리가 높은 대출부터 줄이는 걸 고민해 보세요." : ""}`]);
+  }
+
+  const cnt = (lv) => items.filter((x) => x[0] === lv).length;
+  const BADGE = { good: "b-green", ok: "b-flat", warn: "b-up" };
+  const order = { warn: 0, ok: 1, good: 2 };
+  return `<section class="card" id="sec-analysis">
+      <div class="sec-title"><h2>최근 30일 돈 흐름</h2><span>${Number(A.slice(5, 7))}/${Number(A.slice(8))} ~ ${Number(B.slice(5, 7))}/${Number(B.slice(8))}</span></div>
+      <div class="flow3">
+        <div><span>들어온 돈</span><b class="num down">${income ? won(income) : "-"}</b></div>
+        <div><span>쓴 돈</span><b class="num">${won(spend)}</b></div>
+        <div><span>남은 돈</span><b class="num ${income && income - spend < 0 ? "up" : ""}">${income ? won(income - spend) : "-"}</b></div>
+      </div>
+      ${!incomeRec && incomeEst ? `<p class="hint" style="margin:6px 0 0">가계부에 수입 기록이 없어서, 입력한 연 소득으로 한 달 수입을 추정했어요.</p>` : ""}
+      ${span < 21 ? `<p class="hint" style="margin:6px 0 0">기록이 ${span}일치라 실제 한 달 지출보다 적게 잡혔을 수 있어요.</p>` : ""}
+      <div class="ans" style="display:flex;gap:10px;margin-top:10px">${mascot(36, cnt("warn") ? "reassure" : "happy")}<p style="margin:0;font-size:calc(14px * var(--fs, 1));line-height:1.7;background:var(--soft);border-radius:6px 16px 16px 16px;padding:10px 12px;flex:1">잘하고 있는 점 <b>${cnt("good")}개</b>, 점검할 점 <b>${cnt("warn")}개</b>예요.${cnt("warn") ? " 점검할 곳부터 위에 모아뒀어요." : " 지금처럼만 하면 돼요!"}</p></div>
+    </section>
+    ${moneyProfileHtml({ p, a, income, incomeRec, spend, outs, total, over, baseName, small, need, interest })}
+    ${foot}`;
+}
+
+// 소비 점검: 뉴스레터의 '머니 프로필'처럼 ① 이 사람의 돈 상황 → ② 돈 고민 → ③ 루미의 처방 순서로 보여준다.
+// 숫자는 모두 내 입력값과 가계부 최근 30일 기록이고, 비율 기준은 처방의 근거로만 덧붙인다.
+function moneyProfileHtml({ p, a, income, incomeRec, spend, outs, total, over, baseName, small, need, interest }) {
+  const nick = esc(p.nickname || "나");
+  const left = income ? income - spend : null;
+  const rate = income ? Math.round((left / income) * 100) : null;
+  const cash = a.cash === null || a.cash === undefined ? null : Number(a.cash) * 1e4;
+  const months = cash !== null && spend > 0 ? cash / spend : null;
+  const debtSum = (p.debts || []).reduce((t, d) => t + (Number(d.amount) || 0), 0);
+  const goalsOpen = (p.goals || []).filter((g) => !goalCalc(g).done);
+  // 자주 쓰는 곳: 30일에 4번 이상 결제한 곳
+  const freq = {};
+  outs.forEach((x) => { const k = x.merchant || x.cat; freq[k] = freq[k] || { n: 0, v: 0, cat: x.cat }; freq[k].n++; freq[k].v += x.amount; });
+  const habits = Object.entries(freq).filter(([, f]) => f.n >= 4).sort((x, y) => y[1].n - x[1].n).slice(0, 2);
+  const ss = small.reduce((t, x) => t + x.amount, 0);
+  const wonJ = (v, a1, a2) => { const w = won(v); return w + josa(w, a1, a2); };
+  // 목표에 남은 금액을 이미 예금·현금으로 갖고 있으면 '모자람'이 아니다
+  const goalLeft = goalsOpen.reduce((t, g) => t + goalCalc(g).left, 0) * 1e4;
+  const goalCovered = goalLeft > 0 && cash !== null && cash >= goalLeft;
+  // 작은 결제가 대부분 이미 짚은 분류(예: 카페)면 같은 이야기를 두 번 하지 않는다
+  const smallSame = over.length && small.length && small.filter((x) => x.cat === over[0][0]).length >= small.length * 0.7;
+  const smallIssue = small.length >= 5 && ss > spend * 0.15 && !smallSame;
+
+
+  // ② 돈 고민: 잘하는 점은 담담하게, 가장 큰 걱정 하나는 표시
+  const goods = [], worries = [], acts = [];
+  if (rate !== null) {
+    if (rate >= 20) goods.push(`들어온 돈의 ${rate}%를 남기고 있어요.`);
+    else if (rate >= 10) goods.push(`들어온 돈의 ${rate}%를 남기고 있어요.`);
+    else if (rate >= 0) worries.push(`들어온 돈의 ${rate}%만 남아서 돈이 잘 모이지 않아요.`);
+    else worries.push(`쓴 돈이 들어온 돈보다 ${won(-left)} 많아서, 모아 둔 돈을 꺼내 쓰고 있어요.`);
+  }
+  if (months !== null) {
+    if (months < 3) worries.push(`예금·현금으로는 지금 소비를 약 ${fmt(months, 1)}개월만 버틸 수 있어서, 수입이 갑자기 끊기면 불안해요.`);
+    else if (months >= 24) goods.push(`예금·현금만으로 2년 넘게 버틸 만큼 비상금이 넉넉해요.`);
+    else if (months >= 6) goods.push(`비상금은 약 ${fmt(months, 1)}개월 치로 넉넉해요.`);
+  }
+  if (over.length) {
+    const [c, v] = over[0];
+    worries.push(`${esc(c)}에 한 달 ${wonJ(v, "을", "를")} 써서, ${baseName}의 ${Math.round((v / (income || spend)) * 100)}%가 여기로 나가요.`);
+  }
+  if (goalCovered) goods.push(`목표 저축에 남은 ${won(goalLeft)}은 이미 예금·현금으로 갖고 있어요.`);
+  else if (need && income && left < need) worries.push(`목표 저축에 매달 ${won(need)}이 필요한데, 지금 남는 돈은 ${won(Math.max(0, left))}이에요.`);
+  if (interest && income && interest / income >= 0.2) worries.push(`대출 이자가 한 달 약 ${won(interest)}로 들어온 돈의 ${fmt((interest / income) * 100, 1)}%예요.`);
+  if (smallIssue) worries.push(`1만원 미만 결제가 ${small.length}건 모여 ${wonJ(ss, "이", "가")} 됐어요.`);
+
+  // ③ 루미의 처방: 걱정마다 할 일 하나, 내 숫자로 (기준 비율은 괄호 속 근거로만)
+  over.slice(0, 2).forEach(([c, v, lim, cut]) => {
+    const n = outs.filter((x) => x.cat === c).length, per = n ? v / n : 0;
+    const k = per ? Math.max(1, Math.ceil(cut / per)) : 0;
+    acts.push(`<b>${esc(c)} 한 달 ${won(cut)} 줄이기.</b> ${n >= 3 ? `30일에 ${n}번 썼으니 ${k}번만 덜 쓰면 돼요.` : `한두 번의 큰 지출이라, 다음 달에는 꼭 필요한지 한 번 더 생각해 보세요.`} <span class="hint">(보통 ${baseName}의 ${lim}% 안쪽이면 적당해요)</span>`);
+  });
+  if (months !== null && months < 3) {
+    const gap = spend * 3 - cash;
+    acts.push(`<b>비상금 ${won(gap)} 더 모으기.</b> 3개월 치(${won(spend * 3)})가 있으면 수입이 끊겨도 버틸 수 있어요.${left > 0 ? ` 지금 남는 돈이면 약 ${Math.ceil(gap / left)}달 걸려요.` : ""}`);
+  }
+  if (rate !== null && rate < 10 && !over.length) acts.push(`<b>쓴 돈을 한 달 ${won(Math.max(0, spend - income * 0.8))} 줄이기.</b> 그러면 들어온 돈의 20%가 남아요. 고정 지출부터 살펴보면 쉬워요.`);
+  if (!goalCovered && need && income && left < need) acts.push(`<b>목표 저축 다시 맞추기.</b> 매달 ${won(need - Math.max(0, left))}이 모자라요. 위에서 줄인 돈을 목표로 옮기거나 기한을 늘려 보세요.`);
+  if (interest && income && interest / income >= 0.2) acts.push(`<b>금리가 높은 대출부터 갚기.</b> 이자가 줄면 매달 남는 돈이 바로 늘어요.`);
+  if (smallIssue) acts.push(`<b>작은 결제 절반 줄이기.</b> 1만원 미만 ${small.length}건 중 절반만 줄여도 한 달 약 ${won(ss / 2)}이 남아요.`);
+  // 걱정이 하나뿐이어도 처방은 2~3개: 자주 쓰는 소비 · 월급날 먼저 저축 · 수입 기록 순으로 채운다
+  const top = habits[0];
+  if (acts.length < 3 && top && !over.slice(0, 2).some(([c]) => c === top[1].cat)) {
+    const [k, f] = top, cut = Math.max(1, Math.round(f.n / 4)), avg = f.v / f.n;
+    acts.push(`<b>${esc(k)} 한 달 ${cut}번 덜 가기.</b> 30일에 ${f.n}번, 한 번에 평균 ${won(avg)}이라 ${cut}번만 줄여도 약 ${won(avg * cut)}이 남아요.`);
+  }
+  if (acts.length < 3 && left > 0) {
+    const first = Math.max(1, Math.floor(left / 2 / 1e4)) * 1e4;
+    acts.push(`<b>월급날 ${won(first)} 먼저 저축하기.</b> 남는 돈(${won(left)})의 절반쯤을 월급날 바로 옮겨 두면 쓰기 전에 모여요.`);
+  }
+  if (acts.length < 3 && !incomeRec) acts.push(`<b>들어온 돈도 가계부에 기록하기.</b> 월급·용돈을 넣으면 남는 돈과 저축 속도를 더 정확히 알려드려요.`);
+  if (acts.length < 2) acts.push(`<b>지금 흐름 그대로 유지하기.</b> 다음 달에도 이 정도로만 쓰면 충분해요.`);
+
+  // ── 그림 카드 (어피티 머니 프로필처럼 한눈에) ──
+  const pct = (v, t) => (t > 0 ? Math.max(0, Math.min(100, Math.round((v / t) * 100))) : 0);
+  const tags = [p.age && `만 ${p.age}세`, p.status && esc(p.status), p.income && `연봉 ${INCOME[p.income]}`].filter(Boolean);
+  const flow = income ? `<div class="mp-flow">
+        <div class="mp-row"><span>한 달 들어온 돈</span><b class="num">${won(income)}</b></div>
+        <div class="mp-bar"><i style="width:${pct(Math.min(spend, income), income)}%;background:var(--sub)"></i><i style="width:${rate > 0 ? pct(left, income) : 0}%;background:var(--green)"></i></div>
+        <div class="mp-row hint"><span><i class="dot" style="background:var(--sub)"></i>쓴 돈 ${won(spend)}</span><span><i class="dot" style="background:var(--green)"></i>${left >= 0 ? `남긴 돈 ${won(left)} · ${rate}%` : `${won(-left)} 더 썼어요`}</span></div>
+        ${incomeRec ? "" : `<p class="hint" style="margin:4px 0 0">수입 기록이 없어서 연 소득으로 추정했어요.</p>`}
+      </div>` : `<div class="mp-flow"><div class="mp-row"><span>한 달 쓴 돈</span><b class="num">${won(spend)}</b></div><p class="hint" style="margin:4px 0 0">수입을 기록하면 남는 돈도 보여드려요.</p></div>`;
+  const assetCols = [[a.cash, "예금·현금", "#2F6FDA"], [a.invest, "투자", "#7FA6E6"], [a.other, "기타", "#C5D6F2"]].filter(([v]) => Number(v) > 0);
+  const tileAsset = total > 0 ? `<div class="mp-tile"><span class="hint">현재 자산</span><b class="num">${man(total)}</b>
+        <div class="mp-bar sm">${assetCols.map(([v, , col]) => `<i style="width:${pct(Number(v), total)}%;background:${col}"></i>`).join("")}</div>
+        <span class="mp-leg">${assetCols.map(([v, l, col]) => `<span><i class="dot" style="background:${col}"></i>${l}</span>`).join("")}</span>${debtSum > 0 ? `<span class="hint">대출 ${man(debtSum)}</span>` : ""}</div>`
+    : `<div class="mp-tile"><span class="hint">현재 자산</span><b style="font-size:calc(15px * var(--fs, 1))">입력 전</b><span class="hint">'자산' 칸에서 넣으면 보여드려요</span></div>`;
+  const tileCash = months !== null ? `<div class="mp-tile"><span class="hint">비상금</span><b class="num ${months < 3 ? "up" : ""}">${fmt(months, 1)}개월 치</b>
+        <div class="mp-bar sm" style="position:relative"><i style="width:${pct(Math.min(months, 6), 6)}%;background:${months < 3 ? "#D6453D" : "var(--green)"}"></i><em style="left:50%"></em></div>
+        <span class="hint">가운데 선이 3개월 (권장)</span></div>`
+    : `<div class="mp-tile"><span class="hint">비상금</span><b style="font-size:calc(15px * var(--fs, 1))">-</b><span class="hint">예금·현금을 넣으면 몇 달 버틸지 알려드려요</span></div>`;
+  const habitChips = habits.length ? `<div class="mp-chips">${habits.map(([k, f]) => { const it = mcItemOf({ merchant: k, cat: f.cat }); return `<span class="mp-chip"><img src="${mcSvgSrc(it.key)}" alt="" width="28" height="28"><span><b>${esc(k)}</b><small>30일에 ${f.n}번</small></span></span>`; }).join("")}</div>` : "";
+  const goalLine = goalsOpen.length ? `<p class="hint" style="margin:8px 0 0">목표: ${goalsOpen.slice(0, 2).map((g) => `${esc(g.name)} ${man(g.target)}`).join(" · ")}</p>` : "";
+  const worryList = worries.length
+    ? worries.map((w, i) => `<li class="${i ? "" : "mp-big"}">${i ? "" : `<span class="pill-red">가장 큰 고민</span>`}${w}</li>`).join("")
+    : `<li>지금은 크게 걱정할 부분이 없어요.</li>`;
+  const goodList = goods.map((g) => `<li class="ok">${g}</li>`).join("");
+  const teaser = worries[0] ? worries[0].replace(/<[^>]+>/g, "") : "지금은 크게 걱정할 부분이 없어요.";
+  if (!ui.mpOpen) return `<section class="card" id="sec-check">
+      <div class="sec-title"><h2>${nick}님의 머니 프로필</h2><span>최근 30일 기준</span></div>
+      <div class="ans" style="display:flex;gap:10px;align-items:center">${mascot(40, worries.length ? "reassure" : "happy")}<p style="margin:0;font-size:calc(14px * var(--fs, 1));line-height:1.6;flex:1">${esc(teaser)}</p></div>
+      <button class="btn ghost" data-act="mp-toggle" style="width:100%;margin-top:12px">머니 프로필 · 돈 고민 · 루미의 처방 보기</button>
+    </section>`;
+  return `<section class="card" id="sec-check">
+      <div class="sec-title"><h2>${nick}님의 머니 프로필</h2><span>최근 30일 기준</span></div>
+      <div class="mp-head">${mascot(52, worries.length ? "reassure" : "happy")}<div><b>${nick}님</b><div class="mp-tags">${tags.map((t) => `<span>${t}</span>`).join("") || `<span>마이페이지에서 나이·하는 일을 넣어 보세요</span>`}</div></div></div>
+      ${flow}
+      <div class="mp-tiles">${tileAsset}${tileCash}</div>
+      ${habitChips ? `<h3 class="mp-h">자주 쓰는 소비</h3>${habitChips}` : ""}${goalLine}
+      <h3 class="mp-h">${nick}님의 돈 고민</h3>
+      <ul class="mp-worry">${worryList}${goodList}</ul>
+      <h3 class="mp-h">루미의 처방</h3>
+      <ol class="mp-rx">${acts.slice(0, 3).map((x, i) => `<li><span class="mp-no">${i + 1}</span><span>${x}</span></li>`).join("")}</ol>
+      <button class="btn ghost" data-act="mp-toggle" style="width:100%;margin-top:12px">접기</button>
+    </section>`;
+}
+
+// 사진을 폰에서 줄여서(긴 변 1400px, JPEG) 보내기 → AI 비용·전송량 절약
+// 사진을 폰에서 줄여서 보내기 → AI 비용·전송량 절약.
+// 스크롤해서 길게 찍은 캡처는 그냥 줄이면 글씨가 너무 작아져서, 폭을 유지한 채 위에서 아래로 겹치게 잘라 여러 조각으로 보낸다.
+const PIECE_W = 900, PIECE_H = 1500, PIECE_OVERLAP = 160;
+function imagePieces(file) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const jpeg = (sx, sy, sw, sh, w, h) => {
+        const c = document.createElement("canvas");
+        c.width = Math.round(w); c.height = Math.round(h);
+        const g = c.getContext("2d");
+        g.fillStyle = "#fff"; g.fillRect(0, 0, c.width, c.height);
+        g.drawImage(img, sx, sy, sw, sh, 0, 0, c.width, c.height);
+        return c.toDataURL("image/jpeg", 0.75);
+      };
+      const W = Math.min(img.width, PIECE_W), s = W / img.width, H = img.height * s;
+      // 보통 캡처(세로가 폭의 2.4배 이하)는 예전처럼 한 장으로
+      if (H <= W * 2.4) {
+        const k = Math.min(1, 1400 / Math.max(img.width, img.height));
+        return resolve([jpeg(0, 0, img.width, img.height, img.width * k, img.height * k)]);
+      }
+      const out = [];
+      for (let y = 0; y < H; y += PIECE_H - PIECE_OVERLAP) {
+        const h = Math.min(PIECE_H, H - y);
+        if (out.length && h < PIECE_OVERLAP + 40) break; // 앞 조각과 거의 겹치는 꼬리는 버림
+        out.push(jpeg(0, y / s, img.width, h / s, W, h));
+        if (y + h >= H) break;
+      }
+      resolve(out);
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("사진을 열 수 없어요")); };
+    img.src = url;
+  });
+}
+async function readCaptures(files) {
+  const day = ymd(today0());
+  const used = ledger.uploads[day] || 0;
+  files = [...files].slice(0, 8);
+  if (!files.length) return;
+  ui.capture = { loading: true };
+  render();
+  try {
+    // 사진마다 조각 묶음(긴 캡처는 여러 조각). 하루 한도는 조각 수로 센다(AI가 읽는 장 수)
+    const groups = await Promise.all(files.map(imagePieces));
+    const total = groups.reduce((n, g) => n + g.length, 0);
+    if (used + total > capLimit()) {
+      const long = groups.some((g) => g.length > 1);
+      const more = adLeft("cap") ? " 광고를 보면 3장 더 읽을 수 있어요." : "";
+      ui.capture = { limited: true, error: `오늘 사용량이 ${capPct(used)}%라, 이 사진을 읽으면 ${Math.round(((used + total) / capLimit()) * 100)}%가 되어 하루 한도(100%)를 넘어요.${long ? " 긴 캡처는 여러 조각으로 나눠 읽어서 사용량이 많이 들어요. 짧게 나눠 찍거나 내일 다시 올려 주세요." : " 사진 수를 줄이거나 내일 다시 올려 주세요."}${more}` };
+      render(); return;
+    }
+    // 한 번에 8조각까지. 긴 캡처는 조각 순서대로 보내고, 앞 묶음의 마지막 날짜를 알려줘 날짜가 이어지게 한다
+    const batches = [];
+    for (const g of groups) {
+      for (let i = 0; i < g.length; i += 8) batches.push({ images: g.slice(i, i + 8), pieces: g.length > 1, cont: i > 0 });
+    }
+    const found = [];
+    let lastDate = "";
+    for (const b of batches) {
+      const j = await getJson("/api/receipts", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ images: b.images, pieces: b.pieces, lastDate: b.cont ? lastDate : "" }) });
+      const list = j.transactions || [];
+      found.push(...list);
+      if (list.length) lastDate = list[list.length - 1].date;
+      ledger.uploads[day] = (ledger.uploads[day] || 0) + b.images.length;
+      saveLedger();
+    }
+    // 조각이 겹친 곳에서 같은 거래가 두 번 나오면 하나만
+    const seen = new Set();
+    const uniq = found.filter((t) => { const k = txKey(t); if (seen.has(k)) return false; seen.add(k); return true; });
+    // 이미 기록된 거래나, 다른 앱 캡처에서 같이 찍힌 같은 거래는 체크를 빼둔다(다시 체크하면 기록됨)
+    const items = [];
+    for (const t of uniq) {
+      const old = ledger.tx.find((x) => sameTx(x, t));
+      const twin = !old && items.find((x) => !x.skip && sameTx(x, t));
+      items.push({ ...t, skip: !!(old || twin), dup: old ? "이미 기록됨" : twin ? `위 ‘${twin.merchant}’${josa(twin.merchant, "과", "와")} 겹침` : "" });
+    }
+    ui.capture = items.length ? { items } : { error: "거래를 찾지 못했어요. 이용내역 화면이 잘 보이게 캡처해 주세요" };
+  } catch (err) {
+    ui.capture = { error: err.body?.error || err.message || "읽지 못했어요" };
+  }
+  if (["money", "ledger"].includes(route())) render();
+}
+
+// ───────────────────────── 화면: 경제 공부 ─────────────────────────
+const LEARN_SORTS = [["hot", "화제순"], ["new", "최신순"], ["wrong", "오답순"], ["abc", "가나다순"]];
+function ensureTrending() {
+  if (data.trending !== undefined || ui.trLoading) return;
+  ui.trLoading = true;
+  getJson("/api/trending")
+    .then((j) => (data.trending = j))
+    .catch(() => (data.trending = { available: false }))
+    .finally(() => { ui.trLoading = false; if (["learn", "home"].includes(route())) render(); });
+}
+function hotCount(c) { return data.trending?.available ? data.trending.counts?.[c.id] ?? 0 : null; }
+function sortConcepts(list) {
+  const L = data.learn;
+  const idx = (c) => L.concepts.indexOf(c);
+  const sorts = {
+    // 화제순: 최근 3일(적으면 7일) 정부 보도자료에 많이 나온 순 (데이터가 없으면 '요즘 뜨는' 먼저, 원래 순서)
+    hot: (a, b) => (data.trending?.available ? hotCount(b) - hotCount(a) : 0) || (a.cat === "trend" ? 0 : 1) - (b.cat === "trend" ? 0 : 1) || idx(a) - idx(b),
+    // 최신순: 새로 추가한 개념 먼저 (added 날짜, 같으면 목록 뒤쪽이 최신)
+    new: (a, b) => String(b.added || "").localeCompare(String(a.added || "")) || idx(b) - idx(a),
+    // 오답순: 틀린 문제(최근에 틀린 것) → 안 푼 문제 → 맞힌 문제
+    wrong: (a, b) => {
+      const r = (c) => (isWrong(c) ? 0 : mastered(c) ? 2 : 1);
+      const at = (c) => qa(c, Math.min(curLv(c), quizzesOf(c).length - 1))?.at || 0;
+      return r(a) - r(b) || at(b) - at(a) || idx(a) - idx(b);
+    },
+    abc: (a, b) => a.term.localeCompare(b.term, "ko"),
+  };
+  return [...list].sort(sorts[ui.learnSort] || sorts.hot);
+}
+function conceptRow(c, showCat) {
+  const open = ui.learnOpen === c.id;
+  const lv = curLv(c), done = mastered(c);
+  const st = done ? `<span class="badge b-green">완료</span>` : isWrong(c) ? `<span class="badge b-up">오답</span>` : lv ? `<span class="badge b-down">${lv + 1}단계</span>` : `<span class="badge b-flat">안 풂</span>`;
+  const hc = ui.learnSort === "hot" ? hotCount(c) : null;
+  return `<div class="concept">
+    <button class="c-head" data-act="toggle-concept" data-id="${c.id}" aria-expanded="${open}">
+      <div style="flex:1;min-width:0"><div class="t">${esc(c.term)} ${showCat ? `<span class="tagc">${esc(catName(c.cat))}</span>` : ""}${hc ? `<span class="hot">언급 ${hc}</span>` : ""}</div><div class="d">${esc(c.short)}</div></div>${st}
+    </button>
+    ${open ? `<div class="c-body"><p>${esc(c.body)}</p><p class="me"><b>나와 연결하면</b> ${esc(c.me)}</p>
+      <button class="btn ${done ? "ghost" : ""}" data-act="quiz-open" data-id="${c.id}" data-lv="${done ? quizzesOf(c).length - 1 : lv}">${done ? "3단계 모두 맞혔어요 · 다시 보기" : `OX 퀴즈 풀기 · ${LV_NAME[lv]}`}</button>
+      <button class="link-btn" style="align-self:flex-start;padding-left:0" data-act="note-toggle" data-id="${c.id}">${learnState.notes[c.id] ? "★ 노트에서 빼기" : "☆ 내 노트에 담기"}</button></div>` : ""}
+  </div>`;
+}
+
+function viewLearn() {
+  const L = data.learn;
+  if (!L) return `${learnHead()}<main class="scroll"><p class="hint">불러오는 중…</p></main>`;
+  ensureTrending();
+  markAttend();
+  initGame();
+  ensureCustom();
+  if (ui.learnStage && L.categories.some((c) => c.id === ui.learnStage)) return viewStage(ui.learnStage);
+  if (ui.learnTopic && topicByCat(ui.learnTopic)) return viewTopic(ui.learnTopic);
+  const xp = xpTotal(), lv = levelOf(xp), inLv = xp % LEVEL_XP;
+  const solved = solvedEntries();
+  const mode = learnMode();
+  const inMode = (c) => (mode === "exam" ? c.cat !== "basic" : c.cat === "basic");
+  const totalQ = L.concepts.filter(inMode).reduce((n, c) => n + quizzesOf(c).length, 0);
+  const wrong = L.concepts.filter(isWrong);
+  const att = attendRate();
+  const todayN = Math.min(MISSION, todayCount());
+  const badges = badgeList();
+  const tq = todayQuiz();
+  const T = data.trending;
+  const evs = T?.available ? T.events || [] : [];
+  const hotBlock = evs.length ? `<section class="card" id="l-hot">
+      <div class="sec-title"><h2>요즘 화제 TOP 5</h2><span>최근 ${data.trending?.days || 3}일 정부 보도자료</span></div>
+      <div class="hot-list">${evs.map((e, i) => {
+        const q = mode === "basic" ? basicFor(e) : null;
+        return `<div class="hot-row"><a class="hot-item" href="${href(e.url)}" target="_blank" rel="noopener"><span class="hot-rank">${i + 1}</span><span class="hot-t">${esc(e.title)}<small class="hint">#${esc(e.word)} · 관련 보도자료 ${e.count}건</small></span>${ICON.out}</a>${q ? `<button class="hot-quiz ${mastered(q) ? "done" : ""}" data-act="concept-open" data-id="${q.id}" aria-label="${esc(e.title)} 관련 퀴즈 풀기">${mastered(q) ? "✓ 풀었어요" : "이 화제로 퀴즈 ›"}</button>` : ""}</div>`;
+      }).join("")}</div>
+    </section>` : "";
+  const hub = `<section class="hub">
+      ${[["news", "", "뉴스 쉽게 풀이", "오늘의 경제를 쉬운 말로"], ["letters", "", "뉴스레터", "구독 관리·붙여넣기 풀이"], ["watch", "", "관심 종목", "추가·순서·보유 수량"]]
+        .map(([r, t, n, d]) => `<button class="hub-item" data-act="nav" data-route="${r}" data-target="${t}"><b>${n}</b><span>${d}</span></button>`).join("")}
+    </section>`;
+  // 레벨·칭호는 두 공부 방법이 함께 쌓는 하나라서 맨 위에 한 번만, 두 공부의 진행을 같이 보여준다
+  const prog = (list) => ({ n: list.length, ok: list.filter(mastered).length });
+  const pb = prog(basicList()), pe = prog(L.concepts.filter((c) => c.cat !== "basic"));
+  const lvCard = `<section class="card lv-card">
+      ${mascot(64, lv >= 5 ? "confident" : "happy", "")}
+      <div class="lv-main">
+        <div class="lv-top"><b class="num">Lv.${lv}</b><span class="lv-title">${titleOf(lv)}</span><button class="link-btn" data-act="badges-open">배지 ${badges.filter((b) => b.ok).length}/${badges.length} ›</button></div>
+        <div class="xpbar" role="progressbar" aria-valuenow="${inLv}" aria-valuemin="0" aria-valuemax="${LEVEL_XP}"><i style="width:${inLv}%"></i></div>
+        <span class="hint">경험치 ${xp} XP · 다음 레벨까지 ${LEVEL_XP - inLv} XP</span>
+        <div class="lv-prog">${[["경제 기초", pb, "basic"], ["시험 공부", pe, "exam"]].map(([n, p, k]) => `<span class="${mode === k ? "on" : ""}"><em>${n}</em><i class="lv-pbar"><i style="width:${p.n ? Math.round((p.ok / p.n) * 100) : 0}%"></i></i><b class="num">${p.ok}/${p.n}</b></span>`).join("")}</div>
+      </div>
+    </section>`;
+  const modeSeg = `<div class="sortbar seg2" role="tablist" aria-label="공부 방법">
+      <button class="${mode === "basic" ? "on" : ""}" role="tab" aria-selected="${mode === "basic"}" data-act="learn-mode" data-v="basic">경제 기초</button>
+      <button class="${mode === "exam" ? "on" : ""}" role="tab" aria-selected="${mode === "exam"}" data-act="learn-mode" data-v="exam">시험 공부</button>
+    </div>`;
+  // 처음 열면 공부 방법부터 고른다
+  if (!mode) return `${learnHead()}
+  <main class="scroll">
+    ${lvCard}
+    ${lumiSays("어떤 공부를 할까요? 두 공부의 경험치는 하나로 함께 쌓이고, 고른 건 위에서 언제든 바꿀 수 있어요.", "lookup", "flat")}
+    <button class="card mode-pick" data-act="learn-mode" data-v="basic"><b>경제 기초 정보 습득</b><span class="hint">반도체 수출·FTA처럼 요즘 화제 뉴스로 쉬운 경제 퀴즈를 풀어요.</span></button>
+    <button class="card mode-pick" data-act="learn-mode" data-v="exam"><b>시험 공부 목적</b><span class="hint">국제금융·금융경제·베이지안 거시금융·투자운용사 수업 자료로 탈출 지도와 섬 문제를 풀고, ETF·연말정산·청약 같은 주제나 직접 고른 주제도 공부해요.</span></button>
+    ${hotBlock}
+    ${hub}
+  </main>`;
+  const stages = L.categories.map((cat) => {
+    const list = stageConcepts(cat.id);
+    const done = list.filter(mastered).length;
+    const stars = list.reduce((n, c) => n + Math.min(curLv(c), 3), 0);
+    const all = done === list.length;
+    const th = arcTheme(cat.id);
+    return `<button class="stage arc-card ${all ? "clear" : ""}" data-act="stage-open" data-c="${cat.id}" style="--abg:${th.bg};--agir:${th.gir}">
+        <canvas class="arc-thumb" data-arc="thumb" data-c="${cat.id}" aria-hidden="true"></canvas>
+        <span class="st-top"><b>${esc(cat.name)}</b>${all ? `<span class="st-badge">🏅</span>` : ""}</span>
+        ${cat.islands ? `<span class="arc-bar"><i style="width:${Math.round((done / list.length) * 100)}%"></i></span>
+        <span class="arc-sub">섬 ${cat.islands.filter((_, i) => islandDone(cat.id, i + 1)).length}/${cat.islands.length} · 개념 ${done}/${list.length}</span>`
+        : `<span class="arc-bar"><i style="width:${Math.round((stars / (list.length * 3)) * 100)}%"></i></span>
+        <span class="arc-sub">개념 ${done}/${list.length} · ★ ${stars}/${list.length * 3}</span>`}
+      </button>`;
+  }).join("");
+  return `${learnHead()}
+  <main class="scroll">
+    ${lvCard}
+    ${modeSeg}
+    ${scoreCard()}
+    ${mode === "basic" ? hotBlock + hub : ""}
+    <section class="card mission" id="l-mission">
+      <div class="sec-title" style="margin:0"><h2>오늘의 미션</h2><span>${learnState.missionDay === ymd(today0()) ? "완료 ✓" : `+${MISSION_XP} XP`}</span></div>
+      <p style="margin:0;font-size:calc(14px * var(--fs, 1))">문제 ${MISSION}개 풀기 · <b class="num">${todayN}/${MISSION}</b></p>
+      <div class="msn-dots">${Array.from({ length: MISSION }, (_, k) => `<i class="${k < todayN ? "on" : ""}"></i>`).join("")}</div>
+      <button class="btn block" data-act="qq-start">⚡ 빠른 퀴즈 도전 (5문제)</button>
+    </section>
+    ${mode === "basic" && todayQuizShown(tq) ? `<section class="quiz"><span class="hand" style="font-size:calc(14px * var(--fs, 1));color:var(--sub)">${quizLabel(tq.c)} · ${esc(tq.c.term)}</span>${quizBox(tq.c, tq.lv, true, false, true)}</section>` : ""}
+    <section class="card stats">
+      <button data-act="nav" data-route="solved"><b class="num">${solved.length}<small>/${totalQ}</small></b><span>푼 문제 ›</span></button>
+      <div><b class="num">${att.pct}%</b><span>출석률 · ${att.n}/${att.of}일</span></div>
+      <button data-act="nav" data-route="review"><b class="num" style="color:${wrong.length ? "var(--up)" : "inherit"}">${wrong.length}</b><span>복습할 문제 ›</span></button>
+    </section>
+    ${mode === "exam" ? `<div class="sec-title" style="margin:6px 2px 0" id="l-map"><h2 style="font-size:calc(20px * var(--fs, 1))">탈출 지도</h2><button class="link-btn" data-act="notes-open">내 노트 ${Object.keys(learnState.notes).length} ›</button></div>
+    <div class="stage-grid">${stages}</div>
+    ${topicSection()}
+    ${hub}
+    <p class="foot">앞 개념의 1단계를 맞히면 다음 칸이 열리고, 틀리면 공룡이 한 칸 다가와요. 기록은 이 기기(연결하면 내 계정)에 저장돼요.</p>`
+    : `<p class="foot">경제 기초 퀴즈는 요즘 화제 TOP 5(최근 3일 정부 보도자료, 적은 날은 7일)에 이어지는 문제예요. 기록은 이 기기(연결하면 내 계정)에 저장돼요.</p>`}
+  </main>`;
+}
+// 탈출 지도: 과목마다 다른 게임 그림(레트로 오락실·옛날 게임·블록 점프·겨울 숲)에서 아래에서 위로 올라가 공룡에게서 탈출한다.
+// 그림은 canvas에 코드로 그리고(startArcade), 누르는 칸과 개념 이름은 그 위에 버튼으로 얹는다.
+const ARC_W = 220, ARC_GAP = 46;
+// 과목 순서대로 쓰는 그림. bg·gir는 과목 카드의 바탕색·테두리색
+const ARC_THEMES = [
+  { key: "retro", bg: "#17123d", gir: "#ff6fb0" },
+  { key: "oldgame", bg: "#000000", gir: "#ffd23f" },
+  { key: "block", bg: "#4f86e8", gir: "#f6be2c" },
+  { key: "winter", bg: "#2a3f7a", gir: "#cfe0ff" },
+];
+function arcTheme(catId) {
+  const i = Math.max(0, (data.learn?.categories || []).findIndex((c) => c.id === catId));
+  return ARC_THEMES[i % ARC_THEMES.length];
+}
+const ARC_PAL = { R: "#ff3b5c", W: "#fff", G: "#2fbf4a", Y: "#ffd23f", K: "#222", P: "#ff9ec8", B: "#8a5a2b", S: "#f3dcb4", O: "#3a2a4a", T: "#fff", L: "#2fbf4a", H: "#1a7a2e" };
+const ARC_S = {
+  dino: ["..........GGGGGG.", ".........GGWKGGGG", ".........GGGGGGGG", ".........GGGGTTTT", ".........GGGGG...", "..G.....GGGGG....", ".GG....GGGGGGL...", ".GGG..GGGGGGG....", "..GGGGGGGGGGG....", "...GGGGGGGGG.....", "....GGG..GGG.....", "....GG....GG.....", "....HH....HH....."],
+  hero: ["..OOOOO..", ".OWWWWWO.", "OWWWWWWWO", "OWKWWWKWO", "OWPWWWPWO", "OWWWWWWWO", ".OWWWWWO.", ".OWO.OWO.", ".OO...OO."],
+  cherry: ["......G..", ".....GG..", "....G..G.", "...G....G", ".RRR..RRR", "RRWRRRRWR", "RRRR.RRRR", ".RR...RR."],
+  heart: [".RR.RR.", "RWRRRRR", "RRRRRRR", ".RRRRR.", "..RRR..", "...R..."],
+  star: ["....Y....", "...YYY...", "YYYYYYYYY", ".YYKYKYY.", "..YYYYY..", ".YYY.YYY.", ".YY...YY."],
+  gift: ["..Y..Y..", "...YY...", "RRRYYRRR", "RRRYYRRR", "YYYYYYYY", "RRRYYRRR", "RRRYYRRR", "RRRYYRRR"],
+  cake: ["...R....", "..WWWW..", ".PPPPPP.", "WWWWWWWW", "PPPPPPPP", "BBBBBBBB", "BBBBBBBB"],
+  letter: ["WWWWWWWWW", "WPWWWWWPW", "WWPWWWPWW", "WWWPRPWWW", "WWWWPWWWW", "WWWWWWWWW"],
+  mush: ["..RRRR..", ".RWWRRR.", "RRWWRRWR", "RRRRRRRR", "..SSSS..", "..SKSK..", "..SSSS.."],
+  coin: [".YYY.", "YYWYY", "YYWYY", "YYWYY", ".YYY."],
+  burger: [".YYYYY.", "YYYYYYY", "GGGGGGG", "RRRRRRR", "BBBBBBB", ".YYYYY."],
+  snowman: ["..KKK..", "..KKK..", ".KKKKK.", "..WWW..", ".WKWKW.", "..WRW..", ".RRRRR.", "WWWWWWW", "WWWKWWW", "WWWWWWW", ".WWWWW."],
+  mitten: ["..RRR...", ".RRRRR..", ".RRRRRRR", "RRRRRRRR", "RRRRRRR.", "WWWWWW..", "WWWWWW.."],
+  lantern: ["..KKK..", ".KYYYK.", "KYYWYYK", "KYYYYYK", "KYYYYYK", ".KKKKK."],
+  cocoa: [".W.W...", "..W.W..", "BBBBBB.", "BWWWWBB", "BBBBBB.B", "BBBBBBB.", ".BBBB..."],
+  lock: [".KKK.", "K...K", "KKKKK", "KKYKK", "KKKKK"],
+};
+function arcSpr(x, rows, pal, cx, cy, s) {
+  const ox = Math.round(cx - (rows[0].length * s) / 2), oy = Math.round(cy - (rows.length * s) / 2);
+  for (let r = 0; r < rows.length; r++) for (let c = 0; c < rows[r].length; c++) { const k = rows[r][c]; if (pal[k]) { x.fillStyle = pal[k]; x.fillRect(ox + c * s, oy + r * s, s, s); } }
+}
+function arcRR(x, a, b, w, h, r) { x.beginPath(); if (x.roundRect) x.roundRect(a, b, w, h, r); else x.rect(a, b, w, h); }
+function arcPill(x, txt, a, b, bg, fg) {
+  x.font = "bold 11px sans-serif";
+  const w = x.measureText(txt).width + 16;
+  arcRR(x, a, b, w, 20, 10); x.fillStyle = bg; x.fill();
+  x.fillStyle = fg; x.textBaseline = "middle"; x.textAlign = "left"; x.fillText(txt, a + 8, b + 10.5);
+}
+// 한 과목 지도의 모양: 칸 위치, 지금 칸, 공룡과의 거리
+function arcMap(catId) {
+  const list = stageConcepts(catId);
+  const n = list.length, H = 70 + n * ARC_GAP + 56;
+  const pts = list.map((_, i) => [i === 0 ? 110 : i % 2 ? 60 : 160, H - 62 - i * ARC_GAP]);
+  const states = list.map((_, i) => nodeState(list, i));
+  let hero = states.findIndex((st) => st !== "done");
+  const allDone = hero < 0;
+  if (allDone) hero = n;
+  const wrong = states.filter((st) => st === "wrong").length;
+  return { list, n, H, pts, states, hero, allDone, gap: Math.max(0, hero + 1 - wrong), th: arcTheme(catId) };
+}
+// 칸 하나의 표시: 다 푼 칸은 주황 ✓, 틀린 칸은 빨간 !, 잠긴 칸은 흐리게 + 자물쇠
+function arcMark(x, px, fy, st) {
+  if (st === "locked") { arcSpr(x, ARC_S.lock, { K: "#2b2b2b", Y: "#ffd23f" }, px + 9, fy + 8, 2); return; }
+  if (st !== "done" && st !== "wrong") return;
+  x.fillStyle = st === "done" ? "#ffb020" : "#ff4f6a"; x.beginPath(); x.arc(px + 10, fy - 10, 6, 0, 7); x.fill();
+  x.strokeStyle = "#fff"; x.lineWidth = 2; x.beginPath();
+  if (st === "done") { x.moveTo(px + 7, fy - 10); x.lineTo(px + 9.5, fy - 7.5); x.lineTo(px + 13.5, fy - 13); }
+  else { x.moveTo(px + 10, fy - 14); x.lineTo(px + 10, fy - 10); x.moveTo(px + 10, fy - 7.5); x.lineTo(px + 10, fy - 6.5); }
+  x.stroke();
+}
+function arcItem(x, name, px, fy, sz, st) {
+  x.save(); if (st === "locked") x.globalAlpha = 0.32; arcSpr(x, ARC_S[name], ARC_PAL, px, fy, sz); x.restore();
+  arcMark(x, px, fy, st);
+}
+function arcHero(x, t, px, py, scarf) {
+  x.fillStyle = "rgba(0,0,0,.28)"; x.beginPath(); x.ellipse(px, py + 11, 8, 2.5, 0, 0, 7); x.fill();
+  const by = py + Math.sin(t * 5) * 1.5;
+  arcSpr(x, ARC_S.hero, ARC_PAL, px, by, 2);
+  if (scarf) { x.fillStyle = "#e2483d"; x.fillRect(px - 7, by + 3, 14, 3); }
+}
+// 맨 아래: 쫓아오는 공룡과 남은 거리
+function arcChaser(x, t, m, pal, bg, fg, scarf) {
+  if (m.allDone) return;
+  const dy = m.H - 20 - Math.abs(Math.sin(t * 6)) * 3;
+  arcSpr(x, ARC_S.dino, { ...ARC_PAL, ...pal }, 34, dy, 2);
+  if (scarf) { x.fillStyle = "#e2483d"; x.fillRect(44, dy - 6, 16, 4); x.fillRect(50, dy - 6, 4, 10); }
+  arcPill(x, m.gap <= 1 ? "공룡이 바로 뒤에!" : `공룡과 ${m.gap}칸`, 118, m.H - 32, bg, fg);
+}
+function arcTrail(x, m) {
+  const P = m.pts;
+  x.beginPath(); x.moveTo(P[0][0], m.H); x.lineTo(P[0][0], P[0][1]);
+  for (let i = 1; i < P.length; i++) { const [a, b] = P[i - 1], [c, d] = P[i]; x.bezierCurveTo(a, (b + d) / 2, c, (b + d) / 2, c, d); }
+  x.lineTo(P[P.length - 1][0], 60);
+}
+const ARC_DRAW = {
+  // 1. 레트로 오락실: 남색 밤하늘, 핑크 사다리, 방울 속 아이템
+  retro(x, t, m) {
+    const { pts, H } = m, items = ["cherry", "star", "heart", "cake", "gift"], bub = ["#4dff9a", "#5cc8ff", "#ff7ad9"];
+    x.fillStyle = "#17123d"; x.fillRect(0, 0, ARC_W, H);
+    for (let i = 0; i < 60; i++) { x.fillStyle = Math.floor(t * 3 + i) % 4 ? "#3a3290" : "#a69bff"; x.fillRect((i * 53) % ARC_W, (i * 97) % H, 2, 2); }
+    x.strokeStyle = "#ff6fb0"; x.lineWidth = 3; arcRR(x, 6, 48, ARC_W - 12, H - 54, 8); x.stroke();
+    pts.forEach(([px, py], i) => {
+      const a = Math.min(px, 110) - 30, b = Math.max(px, 110) + 30;
+      x.fillStyle = "#ff6fb0"; x.fillRect(a, py + 14, b - a, 7);
+      x.strokeStyle = "#ffd1e6"; x.lineWidth = 1.5;
+      for (let k = a; k < b; k += 7) { x.beginPath(); x.moveTo(k, py + 21); x.lineTo(k + 5, py + 14); x.stroke(); }
+      const y1 = i < pts.length - 1 ? pts[i + 1][1] + 14 : 40, y2 = py + 14;
+      x.fillStyle = "#7de2ff"; x.fillRect(104, y1, 2, y2 - y1); x.fillRect(114, y1, 2, y2 - y1);
+      for (let k = y1 + 4; k < y2; k += 6) x.fillRect(104, k, 12, 2);
+    });
+    pts.forEach(([px, py], i) => {
+      const st = m.states[i];
+      if (i === m.hero) return arcHero(x, t, px, py);
+      const fy = py + Math.sin(t * 2 + i) * 2;
+      x.fillStyle = st === "locked" ? "rgba(120,120,160,.22)" : st === "wrong" ? "rgba(255,80,100,.22)" : "rgba(80,255,170,.16)";
+      x.strokeStyle = st === "locked" ? "#55508a" : st === "wrong" ? "#ff4f6a" : bub[i % 3];
+      x.lineWidth = 2; x.beginPath(); x.arc(px, fy, 14, 0, 7); x.fill(); x.stroke();
+      x.fillStyle = "rgba(255,255,255,.8)"; x.fillRect(px - 8, fy - 9, 3, 3);
+      arcItem(x, items[i % items.length], px, fy, 2, st);
+    });
+    for (let i = 0; i < 6; i++) { const yy = H - ((t * 25 + i * 90) % H); x.strokeStyle = "rgba(125,226,255,.5)"; x.lineWidth = 1.5; x.beginPath(); x.arc(20 + i * 38, yy, 4, 0, 7); x.stroke(); }
+    arcRR(x, 62, 10, 96, 30, 15); x.fillStyle = "#ff6fb0"; x.fill();
+    x.fillStyle = "#fff"; x.font = "bold 15px sans-serif"; x.textAlign = "center"; x.textBaseline = "middle";
+    x.fillText(m.allDone ? "탈출 성공!" : "EXIT 탈출!", 110, 26); x.textAlign = "left";
+    if (m.allDone) arcHero(x, t, 180, 22);
+    arcChaser(x, t, m, {}, "#ff6fb0", "#fff");
+  },
+  // 2. 옛날 게임: 검은 화면, 알록달록한 철골 발판과 사다리, 맨 위 로켓
+  oldgame(x, t, m) {
+    const { pts, H } = m, cols = ["#ff4fa3", "#ffd23f", "#3fd2ff", "#38e07b", "#ff7a2f"], items = ["heart", "star", "burger", "coin", "mush"];
+    x.fillStyle = "#000"; x.fillRect(0, 0, ARC_W, H);
+    for (let i = 0; i < 40; i++) { x.fillStyle = cols[i % 5]; x.beginPath(); x.arc((i * 37 + 10) % ARC_W, ((i * 71) % (H - 100)) + 50, 1.6, 0, 7); x.fill(); }
+    pts.forEach(([px, py], i) => {
+      const a = Math.min(px, 110) - 32, b = Math.max(px, 110) + 32;
+      x.strokeStyle = cols[i % 5]; x.lineWidth = 2; x.beginPath(); x.moveTo(a, py + 14); x.lineTo(b, py + 14); x.moveTo(a, py + 20); x.lineTo(b, py + 20); x.stroke();
+      x.lineWidth = 1; x.beginPath(); for (let k = a; k < b - 3; k += 6) { x.moveTo(k, py + 20); x.lineTo(k + 3, py + 14); x.lineTo(k + 6, py + 20); } x.stroke();
+      const y1 = i < pts.length - 1 ? pts[i + 1][1] + 20 : 44, y2 = py + 14, lx = i % 2 ? 96 : 118;
+      x.fillStyle = cols[(i + 2) % 5]; x.fillRect(lx, y1, 2, y2 - y1); x.fillRect(lx + 10, y1, 2, y2 - y1);
+      for (let k = y1 + 4; k < y2; k += 6) x.fillRect(lx, k, 12, 2);
+    });
+    pts.forEach(([px, py], i) => {
+      if (i === m.hero) return arcHero(x, t, px, py + 1);
+      arcItem(x, items[i % items.length], px, py + Math.sin(t * 3 + i) * 1.5, 3, m.states[i]);
+    });
+    x.fillStyle = "#fff"; x.font = "bold 16px monospace"; x.textAlign = "center"; x.textBaseline = "middle";
+    x.fillText(m.allDone ? "CLEAR!" : "GAME ON!", 110, 26); x.textAlign = "left";
+    for (let i = 0; i < 3; i++) arcSpr(x, ARC_S.heart, { R: "#ff4fa3", W: "#ff4fa3" }, 18 + i * 14, 26, 2);
+    x.save(); x.translate(194, 24 + Math.sin(t * 4) * 2);
+    x.fillStyle = "#ffd23f"; x.beginPath(); x.moveTo(0, -10); x.lineTo(6, 4); x.lineTo(-6, 4); x.fill();
+    x.fillStyle = "#ff4fa3"; x.fillRect(-4, 4, 8, 4); x.fillStyle = "#ff7a2f"; x.fillRect(-2, 8, 4, 3 + (Math.sin(t * 20) + 1) * 2); x.restore();
+    if (m.allDone) arcHero(x, t, 172, 26);
+    arcChaser(x, t, m, { G: "#38e07b", H: "#1f9e52", L: "#38e07b" }, "#ffd23f", "#000");
+  },
+  // 3. 블록 점프: 파란 하늘, 눈 달린 구름, ? 블록을 밟고 성까지
+  block(x, t, m) {
+    const { pts, H } = m;
+    const g = x.createLinearGradient(0, 0, 0, H); g.addColorStop(0, "#4f86e8"); g.addColorStop(1, "#a9d0ff"); x.fillStyle = g; x.fillRect(0, 0, ARC_W, H);
+    const cloud = (cx, cy) => {
+      x.fillStyle = "#fff"; x.beginPath(); x.arc(cx - 10, cy, 9, 0, 7); x.arc(cx + 2, cy - 5, 11, 0, 7); x.arc(cx + 14, cy, 8, 0, 7); x.fill();
+      x.fillStyle = "#222"; x.fillRect(cx - 1, cy - 6, 2, 5); x.fillRect(cx + 5, cy - 6, 2, 5);
+    };
+    for (let y = 100, k = 0; y < H - 120; y += 120, k++) cloud((k % 2 ? 190 : 30) + Math.sin(t * 0.5 + k) * 5, y);
+    x.fillStyle = "#7fd37a"; x.fillRect(166, H - 88, 30, 60); x.fillStyle = "#f0b98a"; x.fillRect(184, H - 66, 40, 38);
+    [[20, H - 28, 22], [48, H - 28, 16]].forEach(([a, b, r]) => {
+      x.fillStyle = "#22a33a"; x.beginPath(); x.arc(a, b, r, Math.PI, 0); x.fill();
+      x.fillStyle = "#111"; x.fillRect(a - 4, b - r + 7, 2, 4); x.fillRect(a + 3, b - r + 7, 2, 4);
+    });
+    x.fillStyle = "#c97a4a"; x.fillRect(0, H - 28, ARC_W, 28);
+    x.fillStyle = "#a95f35"; for (let k = -10; k < ARC_W; k += 10) { x.beginPath(); x.moveTo(k, H); x.lineTo(k + 6, H); x.lineTo(k + 14, H - 24); x.lineTo(k + 8, H - 24); x.fill(); }
+    x.fillStyle = "#8a4a22"; x.fillRect(0, H - 28, ARC_W, 3);
+    pts.forEach(([px, py], i) => {
+      const st = m.states[i], by = py + 12;
+      x.fillStyle = st === "done" ? "#b0703a" : st === "locked" ? "rgba(240,190,60,.45)" : st === "wrong" ? "#e2614d" : "#f6be2c";
+      x.strokeStyle = "#5a3a10"; x.lineWidth = 2; arcRR(x, px - 13, by, 26, 22, 3); x.fill(); x.stroke();
+      x.fillStyle = st === "done" ? "#8a5428" : "#fff3c2"; [[3, 3], [20, 3], [3, 16], [20, 16]].forEach(([a, b]) => x.fillRect(px - 13 + a, by + b, 3, 3));
+      if (i === m.hero) return arcHero(x, t, px, py);
+      if (st === "done") { arcSpr(x, i % 2 ? ARC_S.mush : ARC_S.coin, ARC_PAL, px, py + Math.sin(t * 4 + i) * 2, 2); arcMark(x, px + 3, by + 8, "done"); return; }
+      x.fillStyle = st === "wrong" ? "#fff" : "#7a4f12"; x.font = "bold 15px sans-serif"; x.textAlign = "center"; x.textBaseline = "middle";
+      x.fillText(st === "wrong" ? "!" : "?", px, by + 12); x.textAlign = "left";
+      if (st === "locked") arcSpr(x, ARC_S.lock, { K: "#2b2b2b", Y: "#ffd23f" }, px + 12, by + 2, 2);
+    });
+    x.fillStyle = "#e9e2f5"; x.fillRect(84, 26, 52, 28); x.fillStyle = "#f27aa0";
+    [[84, 16], [102, 8], [120, 16]].forEach(([a, b]) => { x.fillRect(a, b, 16, 12); x.beginPath(); x.moveTo(a - 2, b); x.lineTo(a + 8, b - 10); x.lineTo(a + 18, b); x.fill(); });
+    x.fillStyle = "#7a5a3a"; x.fillRect(104, 40, 12, 14);
+    x.fillStyle = "#444"; x.fillRect(154, 8, 2, 46); x.fillStyle = "#e2483d"; x.beginPath(); x.moveTo(156, 8); x.lineTo(172, 13 + Math.sin(t * 5) * 2); x.lineTo(156, 18); x.fill();
+    if (m.allDone) arcHero(x, t, 60, 44);
+    arcChaser(x, t, m, {}, "#fff", "#a95f35");
+  },
+  // 4. 겨울 숲: 눈 내리는 밤, 눈길 따라 불 켜진 오두막으로
+  winter(x, t, m) {
+    const { pts, H } = m, items = ["snowman", "mitten", "gift", "lantern", "cocoa"];
+    const g = x.createLinearGradient(0, 0, 0, 160); g.addColorStop(0, "#2a3f7a"); g.addColorStop(1, "#6f8fc6"); x.fillStyle = g; x.fillRect(0, 0, ARC_W, H);
+    const tree = (cx, by, h, c) => { x.fillStyle = c; for (let k = 0; k < 4; k++) { const w = h * (0.55 - k * 0.1), y = by - k * h * 0.22; x.beginPath(); x.moveTo(cx - w / 2, y); x.lineTo(cx, y - h * 0.4); x.lineTo(cx + w / 2, y); x.fill(); } };
+    [[20, 140, 90], [62, 130, 80], [178, 140, 95], [212, 130, 70]].forEach(([a, b, h]) => tree(a, b, h, "#1d3b3a"));
+    x.fillStyle = "#e6eef9"; x.beginPath(); x.moveTo(0, 140); x.quadraticCurveTo(110, 120, ARC_W, 140); x.lineTo(ARC_W, H); x.lineTo(0, H); x.fill();
+    for (let y = 230, k = 0; y < H - 40; y += 95, k++) tree(k % 2 ? 208 : 12, y, 62, "#24524c");
+    x.lineCap = "round"; x.strokeStyle = "#c3d3ea"; x.lineWidth = 22; arcTrail(x, m); x.stroke();
+    x.strokeStyle = "#f7fbff"; x.lineWidth = 16; arcTrail(x, m); x.stroke(); x.lineCap = "butt";
+    x.fillStyle = "#9fb3d4";
+    for (let i = 0; i < Math.min(m.hero, pts.length - 1); i++) { const [a, b] = pts[i], [c, d] = pts[i + 1]; for (let k = 1; k < 4; k++) { x.beginPath(); x.ellipse(a + ((c - a) * k) / 4 + (k % 2 ? 3 : -3), b + ((d - b) * k) / 4, 2, 3, 0, 0, 7); x.fill(); } }
+    x.fillStyle = "#6b4a3a"; x.fillRect(80, 36, 60, 34); x.fillStyle = "#f4f8ff"; x.beginPath(); x.moveTo(72, 38); x.lineTo(110, 12); x.lineTo(148, 38); x.fill();
+    const lg = x.createRadialGradient(110, 54, 2, 110, 54, 40); lg.addColorStop(0, "rgba(255,220,140,.9)"); lg.addColorStop(1, "rgba(255,220,140,0)");
+    x.fillStyle = lg; x.fillRect(60, 6, 100, 100); x.fillStyle = "#ffd98a"; x.fillRect(100, 46, 20, 16); x.fillStyle = "#6b4a3a"; x.fillRect(109, 46, 2, 16);
+    pts.forEach(([px, py], i) => {
+      x.fillStyle = "rgba(80,100,140,.18)"; x.beginPath(); x.ellipse(px, py + 11, 12, 3, 0, 0, 7); x.fill();
+      if (i === m.hero) return arcHero(x, t, px, py, true);
+      arcItem(x, items[i % items.length], px, py, 2, m.states[i]);
+    });
+    for (let i = 0; i < 70; i++) { const sp = 10 + (i % 5) * 6, yy = (i * 37 + t * sp) % H, xx = (i * 53 + Math.sin(t + i) * 8) % ARC_W; x.fillStyle = i % 7 ? "rgba(255,255,255,.85)" : "rgba(255,240,200,.95)"; x.beginPath(); x.arc(xx, yy, i % 7 ? 1.3 : 2.4, 0, 7); x.fill(); }
+    if (m.allDone) arcHero(x, t, 150, 62, true);
+    arcChaser(x, t, m, { G: "#7f97c4", H: "#5a6f9a", L: "#7f97c4" }, "rgba(255,255,255,.92)", "#2a3f7a", true);
+  },
+};
+function arcDrawMap(x, t, m) { ARC_DRAW[m.th.key](x, t, m); }
+// 과목 카드 위의 작은 그림: 같은 장소에서 공룡이 루미를 쫓는 장면
+function arcDrawThumb(x, t, th) {
+  const W = 150, Hh = 64, k = th.key;
+  if (k === "block" || k === "winter") { const g = x.createLinearGradient(0, 0, 0, Hh); g.addColorStop(0, k === "block" ? "#4f86e8" : "#2a3f7a"); g.addColorStop(1, k === "block" ? "#a9d0ff" : "#6f8fc6"); x.fillStyle = g; }
+  else x.fillStyle = th.bg;
+  x.fillRect(0, 0, W, Hh);
+  if (k === "retro") {
+    for (let i = 0; i < 18; i++) { x.fillStyle = Math.floor(t * 3 + i) % 4 ? "#3a3290" : "#a69bff"; x.fillRect((i * 37) % W, (i * 23) % 50, 2, 2); }
+    x.fillStyle = "#ff6fb0"; x.fillRect(0, 54, W, 6);
+    x.fillStyle = "#7de2ff"; x.fillRect(118, 14, 2, 40); x.fillRect(128, 14, 2, 40); for (let j = 18; j < 54; j += 6) x.fillRect(118, j, 12, 2);
+    x.strokeStyle = "#4dff9a"; x.lineWidth = 2; x.beginPath(); x.arc(140, 12 + Math.sin(t * 2) * 2, 8, 0, 7); x.stroke();
+  }
+  if (k === "oldgame") {
+    const cols = ["#ff4fa3", "#ffd23f", "#3fd2ff", "#38e07b"];
+    for (let i = 0; i < 14; i++) { x.fillStyle = cols[i % 4]; x.fillRect((i * 41) % W, (i * 17) % 44, 2, 2); }
+    x.strokeStyle = "#3fd2ff"; x.lineWidth = 2; x.beginPath(); x.moveTo(0, 54); x.lineTo(W, 54); x.moveTo(0, 60); x.lineTo(W, 60); x.stroke();
+    arcSpr(x, ARC_S.star, ARC_PAL, 132, 22 + Math.sin(t * 3) * 2, 2);
+  }
+  if (k === "block") {
+    x.fillStyle = "#c97a4a"; x.fillRect(0, 54, W, 10);
+    x.fillStyle = "#f6be2c"; x.strokeStyle = "#5a3a10"; x.lineWidth = 2; arcRR(x, 118, 10, 22, 20, 3); x.fill(); x.stroke();
+    x.fillStyle = "#7a4f12"; x.font = "bold 13px sans-serif"; x.textAlign = "center"; x.textBaseline = "middle"; x.fillText("?", 129, 21); x.textAlign = "left";
+    x.fillStyle = "#1fae3a"; x.fillRect(102, 38, 14, 16); x.fillRect(100, 34, 18, 6);
+  }
+  if (k === "winter") {
+    x.fillStyle = "#e6eef9"; x.fillRect(0, 50, W, 14);
+    x.fillStyle = "#24524c"; x.beginPath(); x.moveTo(120, 52); x.lineTo(132, 14); x.lineTo(144, 52); x.fill();
+    for (let i = 0; i < 16; i++) { x.fillStyle = "#fff"; x.beginPath(); x.arc((i * 29) % W, (i * 13 + t * 12) % Hh, 1.2, 0, 7); x.fill(); }
+  }
+  const pal = { retro: {}, block: {}, oldgame: { G: "#38e07b", H: "#1f9e52", L: "#38e07b" }, winter: { G: "#7f97c4", H: "#5a6f9a", L: "#7f97c4" } }[k];
+  arcSpr(x, ARC_S.dino, { ...ARC_PAL, ...pal }, 28, 40 - Math.abs(Math.sin(t * 6)) * 2, 2);
+  arcSpr(x, ARC_S.hero, ARC_PAL, 78, 44 + Math.sin(t * 5), 2);
+}
+// 화면에 있는 탈출 지도 그림(canvas)을 그리고, 움직임을 켜 두었으면 계속 움직인다
+let arcRaf = 0;
+function startArcade() {
+  cancelAnimationFrame(arcRaf);
+  const items = [...document.querySelectorAll("canvas[data-arc]")].map((cv) => {
+    const map = cv.dataset.arc === "map", lw = map ? ARC_W : 150;
+    const m = map ? arcMap(cv.dataset.c) : null, th = arcTheme(cv.dataset.c);
+    const r = cv.getBoundingClientRect(), dpr = Math.min(2, window.devicePixelRatio || 1);
+    cv.width = Math.max(1, Math.round(r.width * dpr)); cv.height = Math.max(1, Math.round(r.height * dpr));
+    const x = cv.getContext("2d"), sc = (r.width / lw) * dpr;
+    x.setTransform(sc, 0, 0, sc, 0, 0);
+    return { cv, draw: (tt) => (map ? arcDrawMap(x, tt, m) : arcDrawThumb(x, tt, th)) };
+  });
+  if (!items.length) return;
+  const still = ui.lumiStill || window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+  items.forEach((o) => o.draw(0));
+  if (still) return;
+  let last = 0;
+  const tick = (ms) => {
+    if (!items[0].cv.isConnected) return;
+    if (ms - last > 50) { last = ms; items.forEach((o) => o.draw(ms / 1000)); }
+    arcRaf = requestAnimationFrame(tick);
+  };
+  arcRaf = requestAnimationFrame(tick);
+}
+// 시험 공부의 '주제별 공부': 추천 주제 + 기타(직접 적기)
+function topicSection() {
+  const left = topicGenLeft(), busy = ui.topicBusy;
+  return `<div class="sec-title" style="margin:6px 2px 0" id="l-topic"><h2 style="font-size:calc(20px * var(--fs, 1))">주제별 공부</h2><span>2030에게 쓸모 있는 주제</span></div>
+    <div class="topic-grid">${topicList().map((t) => {
+      const list = stageConcepts(t.cat), ok = list.filter(mastered).length;
+      return `<button class="topic-card ${list.length && ok === list.length ? "clear" : ""}" data-act="topic-open" data-c="${t.cat}"><span class="tp-i" aria-hidden="true">${t.icon}</span><b>${esc(t.name)}</b><small>${esc(t.desc)}</small><span class="tp-n num">${ok}/${list.length}</span></button>`;
+    }).join("")}
+      <button class="topic-card add ${ui.topicInput ? "on" : ""}" data-act="topic-input" aria-expanded="${!!ui.topicInput}"><span class="tp-i" aria-hidden="true">＋</span><b>기타</b><small>주제 직접 적기</small></button>
+    </div>
+    ${ui.topicInput ? `<section class="card topic-form">
+      <label for="topicIn"><b>공부하고 싶은 주제</b></label>
+      <input class="field" id="topicIn" maxlength="20" autocomplete="off" placeholder="예: 퇴직연금, 금리 인하, 전세 계약" value="${esc(ui.topicDraft || "")}" ${busy ? "disabled" : ""}>
+      <button class="btn" data-act="topic-make" ${busy || left <= 0 ? "disabled" : ""}>${busy ? "루미가 만드는 중…" : left <= 0 ? "오늘은 다 만들었어요" : "이 주제로 공부 만들기"}</button>
+      <p class="hint" style="margin:0">루미(AI)가 개념 3개와 OX 퀴즈를 만들어요. 하루 ${TOPIC_DAY}개까지 · 오늘 ${Math.max(0, left)}개 남음. 만든 주제는 이 기기(연결하면 내 계정)에 저장돼서 다시 열 때는 한도를 쓰지 않아요.</p>
+    </section>` : ""}`;
+}
+function viewTopic(cat) {
+  const t = topicByCat(cat), list = stageConcepts(cat), ok = list.filter(mastered).length;
+  return `${learnHead()}
+  <main class="scroll">
+    <div class="stage-head"><button class="icon-btn" data-act="stage-close" aria-label="경제 공부로">${ICON.back}</button><div><h2>${t.icon} ${esc(t.name)}</h2><span class="hint">맞힌 개념 ${ok}/${list.length} · 개념마다 OX 3단계</span></div></div>
+    ${t.mine ? `<p class="hint" style="margin:0 2px">루미(AI)가 만든 주제라 틀린 내용이 있을 수 있어요.</p>` : ""}
+    <section class="card isl-list">${list.map((c, i) => {
+      const lv = curLv(c);
+      const [cls, word] = mastered(c) ? ["b-green", "완료"] : isWrong(c) ? ["b-up", "오답"] : lv ? ["b-down", `${lv + 1}단계`] : ["b-flat", "안 풂"];
+      return `<button class="isl-row" data-act="concept-open" data-id="${c.id}"><span class="isl-no num">${i + 1}</span><span class="isl-t">${esc(c.term)}<small class="hint" style="display:block;font-weight:400">${esc(c.short || "")}</small></span><span class="badge ${cls}">${word}</span></button>`;
+    }).join("")}</section>
+    ${t.mine ? `<button class="link-btn" style="align-self:center" data-act="topic-del" data-c="${cat}">이 주제 지우기</button>` : ""}
+    <p class="foot">개념을 누르면 설명·OX 퀴즈와 관련 뉴스를 볼 수 있어요.</p>
+  </main>`;
+}
+async function makeTopic() {
+  if (ui.topicBusy) return;
+  const topic = (document.getElementById("topicIn")?.value || "").replace(/\s+/g, " ").trim();
+  ui.topicDraft = topic;
+  if (!topic) { toast("공부할 주제를 적어 주세요"); return; }
+  const same = topicList().find((t) => t.name.replace(/\s/g, "") === topic.replace(/\s/g, ""));
+  if (same) { ui.learnTopic = same.cat; ui.topicInput = false; render(); window.scrollTo(0, 0); return; }
+  if (topicGenLeft() <= 0) { toast(`직접 적는 주제는 하루 ${TOPIC_DAY}개까지 만들 수 있어요. 내일 다시 해 주세요`); return; }
+  ui.topicBusy = true; render();
+  try {
+    const j = await getJson("/api/ask", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ topic, lv: profile.level ?? null }) });
+    const day = ymd(today0()), g = learnState.topicGen || {};
+    learnState.topicGen = { day, n: (g.day === day ? g.n : 0) + 1 };
+    if (!j.ok) { saveLearn(); toast(j.error || "경제·돈과 관련된 주제로 적어 주세요"); return; }
+    const id = "u" + Date.now().toString(36);
+    const concepts = j.concepts.map((c, i) => ({ id: `${id}-${i + 1}`, term: c.term, kw: c.kw, short: c.short, body: c.body, me: c.me, quiz: c.quizzes[0], more: c.quizzes.slice(1), added: day }));
+    learnState.custom = [...(learnState.custom || []), { id, name: j.name || topic, at: Date.now(), concepts }];
+    saveLearn(); ensureCustom();
+    ui.learnTopic = id; ui.topicInput = false; ui.topicDraft = "";
+    toast(`‘${j.name || topic}’ 공부를 만들었어요`);
+  } catch (err) {
+    toast(err.body?.error || "주제 공부를 만들지 못했어요. 잠시 후 다시 해 주세요");
+  } finally {
+    ui.topicBusy = false;
+    if (route() === "learn") { render(); window.scrollTo(0, 0); }
+  }
+}
+function viewStage(catId) {
+  if (islandNames(catId).length) return viewIslands(catId);
+  const m = arcMap(catId);
+  const done = m.list.filter(mastered).length;
+  const word = { done: "완료", wrong: "틀림", doing: "진행 중", open: "시작", locked: "잠김" };
+  return `${learnHead()}
+  <main class="scroll">
+    <div class="stage-head"><button class="icon-btn" data-act="stage-close" aria-label="탈출 지도 목록으로">${ICON.back}</button><div><h2>${esc(catName(catId))}</h2><span class="hint">개념 ${done}/${m.n} 완료 · 아래에서 위로 올라가요</span></div></div>
+    <div class="arcade" style="aspect-ratio:${ARC_W}/${m.H};background:${m.th.bg};border-color:${m.th.gir}">
+      <canvas data-arc="map" data-c="${catId}" aria-hidden="true"></canvas>
+      ${m.list.map((c, i) => {
+        const st = m.states[i], [px, py] = m.pts[i];
+        const tag = i === m.hero ? `지금 여기${st === "doing" ? ` · ${curLv(c) + 1}단계` : ""}` : st === "doing" ? `${curLv(c) + 1}단계` : st === "wrong" ? "다시 풀기" : "";
+        return `<button class="arc-node ${px > 110 ? "r" : ""} ${st}" style="left:${((px / ARC_W) * 100).toFixed(2)}%;top:${((py / m.H) * 100).toFixed(2)}%" data-act="${st === "locked" ? "node-locked" : "concept-open"}" data-id="${c.id}" aria-label="${esc(c.term)} ${word[st]}">
+          <span class="hit"></span><span class="lb">${tag ? `<small>${tag}</small>` : ""}${esc(c.term)}</span></button>`;
+      }).join("")}
+    </div>
+    <p class="foot">앞 개념의 1단계를 맞히면 다음 칸이 열려요. 틀린 칸이 있으면 공룡이 한 칸 다가와요.</p>
+  </main>`;
+}
+// 섬 화면: 섬 목록(지그재그로 이어진 큰 카드) → 섬을 누르면 그 안의 개념 목록 → 개념을 누르면 문제 화면(#quiz)
+function viewIslands(catId) {
+  const names = islandNames(catId);
+  const n = ui.learnIsland;
+  if (n && names[n - 1] && islandOpen(catId, n)) {
+    const list = islandConcepts(catId, n);
+    const ok = list.filter(mastered).length;
+    return `${learnHead()}
+  <main class="scroll">
+    <div class="stage-head"><button class="icon-btn" data-act="island-close" aria-label="섬 목록으로">${ICON.back}</button><div><h2>${n}섬 · ${esc(names[n - 1])}</h2><span class="hint">맞힌 개념 ${ok}/${list.length} · 모두 맞히면 다음 섬이 열려요</span></div></div>
+    <section class="card isl-list">${list.map((c, i) => {
+      const [cls, word] = mastered(c) ? ["b-green", "맞힘"] : isWrong(c) ? ["b-up", "틀림"] : ["b-flat", "안 풀었음"];
+      return `<button class="isl-row" data-act="concept-open" data-id="${c.id}"><span class="isl-no num">${i + 1}</span><span class="isl-t">${esc(c.term)}</span><span class="badge ${cls}">${word}</span></button>`;
+    }).join("")}</section>
+  </main>`;
+  }
+  const all = stageConcepts(catId);
+  const cards = names.map((name, i) => {
+    const k = i + 1, list = islandConcepts(catId, k), ok = list.filter(mastered).length;
+    const done = ok === list.length, open = islandOpen(catId, k);
+    return `<button class="isl ${done ? "done" : open ? "open" : "locked"} ${i % 2 ? "r" : ""}" data-act="${open ? "island-open" : "island-locked"}" data-i="${k}" aria-label="${k}섬 ${esc(name)} ${done ? "완료" : open ? "열림" : "잠김"}">
+      <span class="isl-num num">${done ? "✓" : k}</span>
+      <span class="isl-body"><b>${esc(name)}</b><span class="hint">${open ? `맞힌 개념 ${ok}/${list.length}` : `앞 섬을 다 맞히면 열려요 · 개념 ${list.length}개`}</span>
+        <span class="isl-bar"><i style="width:${Math.round((ok / list.length) * 100)}%"></i></span></span></button>`;
+  }).join(`<span class="isl-path" aria-hidden="true"></span>`);
+  return `${learnHead()}
+  <main class="scroll">
+    <div class="stage-head"><button class="icon-btn" data-act="stage-close" aria-label="공부로">${ICON.back}</button><div><h2>${esc(catName(catId))}</h2><span class="hint">섬 ${names.filter((_, i) => islandDone(catId, i + 1)).length}/${names.length} 완료 · 개념 ${all.filter(mastered).length}/${all.length}</span></div></div>
+    <div class="isl-map">${cards}</div>
+    <p class="foot">섬 안의 문제를 모두 맞히면 다음 섬이 열려요. 섬 안에서는 아무 개념이나 골라 풀 수 있어요.</p>
+  </main>`;
+}
+
+// ───────────────────────── 화면: 우리 지역 혜택 ─────────────────────────
+const SIDO = ["서울특별시", "부산광역시", "대구광역시", "인천광역시", "광주광역시", "대전광역시", "울산광역시", "세종특별자치시", "경기도", "강원특별자치도", "충청북도", "충청남도", "전북특별자치도", "전라남도", "경상북도", "경상남도", "제주특별자치도"];
+const STATUSES = ["대학생", "대학원생", "취준생", "직장인", "자영업", "기타"];
+function regionFields(p) {
+  const r = p.region || {};
+  return `<div class="grid2">
+      <div><label class="lb" for="f-sido">사는 곳 (시·도)</label><select class="field" id="f-sido" data-field="sido"><option value="">선택</option>${SIDO.map((s) => `<option ${r.sido === s ? "selected" : ""}>${s}</option>`).join("")}</select></div>
+      <div><label class="lb" for="f-sigungu">시·군·구</label><input class="field" id="f-sigungu" data-field="sigungu" placeholder="예: 강남구" maxlength="10" value="${esc(r.sigungu || "")}"></div>
+      <div><label class="lb" for="f-status">지금 나는</label><select class="field" id="f-status" data-field="status"><option value="">선택</option>${STATUSES.map((s) => `<option ${p.status === s ? "selected" : ""}>${s}</option>`).join("")}</select></div>
+      <div><label class="lb" for="f-school">학교 (선택)</label><input class="field" id="f-school" data-field="school" placeholder="예: 한국대학교" maxlength="20" value="${esc(p.school || "")}"></div>
+    </div>`;
+}
+function viewBenefits() {
+  const p = profile;
+  const B = data.benefitsApi;
+  const items = (B?.items || []).filter((b) => ui.benTab === "all" || (ui.benTab === "local" ? b.local : !b.local));
+  const rates = data.rates?.available ? data.rates.items : [];
+  const body = !p.region?.sido ? `<p class="hint" style="margin:0">위에서 사는 곳을 고르면 지자체·교육청·정부 혜택을 나이와 상황에 맞춰 찾아드려요.</p>`
+    : !B ? `<p class="hint" style="margin:0">찾는 중…</p>`
+    : B.available === false ? `<p style="margin:0;font-size:calc(14px * var(--fs, 1));line-height:1.6">공공데이터포털 키를 연결하면 정부24 혜택이 여기에 떠요.</p><a class="btn ghost" style="display:inline-flex;align-items:center;margin-top:10px" href="https://www.gov.kr/portal/rcvfvrSvc/main" target="_blank" rel="noopener">보조금24에서 직접 찾기 ${ICON.out}</a>`
+    : items.length ? items.map((b) => `<a class="benefit2" href="${href(b.url || "https://www.gov.kr")}" target="_blank" rel="noopener">
+        <div class="t">${esc(b.name)}</div>
+        ${b.summary ? `<div class="d">${esc(b.summary)}</div>` : ""}
+        <div class="m"><span class="badge ${b.local ? "b-green" : "b-flat"}">${b.local ? "우리 지역" : "정부"}</span><span>${esc(b.org || "")}</span>${b.deadline ? `<span>· ${esc(String(b.deadline).slice(0, 24))}</span>` : ""}</div>
+      </a>`).join("")
+    : `<p class="hint" style="margin:0">${B.error ? esc(B.error) : "조건에 맞는 혜택을 찾지 못했어요."}</p>`;
+  return `${pageHead("우리 지역 혜택")}
+  <main class="scroll">
+    <section class="card form" id="sec-region">${regionFields(p)}<p class="hint" style="margin:0">나이(만 ${p.age || "?"}세)와 관심사(${esc(p.prefs.join("·") || "없음")})도 함께 반영해요.</p></section>
+    ${p.region?.sido ? `<div class="tabs">${[["all", "전체"], ["local", "우리 지역"], ["gov", "정부"]].map(([id, l]) => `<button class="chip ${ui.benTab === id ? "on" : ""}" data-act="ben-tab" data-t="${id}">${l}</button>`).join("")}</div>` : ""}
+    <section class="card" style="padding:6px 16px">${body}</section>
+    ${p.school ? `<a class="card line" href="https://search.naver.com/search.naver?query=${encodeURIComponent(p.school + " 장학금 공지")}" target="_blank" rel="noopener"><span><b>${esc(p.school)}</b> <span class="hint">장학·지원 공지 찾아보기</span></span>${ICON.out}</a>` : ""}
+    ${rates.length ? `<section class="card"><div class="sec-title"><h2>은행 정기예금 금리 TOP 3</h2><span>12개월 · 기본금리</span></div>
+      ${rates.map((r) => `<div class="row" style="min-height:40px"><span style="font-size:calc(14px * var(--fs, 1))"><b>${esc(r.bank)}</b> ${esc(r.product)}</span><span class="num" style="font-weight:700;color:var(--green);white-space:nowrap">연 ${fmt(r.base, 2)}%</span></div>`).join("")}</section>` : ""}
+    <p class="foot">정부24 ‘대한민국 공공서비스 정보’ 기준이에요. 학교별 공지는 자동으로 모을 수 없어서 검색으로 연결해요.<br>조건은 바뀔 수 있으니 신청 전에 꼭 확인하세요.</p>
+  </main>`;
+}
+
+async function loadBrief() {
+  // 쉽게 풀이는 하루 2번까지 새로 부른다(이미 받아 둔 풀이를 다시 보는 건 세지 않음)
+  const p = profile;
+  const who = [p.status, ...(p.aims || []).slice(0, 2).map((a) => AIM_LABEL[a])].filter(Boolean).join(", ");
+  const lang = ui.lang === "en" ? "&lang=en" : "";
+  const interests = `${myInterests(5).join(",")}&lv=${p.level ?? ""}&who=${encodeURIComponent(who)}${lang}`; // 같은 날 같은 조건이면 받아 둔 풀이를 다시 쓴다
+  const saved = lastGet().brief;
+  if (saved?.day === ymd(today0()) && saved.interests === interests) {
+    data.brief = saved.data;
+    if (["home", "news"].includes(route())) render();
+    return;
+  }
+  const used = aiUse();
+  if (used.brief >= AI_LIMIT.brief) {
+    data.brief = { available: true, points: [], error: `오늘 쉽게 풀이는 ${AI_LIMIT.brief}번 다 봤어요. 내일 아침에 새로 풀어 드릴게요.` };
+    if (["home", "news"].includes(route())) render();
+    return;
+  }
+  try {
+    data.brief = await getJson(`/api/brief?interests=${encodeURIComponent(myInterests(5).join(","))}&lv=${p.level ?? ""}&who=${encodeURIComponent(who)}${lang}`);
+    if (data.brief?.points?.length) { const v = aiUse(); v.brief++; aiSave(v); lastSet("brief", { day: ymd(today0()), interests, data: data.brief }); }
+  } catch { data.brief = null; }
+  if (["home", "news"].includes(route())) render();
+}
+function briefReady() { return data.brief?.available && data.brief.points?.length; }
+
+async function loadBenefits() {
+  const r = profile?.region;
+  if (!r?.sido) { data.benefitsApi = null; return; }
+  const qs = new URLSearchParams({ sido: r.sido, sigungu: r.sigungu || "", age: profile.age || "", status: profile.status || "", prefs: profile.prefs.join(",") });
+  try { data.benefitsApi = await getJson(`/api/benefits?${qs}`); } catch { data.benefitsApi = { available: true, items: [], error: "혜택 정보를 불러오지 못했어요" }; }
+  if (["home", "benefits"].includes(route())) render();
+}
+
+// ───────────────────────── 상단 검색 ─────────────────────────
+const SUGGEST = ["내 대출, 금리 오르면 이자 얼마?", "지금 환전해도 될까?", "FOMC가 뭐야?", "내 성향에 맞는 저축 방법은?"];
+
+const PAGE_NAME = { my: "마이페이지", risktest: "마이페이지", home: "홈", assets: "내 돈", ledger: "내 돈", learn: "경제 공부", solved: "공부", review: "공부", news: "뉴스", letters: "뉴스레터", watch: "관심 종목", schedule: "일정", benefits: "우리 지역 혜택", layout: "홈 화면 꾸미기", etc: "기타" };
+// 검색창 바로 가기: 화면 안의 칸·버튼까지. [이름, 화면, 위치(id), 찾는 말들, 누르면 할 일(없으면 그 위치로 이동)]
+const SPOTS = [
+  ["모의투자 (가상 1,000만 원 주식 게임)", "invest", "", ["모의투자", "모의주식", "주식 게임", "게임", "시즌", "순위", "랭킹", "채권", "cma", "힌트"]],
+  ["로그아웃 · 기기 연결", "my", "sec-sync", ["로그아웃", "로그인", "기기 연결", "기기", "연결", "구글", "계정", "동기화", "다른 기기"]],
+  ["기본 정보 (닉네임·나이·성별·소득·지역)", "my", "sec-basic", ["기본 정보", "닉네임", "이름", "나이", "성별", "소득", "연봉", "사는 곳", "지역", "학교"]],
+  ["투자 성향 · 관심사", "my", "sec-risk", ["관심사", "관심", "투자 성향", "성향", "선호", "위험", "쇼핑", "여행", "부동산"]],
+  ["투자 성향 정밀 진단 (7문항)", "risktest", "", ["진단", "성향 진단", "성향 테스트", "테스트", "7문항"]],
+  ["지수·주가 (코스피·코스닥)", "home", "h-market", ["코스피", "코스닥", "지수", "주가", "시세"]],
+  ["오늘, 나에게 미치는 영향 (환율·금리)", "home", "h-impact", ["영향", "환율", "환전", "달러", "금리 영향"]],
+  ["오늘의 퀴즈", "home", "h-quiz", ["오늘의 퀴즈", "ox", "오엑스"]],
+  ["순자산 변화 그래프", "assets", "sec-net", ["순자산", "그래프", "자산 변화"]],
+  ["내 자산 진단", "assets", "sec-diag", ["자산 진단", "진단", "비상금"]],
+  ["투자 점검 (성향 vs 실제 투자)", "assets", "sec-invcheck", ["투자 점검", "투자 비중", "성향 비교", "리밸런싱", "쏠림", "포트폴리오"]],
+  ["목표 저축", "assets", "sec-goals", ["목표", "저축", "모으기"]],
+  ["자산·대출 입력", "assets", "sec-assets", ["자산 입력", "자산", "예금", "현금", "대출", "부채", "빚", "이자"]],
+  ["이번 달 예산", "assets", "sec-budget", ["예산", "한 달 예산", "분류별 예산"]],
+  ["소비 분석 · 소비 점검", "assets", "sec-analysis", ["소비 분석", "소비 점검", "점검", "합리", "돈 흐름"]],
+  ["캡처로 기록하기", "ledger", "m-capture", ["캡처", "영수증", "사진", "스크린샷", "카드 내역"]],
+  ["직접 기록하기", "ledger", "m-quick", ["직접 기록", "직접", "현금", "수기"]],
+  ["고정 수입·지출", "ledger", "m-fixed", ["고정", "월세", "월급", "통신비", "자동 기록", "매달"]],
+  ["최근 기록 (고치기·검색)", "ledger", "m-recent", ["최근 기록", "내역", "기록 검색", "기록 고치기", "기록 삭제"]],
+  ["지출 통계 · 루미 피드백", "ledger", "m-summary", ["통계", "지출", "도넛", "차트", "주간", "월간", "소비 피드백", "피드백"]],
+  ["달력으로 보기", "ledger", "m-cal", ["달력", "캘린더"]],
+  ["오늘의 미션 · 빠른 퀴즈", "learn", "l-mission", ["미션", "빠른 퀴즈", "퀴즈", "출석", "레벨", "경험치", "칭호"]],
+  ["탈출 지도 · 투자운용사 섬", "learn", "l-map", ["탈출 지도", "지도", "섬", "투자운용사", "국제금융", "금융경제", "베이지안", "과목", "개념"]],
+  ["요즘 화제 TOP 5", "learn", "l-hot", ["화제", "top", "보도자료", "이번 주 화제"]],
+  ["배지 보관함", "learn", "", ["배지", "뱃지"], "badges-open"],
+  ["내 노트", "learn", "", ["노트", "메모"], "notes-open"],
+  ["푼 문제", "solved", "", ["푼 문제"]],
+  ["복습할 문제", "review", "", ["복습", "틀린 문제", "오답"]],
+  ["오늘의 경제 쉽게 풀이", "news", "", ["쉽게 풀이", "풀이", "오늘의 경제", "정책"]],
+  ["뉴스레터 TOP 5", "letters", "sec-letters", ["뉴스레터", "구독", "머니레터", "뉴닉", "미라클레터", "순살브리핑", "데일리바이트"]],
+  ["관심 종목 (추가·보유 수량)", "watch", "sec-watch", ["관심 종목", "종목", "보유 수량", "수량", "주식"]],
+  ["나를 위한 일정", "schedule", "", ["일정", "세일", "금통위", "fomc", "스케줄"]],
+  ["우리 지역 혜택", "benefits", "sec-region", ["혜택", "지원금", "청년", "동네", "장학", "정기예금", "예금 금리"]],
+  ["홈 화면 꾸미기 (순서·숨기기)", "layout", "sec-layout", ["꾸미기", "순서", "숨기기", "숨기", "배치", "홈 편집"]],
+  ["루미 움직임 켜기·끄기", "etc", "sec-lumi", ["루미 움직임", "움직임", "애니메이션", "멈추기"]],
+  ["내 정보 전부 지우기", "etc", "sec-privacy", ["지우기", "삭제", "초기화", "탈퇴", "개인정보", "데이터"]],
+  ["앱 정보 (데이터 출처)", "etc", "sec-info", ["앱 정보", "버전", "출처", "데이터 출처"]],
+];
+function searchResults() {
+  const q = ui.q.trim();
+  if (!q) return `<div class="sg">이렇게 물어볼 수 있어요</div>${SUGGEST.map((s) => `<button class="si" data-act="ask" data-q="${esc(s)}"><span>${esc(s)}</span><span class="s2">질문</span></button>`).join("")}`;
+  const lc = q.toLowerCase();
+  const has = (s) => String(s || "").toLowerCase().includes(lc);
+  const out = [];
+  const group = (title, rows) => { if (rows.length) out.push(`<div class="sg">${title}</div>${rows.join("")}`); };
+  const m = data.market;
+
+  const quotes = [];
+  if (m) {
+    [["코스피", m.kospi, 2], ["코스닥", m.kosdaq, 2], ["원/달러 환율", m.usd, 1]].forEach(([nm, v, d]) => {
+      if (v && has(nm)) quotes.push(`<div class="si"><span>${nm}</span><span class="num">${fmt(v.v, d)} <span class="${tone(v.pct)}">${pct(v.pct)}</span></span></div>`);
+    });
+    (m.stocks || []).filter((s) => has(s.name)).forEach((s) => quotes.push(`<div class="si"><span>${esc(s.name)} <span class="s2">내 종목</span></span><span class="num">${s.missing ? "-" : fmt(s.v) + "원"} <span class="${tone(s.pct)}">${s.missing ? "" : pct(s.pct)}</span></span></div>`));
+  }
+  const mine = new Set(profile.watch.map((w) => w.name));
+  (ui.sremote || []).filter((r) => !mine.has(r.name)).slice(0, 4)
+    .forEach((r) => quotes.push(`<button class="si" data-act="add-watch-s" data-v="${esc(r.name)}"><span>${esc(r.name)} <span class="s2">${esc(r.market || "")}</span></span><span class="s2" style="color:var(--green);font-weight:700">+ 관심 종목</span></button>`));
+  group("시세·종목", quotes);
+
+  // 경제 용어: 경제 공부 개념에서 찾기 → 누르면 그 개념 카드로
+  group("경제 용어", (data.learn?.concepts || []).filter((c) => has(c.term) || has(c.short)).slice(0, 3)
+    .map((c) => `<button class="si" data-act="open-concept" data-id="${c.id}"><span><b>${esc(c.term)}</b> <span class="s2">${esc(c.short || catName(c.cat))}</span></span><span class="s2">›</span></button>`));
+
+  const pool = [...(data.news?.issues || []), ...(data.news?.forYou || []), ...(data.newsFull?.issues || []), ...(data.newsFull?.forYou || [])];
+  const seen = new Set();
+  const news = pool.filter((n) => has(n.title) && !seen.has(n.url) && seen.add(n.url)).slice(0, 3)
+    .map((n) => `<a class="si" href="${href(n.url)}" target="_blank" rel="noopener"><span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(shortTitle(n.title))}</span><span class="s2">${esc(n.source || "")}</span></a>`);
+  news.push(`<button class="si" data-act="kw" data-k="${esc(q)}"><span>‘${esc(q)}’ 뉴스 더 보기</span><span class="s2">›</span></button>`);
+  group("뉴스", news);
+
+  group("일정", data.calendar.filter((e) => has(e.title) || (e.tags || []).some(has)).slice(0, 3)
+    .map((e) => `<button class="si" data-act="go-schedule" data-all="1"><span>${esc(e.title)}</span><span class="s2">${esc(e.approx ? e.when : e.monthly ? `매달 ${e.monthly}일` : `${Number(e.date.slice(5, 7))}/${Number(e.date.slice(8, 10))}`)}</span></button>`));
+
+  group("우리 지역 혜택", (data.benefitsApi?.items || []).filter((b) => has(b.name) || has(b.summary) || has(b.org)).slice(0, 3)
+    .map((b) => `<a class="si" href="${href(b.url || "https://www.gov.kr")}" target="_blank" rel="noopener"><span>${esc(b.name)}</span><span class="s2">${b.local ? "지역" : "정부"} ${ICON.out}</span></a>`));
+
+  // 바로 가기: 화면 안의 칸·버튼(SPOTS)과 목차 항목. 이름이 딱 맞는 것부터
+  const norm = (x) => String(x).toLowerCase().replace(/\s+/g, "");
+  const qq = norm(q);
+  const score = (label, keys) => {
+    const L = norm(label), K = keys.map(norm);
+    if (K.includes(qq) || L === qq) return 3;
+    if (L.includes(qq) || K.some((k) => k.startsWith(qq))) return 2;
+    if (K.some((k) => k.includes(qq) || (k.length >= 2 && qq.includes(k)))) return 1;
+    return 0;
+  };
+  const jumps = [];
+  SPOTS.forEach(([label, route, target, keys, act]) => { const sc = score(label, keys); if (sc) jumps.push({ sc, label, route, target, act }); });
+  drawerMenu().forEach((g) => {
+    if (g.route) { const sc = score(g.title, []); if (sc) jumps.push({ sc, label: g.title, route: g.route, target: "" }); }
+    g.items.forEach(([label, route, target, sub]) => { const sc = score(label, []); if (sc) jumps.push({ sc, label, route, target, sub, from: g.title }); });
+  });
+  const seenJump = new Set();
+  const jumpRows = jumps.sort((x, y) => y.sc - x.sc)
+    .filter((j) => { const k = j.act || j.route + "#" + (j.target || ""); return !seenJump.has(k) && seenJump.add(k); }).slice(0, 6)
+    .map((j) => `<button class="si" data-act="${j.act || "nav"}" data-route="${j.route}" data-target="${j.target || ""}" ${j.sub ? `data-sub="${j.sub}"` : ""} data-jump="1"><span>${esc(j.label)}</span><span class="s2">${esc(j.from || PAGE_NAME[j.route] || "")} ›</span></button>`);
+  if (jumpRows.length) out.unshift(`<div class="sg">바로 가기</div>${jumpRows.join("")}`); // 화면 이동은 맨 위에
+
+  out.push(`<button class="si ask" data-act="ask" data-q="${esc(q)}"><span style="display:flex;align-items:center;gap:8px">${mascot(22)} 루미에게 ‘${esc(q.length > 16 ? q.slice(0, 16) + "…" : q)}’ 물어보기</span><span>›</span></button>`);
+  return out.join("");
+}
+function refreshResults() {
+  const box = document.getElementById("sresults");
+  if (box) box.innerHTML = searchResults();
+}
+
+// ── AI 사용 한도 (PRD 8번): 루미의 피드백(물어보기·뉴스레터 풀이·가계부 피드백)은 합쳐서 주 3번(월요일에 다시 채움),
+//    쉽게 풀이는 하루 2번, 캡처는 하루 3장(가계부에서 셈). 다 쓰면 15초 광고를 보고 더 받는다
+//    (피드백 +1번은 주 3번까지, 캡처 +3장은 하루 3번까지) ──
+const AI_LIMIT = { fb: 3, brief: 2 };
+const AD_BONUS = { fb: 1, cap: 3 }, AD_MAX = 3, AD_SECONDS = 15;
+const AI_KEY = "myeco.ai.v1";
+function weekKey() { const d = today0(); d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); return ymd(d); } // 이번 주 월요일
+// 이번 주 것(fb·adFb)과 오늘 것(adCap·brief·openAd)을 나눠 센다
+function aiUse() {
+  const day = ymd(today0()), week = weekKey();
+  const out = { day, week, fb: 0, adFb: 0, adCap: 0, brief: 0, openAd: false };
+  let v = {};
+  try { v = JSON.parse(localStorage.getItem(AI_KEY)) || {}; } catch {}
+  // 예전 모양(하루 단위, 질문·뉴스레터 따로)은 이번 주 기록이면 이번 주 횟수로 넘긴다
+  if (!v.week && v.day >= week) { v.week = week; v.fb = v.fb ?? (v.ask || 0) + (v.letter || 0); }
+  if (v.week === week) { out.fb = v.fb || 0; out.adFb = v.adFb || 0; }
+  if (v.day === day) { out.adCap = v.adCap || 0; out.brief = v.brief || 0; out.openAd = !!v.openAd; }
+  return out;
+}
+function aiSave(v) { try { localStorage.setItem(AI_KEY, JSON.stringify(v)); } catch {} }
+// 루미의 마지막 답·가계부 피드백·오늘의 쉽게 풀이는 이 기기에 남겨 둔다 (횟수를 이미 썼으니 새로 고쳐도 다시 보이게)
+const LAST_KEY = "myeco.last.v1";
+function lastGet() { try { return JSON.parse(localStorage.getItem(LAST_KEY)) || {}; } catch { return {}; } }
+function lastSet(k, v) { const o = lastGet(); if (v === null) delete o[k]; else o[k] = v; try { localStorage.setItem(LAST_KEY, JSON.stringify(o)); } catch {} }
+function lastFb(kind) { const f = lastGet()["fb-" + kind]; return f && f.from === periodRange(kind)[0] ? { text: f.text, fb: f.fb } : null; }
+// AI 피드백을 머니 프로필 모양으로: 돈 고민(가장 큰 걱정은 표시) → 루미의 처방
+function moneyFbHtml(F, kind) {
+  const who = esc(profile.nickname || "나");
+  if (!F.fb) return `<p style="margin:0;font-size:calc(14px * var(--fs, 1));line-height:1.7;white-space:pre-line">${esc(F.text)}</p>`;
+  const f = F.fb;
+  return `<div style="flex:1;min-width:0">
+      <h3 class="mp-h" style="margin-top:0">${who}님의 ${kind === "week" ? "이번 주" : "이번 달"} 돈 고민</h3>
+      <p class="mp-story">${esc(f.good || "")} ${f.worry ? `<mark class="worry">${esc(f.worry)}</mark>` : ""}</p>
+      <h3 class="mp-h">루미의 처방</h3>
+      <ol class="mp-acts">${(f.actions || []).slice(0, 3).map((x) => `<li><b>${esc(String(x.title).replace(/[.。]$/, ""))}.</b> ${esc(x.detail)}</li>`).join("")}</ol>
+    </div>`;
+}
+function aiLeft() { const v = aiUse(); return Math.max(0, AI_LIMIT.fb + v.adFb * AD_BONUS.fb - v.fb); }
+function aiCount() { const v = aiUse(); v.fb++; aiSave(v); }
+function adLeft(kind) { const v = aiUse(); return Math.max(0, AD_MAX - (kind === "fb" ? v.adFb : v.adCap)); }
+function capLimit() { return CAPTURE_DAILY + aiUse().adCap * AD_BONUS.cap; }
+function fbLeftText() { const ad = aiUse().adFb; return `이번 주 남은 루미의 피드백 ${aiLeft()}번 (주 ${AI_LIMIT.fb}번${ad ? ` + 광고 ${ad}번` : ""})`; }
+function outOfFb() { return `이번 주 루미의 피드백을 다 썼어요.${adLeft("fb") ? " 광고를 보면 1번 더 받을 수 있어요." : " 이번 주는 광고로 받을 수 있는 만큼 다 받았어요. 월요일에 다시 채워져요!"}`; }
+function adLimitText(kind) { return kind === "fb" ? "이번 주는 광고로 받을 수 있는 만큼 다 받았어요. 월요일에 다시 채워져요!" : "오늘은 광고로 받을 수 있는 만큼 다 받았어요. 내일 다시 만나요!"; }
+function adButton(kind) {
+  return adLeft(kind) ? `<button class="btn ghost" data-act="ad-open" data-k="${kind}">${kind === "fb" ? "광고 보고 더 받기 (15초)" : "광고 보고 3장 더 받기 (15초)"}</button>` : "";
+}
+// 광고 팝업: 지금은 광고망이 없어 '광고 자리(예시)'를 보여준다. 화면을 보고 있는 동안만 15초를 세고, 끝까지 봐야 받기가 켜진다
+function modalAd(m) {
+  const left = AD_SECONDS - m.seen;
+  return `<div class="sec-title" style="margin:0"><h2>광고</h2><span class="num ad-left">${left > 0 ? `${left}초 남음` : "다 봤어요"}</span></div>
+    <div class="ad-slot"><b>광고 자리 (예시)</b><span class="hint">광고망을 연결하면 여기에 실제 광고가 나와요</span></div>
+    <div class="ad-bar" aria-hidden="true"><i style="width:${Math.round((m.seen / AD_SECONDS) * 100)}%"></i></div>
+    <p class="hint" style="margin:0">끝까지 보면 ${m.k === "fb" ? "루미의 피드백 1번" : "캡처 3장"}을 더 받아요 · ${m.k === "fb" ? "이번 주" : "오늘"} ${adLeft(m.k)}번 더 받을 수 있어요</p>
+    <div class="inline"><button class="btn ghost" data-act="ad-close" style="flex:1">닫기</button><button class="btn ad-get" data-act="ad-reward" style="flex:2" ${left > 0 ? "disabled" : ""}>받기</button></div>`;
+}
+// 앱을 열 때 팝업 광고: 하루 처음 열 때 한 번, 로딩 화면이 끝난 뒤. X나 바깥을 누르면 바로 닫힌다 (지금은 광고 자리 예시)
+function viewOpenAd() {
+  return `<div class="sheet-back openad-back" data-act="openad-close">
+    <div class="openad" role="dialog" aria-modal="true" aria-label="광고" data-stop="1">
+      <div class="openad-top"><span class="hint">광고</span><button class="icon-btn" data-act="openad-close" aria-label="광고 닫기">${ICON.close}</button></div>
+      <div class="ad-slot"><b>광고 자리 (예시)</b><span class="hint">광고망을 연결하면 여기에 실제 광고가 나와요</span></div>
+    </div></div>`;
+}
+function showOpenAd() {
+  if (!profile || route() === "onboard" || ui.modal || ui.sheet || aiUse().openAd) return;
+  const v = aiUse(); v.openAd = true; aiSave(v);
+  ui.openAd = true; render();
+}
+function startAd(kind) {
+  if (!adLeft(kind)) { toast(adLimitText(kind)); return; }
+  openModal("ad", { k: kind, seen: 0 });
+  clearInterval(ui.adTimer);
+  ui.adTimer = setInterval(() => {
+    const m = ui.modal;
+    if (!m || m.kind !== "ad") { clearInterval(ui.adTimer); return; }
+    if (document.hidden || m.seen >= AD_SECONDS) return; // 다른 화면(앱 밖)으로 가면 세기를 멈춘다
+    m.seen++;
+    const left = AD_SECONDS - m.seen;
+    document.querySelector(".ad-left")?.replaceChildren(left > 0 ? `${left}초 남음` : "다 봤어요");
+    const bar = document.querySelector(".ad-bar i"); if (bar) bar.style.width = `${Math.round((m.seen / AD_SECONDS) * 100)}%`;
+    if (left <= 0) document.querySelector(".ad-get")?.removeAttribute("disabled");
+  }, 1000);
+}
+function rewardAd() {
+  const m = ui.modal;
+  if (!m || m.kind !== "ad" || m.seen < AD_SECONDS || !adLeft(m.k)) return;
+  const v = aiUse();
+  if (m.k === "fb") v.adFb++; else v.adCap++;
+  aiSave(v);
+  clearInterval(ui.adTimer); ui.modal = null;
+  toast(m.k === "fb" ? "루미의 피드백 1번을 더 받았어요" : "캡처 3장을 더 받았어요");
+  if (m.k === "fb") {
+    if (ui.letter?.limited) ui.letter = { ...ui.letter, error: "", limited: false };
+    if (ui.moneyFb?.limited) ui.moneyFb = null;
+    if (ui.sheet?.limited) { askAi(ui.sheet.q); return; } // 막혔던 질문을 바로 다시 묻는다
+  } else if (ui.capture?.limited) ui.capture = null;
+  render();
+}
+
+async function askAi(q) {
+  const tutFree = tutNext()?.id === "home"; // 튜토리얼 첫 질문은 주 3번 한도에서 빼지 않음
+  if (tutFree) tutDone("home");
+  if (!tutFree && !aiLeft()) {
+    ui.sheet = { q, a: outOfFb(), limited: true };
+    ui.q = ""; ui.searchOpen = false; render(); return;
+  }
+  ui.sheet = { q, loading: true };
+  ui.q = ""; ui.sremote = []; ui.searchOpen = false;
+  render();
+  try {
+    const j = await getJson("/api/ask", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ question: q, ...summaryForAi(), lang: ui.lang || "ko" }) });
+    if (!tutFree) aiCount();
+    ui.sheet = { q, a: j.answer || "답을 만들지 못했어요." };
+    if (j.answer) lastSet("sheet", { day: ymd(today0()), q, a: j.answer });
+  } catch (err) {
+    ui.sheet = { q, a: err.body?.error || "지금은 답할 수 없어요. 잠시 후 다시 시도해 주세요." };
+  }
+  if (ui.sheet) render();
+}
+
+function ago(iso) {
+  const min = Math.round((Date.now() - new Date(iso)) / 60000);
+  if (min < 60) return `${Math.max(min, 1)}분 전`;
+  if (min < 1440) return `${Math.round(min / 60)}시간 전`;
+  return `${Math.round(min / 1440)}일 전`;
+}
+
+function moreQuestion(k) {
+  const skip = `<button class="link-btn" style="padding-left:0;color:var(--sub)" data-act="skip" data-k="${k}">나중에 할게요</button>`;
+  const head = `<span class="hint">알려주면 더 맞춰드려요 · 이 기기에만 저장돼요</span>`;
+  if (k === "debts") return `${head}<p class="q">혹시 대출이 있나요?</p>
+    <div class="inline"><button class="btn ghost" data-act="no-debt" style="flex:1">없어요</button><button class="btn" data-act="go-my" data-focus="debts" style="flex:1">있어요, 입력할게요</button></div>${skip}`;
+  if (k === "region") return `${head}<p class="q">어느 지역에 사세요? 지자체 혜택을 찾아드려요</p>
+    <div class="inline"><label for="q-sido" class="sr">시·도</label><select class="field" id="q-sido" style="flex:1.2"><option value="">시·도</option>${SIDO.map((x) => `<option>${x}</option>`).join("")}</select>
+      <label for="q-sgg" class="sr">시·군·구</label><input class="field" id="q-sgg" placeholder="시·군·구" maxlength="10" style="flex:1"><button class="btn" data-act="set-region">저장</button></div>${skip}`;
+  if (k === "status") return `${head}<p class="q">지금 어떤 상황이에요?</p>
+    <div class="chips">${STATUSES.map((x) => `<button class="chip" data-act="set-status" data-v="${x}">${x}</button>`).join("")}</div>${skip}`;
+  if (k === "aims" || k === "fields") {
+    const sel = ui.qSel?.[k] || [], list = k === "aims" ? AIMS : FIELDS;
+    return `${head}<p class="q">${k === "aims" ? "요즘 돈 목표나 고민이 있나요? (여러 개)" : "관심 있는 분야가 있나요? 그 분야 뉴스를 챙겨드려요 (여러 개)"}</p>
+    ${k === "aims" ? `<div class="chips">${list.map((x) => `<button class="chip ${sel.includes(x) ? "on" : ""}" data-act="q-toggle" data-k="${k}" data-v="${x}" aria-pressed="${sel.includes(x)}">${AIM_LABEL[x]}</button>`).join("")}</div>` : fieldChips(sel, "q-toggle", 'data-k="fields"')}
+    <button class="btn" data-act="q-save" data-k="${k}" ${sel.length ? "" : "disabled"}>저장</button>${skip}`;
+  }
+  if (k === "level") return `${head}<p class="q">경제, 얼마나 알고 있어요? 루미가 설명 수준을 맞출게요</p>
+    <div class="chips">${LEVELS.map((x, i) => `<button class="chip" data-act="set-level" data-v="${i}">${x}</button>`).join("")}</div>${kqLink}${skip}`;
+  if (k === "household") return `${head}<p class="q">지금 누구와 살아요? 생활비와 1인 가구 혜택을 가늠하는 데 써요</p>
+    <div class="chips">${HOUSEHOLDS.map((x) => `<button class="chip" data-act="set-household" data-v="${x}">${x}</button>`).join("")}</div>${skip}`;
+  if (k === "income") return `${head}<p class="q">연 소득은 어느 구간인가요? (혜택 추천에 써요)</p>
+    <div class="chips">${INCOME.slice(1).map((t, i) => `<button class="chip" data-act="set-income" data-v="${i + 1}">${t}</button>`).join("")}</div>${skip}`;
+  if (k === "cash") return `${head}<p class="q">예금·현금은 대략 얼마나 있나요?</p>
+    <div class="inline"><div class="money" style="flex:1"><label for="q-cash" class="sr">예금·현금 (만원)</label><input class="field num" id="q-cash" inputmode="numeric" placeholder="예: 3000"><span class="unit">만원</span></div><button class="btn" data-act="set-cash">저장</button></div>${skip}`;
+  if (k === "payday") return `${head}<p class="q">월급날이 있다면 며칠인가요? 캘린더에 넣어드려요</p>
+    <div class="inline"><div class="money" style="flex:1"><label for="q-pay" class="sr">월급날 (일)</label><input class="field num" id="q-pay" inputmode="numeric" placeholder="예: 25"><span class="unit">일</span></div><button class="btn" data-act="set-payday">저장</button></div>${skip}`;
+  if (k === "gender") return `${head}<p class="q">성별을 알려주실래요? (선택)</p>
+    <div class="chips">${["여성", "남성", "밝히지 않음"].map((g) => `<button class="chip" data-act="set-gender" data-v="${g}">${g}</button>`).join("")}</div>`;
+  return "";
+}
+
+function viewSheet() {
+  const s = ui.sheet;
+  return `<div class="sheet-back" data-act="close-sheet">
+    <div class="sheet" role="dialog" aria-modal="true" aria-label="질문 답변" data-stop="1">
+      <div style="display:flex;justify-content:space-between;align-items:center"><b class="hand" style="font-size:calc(16px * var(--fs, 1))">물어봐요</b><button class="icon-btn" data-act="close-sheet" aria-label="닫기">${ICON.close}</button></div>
+      <div class="qline">${esc(s.q)}</div>
+      <div class="ans">${mascot(40)}<p class="${s.loading ? "hand" : ""}">${s.loading ? "음… 생각하는 중이에요" : esc(s.a)}</p></div>
+      ${!s.loading ? `<p class="hint" style="margin:0">${s.limited ? "" : "참고용 설명이에요. 투자 결정은 직접 판단해 주세요. · "}${fbLeftText()}</p>${s.limited ? adButton("fb") : ""}` : ""}
+    </div></div>`;
+}
+
+// ───────────────────────── 화면: 마이페이지 ─────────────────────────
+function mySections() {
+  const p = profile;
+  const hide = ui.hideMoney;
+  const a = p.assets;
+  const debts = p.debts || [];
+  const total = (Number(a.cash) || 0) + (Number(a.invest) || 0) + (Number(a.other) || 0);
+  const debtSum = debts.reduce((s, d) => s + (Number(d.amount) || 0), 0);
+  const net = total - debtSum;
+  const hasAssets = a.cash !== null || a.invest !== null || a.other !== null;
+  const money = (v) => (hide ? "••••" : man(v));
+
+  // 자산 진단 (입력한 값만으로 계산, 일반적인 기준)
+  const diag = [];
+  if (hasAssets) {
+    const dr = total ? (debtSum / total) * 100 : debtSum ? 100 : 0;
+    diag.push(dr < 20 ? ["b-green", "부채", `자산 대비 부채가 ${fmt(dr)}%로 건전한 편이에요.`]
+      : dr < 50 ? ["b-flat", "부채", `자산 대비 부채가 ${fmt(dr)}%예요. 금리가 오를 때 이자 부담을 같이 봐두세요.`]
+      : ["b-up", "부채", `자산 대비 부채가 ${fmt(dr)}%로 높은 편이에요. 금리가 높은 대출부터 줄이는 걸 고민해 보세요.`]);
+    if (incomeMonthly(p)) {
+      const need = incomeMonthly(p) * 3;
+      diag.push((Number(a.cash) || 0) >= need ? ["b-green", "비상금", `예금·현금이 월 소득 3개월치(약 ${man(need)}) 이상이라 비상금은 충분해요.`]
+        : ["b-up", "비상금", `비상금은 보통 월 소득 3~6개월치를 권해요. 약 ${man(need)}을 목표로 잡아보세요.`]);
+    } else diag.push(["b-flat", "비상금", "‘편집’에서 월 소득을 넣으면 비상금이 충분한지 알려드려요."]);
+    // 투자 비중과 성향 비교는 아래 '투자 점검' 카드에서 (investCheckHtml)
+    const variable = debts.filter((d) => d.kind === "변동").reduce((s, d) => s + (Number(d.amount) || 0), 0);
+    if (variable) diag.push(["b-flat", "금리", `변동금리 대출 ${man(variable)}은 금리가 0.25%p 오르면 월 이자가 약 ${won((variable * 1e4 * 0.0025) / 12)} 늘어요.`]);
+  }
+  const seg = (v, c) => (total && v ? `<div style="width:${(v / total) * 100}%;background:${c}"></div>` : "");
+
+  const watchRows = p.watch.map((w, i) => `<div class="row">
+      <span class="name" style="flex:1">${esc(w.name)}</span>
+      <div class="money" style="width:110px"><label for="qty-${i}" class="sr">${esc(w.name)} 보유 수량</label><input class="field num" id="qty-${i}" inputmode="numeric" placeholder="보유 수량" data-field="qty" data-i="${i}" value="${w.qty ?? ""}"><span class="unit">주</span></div>
+      <button class="icon-btn" data-act="rm-watch" data-i="${i}" aria-label="${esc(w.name)} 삭제">${ICON.x}</button></div>`).join("");
+
+  const debtRows = debts.map((d, i) => `<div class="debt">
+      <div class="inline"><label for="dn-${i}" class="sr">대출 이름</label><input class="field" id="dn-${i}" placeholder="대출 이름 (예: 신용대출)" data-field="debt-name" data-i="${i}" value="${esc(d.name || "")}">
+        <button class="icon-btn" data-act="rm-debt" data-i="${i}" aria-label="대출 삭제">${ICON.x}</button></div>
+      <div class="grid2">
+        <div class="money"><label for="da-${i}" class="sr">대출 잔액 (만원)</label><input class="field num" id="da-${i}" inputmode="numeric" placeholder="잔액" data-field="debt-amount" data-i="${i}" value="${d.amount ?? ""}"><span class="unit">만원</span></div>
+        <div class="money"><label for="dr-${i}" class="sr">금리 (%)</label><input class="field num" id="dr-${i}" inputmode="decimal" placeholder="금리" data-field="debt-rate" data-i="${i}" value="${d.rate ?? ""}"><span class="unit">%</span></div>
+        <div><label for="dk-${i}" class="sr">금리 종류</label><select class="field" id="dk-${i}" data-field="debt-kind" data-i="${i}">${["변동", "고정"].map((k) => `<option ${d.kind === k ? "selected" : ""}>${k}</option>`).join("")}</select></div>
+        <div class="money"><label for="dd-${i}" class="sr">이자 납부일</label><input class="field num" id="dd-${i}" inputmode="numeric" placeholder="이자일" data-field="debt-day" data-i="${i}" value="${d.day ?? ""}"><span class="unit">일</span></div>
+      </div></div>`).join("");
+
+  return {
+    profile: `
+    <section class="card" style="display:flex;align-items:center;gap:14px">
+      ${mascot(56)}
+      <div style="flex:1"><div style="font-size:calc(18px * var(--fs, 1));font-weight:700">${esc(p.nickname || "이름 없음")}님</div>
+      <div class="hint">${p.age ? `만 ${p.age}세 · ` : ""}${riskType(p.avert)} · ${p.prefs.map(esc).join(", ") || "선호 미입력"}</div></div>
+    </section>
+    `,
+    layout: `
+    <section class="card form" id="sec-layout">
+      <div class="sec-title"><h2>홈 화면 꾸미기</h2><button class="link-btn" data-act="layout-reset">처음대로</button></div>
+      <p class="hint" style="margin:0">화살표로 순서를 바꾸고, 눈 버튼으로 칸을 숨겨요. 바꾸는 즉시 미리보기에 보여요.</p>
+      <div class="layout-wrap">
+        ${homePreview()}
+        <div class="layout-lists">
+          <div>
+            <span class="lb">홈 화면 칸 순서</span>
+            ${layout().order.map((id, i, arr) => {
+              const sec = SECTIONS.find((x) => x.id === id);
+              const off = layout().hidden.has(id);
+              return `<div class="lo-row ${off ? "off" : ""}">
+                <span class="lo-n num">${i + 1}</span><span class="lo-t">${esc(sec.label)}</span>
+                <button class="lo-b" data-act="sec-move" data-id="${id}" data-d="-1" ${i === 0 ? "disabled" : ""} aria-label="${esc(sec.label)} 위로">▲</button>
+                <button class="lo-b" data-act="sec-move" data-id="${id}" data-d="1" ${i === arr.length - 1 ? "disabled" : ""} aria-label="${esc(sec.label)} 아래로">▼</button>
+                <button class="lo-b eye" data-act="sec-toggle" data-id="${id}" aria-pressed="${!off}" aria-label="${esc(sec.label)} ${off ? "보이기" : "숨기기"}">${off ? "숨김" : "보임"}</button>
+              </div>`;
+            }).join("")}
+          </div>
+          ${p.watch.length > 1 ? `<div>
+            <span class="lb">시세에 보일 종목 순서</span>
+            ${p.watch.map((w, i, arr) => `<div class="lo-row">
+                <span class="lo-n num">${i + 1}</span><span class="lo-t">${esc(w.name)}</span>
+                <button class="lo-b" data-act="watch-move" data-i="${i}" data-d="-1" ${i === 0 ? "disabled" : ""} aria-label="${esc(w.name)} 앞으로">▲</button>
+                <button class="lo-b" data-act="watch-move" data-i="${i}" data-d="1" ${i === arr.length - 1 ? "disabled" : ""} aria-label="${esc(w.name)} 뒤로">▼</button>
+              </div>`).join("")}
+          </div>` : ""}
+        </div>
+      </div>
+    </section>
+    `,
+    diag: `
+    <section class="card" id="sec-diag">
+      <div class="sec-title"><h2>내 자산 진단</h2><button class="link-btn" data-act="toggle-hide">${hide ? "금액 보이기" : "금액 숨기기"}</button></div>
+      ${hasAssets ? `
+        <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px"><span class="hint">순자산</span><span class="num" style="font-size:calc(24px * var(--fs, 1));font-weight:700">${money(net)}</span></div>
+        <div class="bar" aria-hidden="true">${seg(Number(a.cash) || 0, "#5B7CFA")}${seg(Number(a.invest) || 0, "#FF9EBB")}${seg(Number(a.other) || 0, "#C9B8F5")}</div>
+        <div class="legend" style="margin:8px 0 12px"><span><i style="background:#5B7CFA"></i>예금·현금 ${money(a.cash || 0)}</span><span><i style="background:#FF9EBB"></i>투자 ${money(a.invest || 0)}</span><span><i style="background:#C9B8F5"></i>기타 ${money(a.other || 0)}</span><span>부채 ${money(debtSum)}</span></div>
+        <div class="diag">${diag.map(([c, t, s]) => `<div class="diag-line"><span class="badge ${c}">${t}</span><span>${esc(s)}</span></div>`).join("")}</div>
+        <p class="hint" style="margin:12px 0 0">입력한 값으로 계산한 일반적인 참고 기준이에요. 투자 권유가 아니에요.</p>`
+      : `<p class="hint" style="margin:0">위의 ‘편집’에서 자산을 입력하면 진단해드려요.</p>`}
+    </section>
+    `,
+    basic: `
+    <section class="card form" id="sec-basic">
+      <div class="sec-title"><h2>기본 정보</h2></div>
+      <div class="grid2">
+        <div><label class="lb" for="f-nick">닉네임</label><input class="field" id="f-nick" data-field="nickname" value="${esc(p.nickname)}" maxlength="12"></div>
+        <div><label class="lb" for="f-age">만 나이</label><input class="field num" id="f-age" inputmode="numeric" data-field="age" value="${p.age ?? ""}"></div>
+        <div><label class="lb" for="f-gender">성별</label><select class="field" id="f-gender" data-field="gender">${["", "여성", "남성", "밝히지 않음"].map((g) => `<option value="${g}" ${p.gender === g ? "selected" : ""}>${g || "선택 안 함"}</option>`).join("")}</select></div>
+        <div><label class="lb" for="f-household">사는 형태</label><select class="field" id="f-household" data-field="household"><option value="">선택 안 함</option>${HOUSEHOLDS.map((x) => `<option ${p.household === x ? "selected" : ""}>${x}</option>`).join("")}</select></div>
+        <div><label class="lb" for="f-income">연 소득</label><select class="field" id="f-income" data-field="income">${INCOME.map((t, i) => `<option value="${i}" ${(p.income || 0) === i ? "selected" : ""}>${t || "선택 안 함"}</option>`).join("")}</select></div>
+      </div>
+      ${regionFields(p)}
+    </section>
+    `,
+    risk: `
+    <section class="card form" id="sec-risk">
+      <div class="sec-title"><h2>투자 성향 · 관심사</h2><span class="type-pill" id="avert-type">${riskType(p.avert)}</span></div>
+      <label class="lb" for="f-avert">위험을 얼마나 피하고 싶나요? <b class="num" id="avert-val" style="color:var(--ink)">${p.avert}/10</b></label>
+      <input class="range" id="f-avert" type="range" min="1" max="10" step="1" value="${p.avert}" data-field="avert">
+      <div class="range-ends"><span>1 · 위험 괜찮아요</span><span>10 · 손실은 싫어요</span></div>
+      <button class="btn ghost" data-act="go-risktest">${p.riskTest ? `정밀 진단 다시 받기 (지난 결과: ${esc(p.riskTest.type)})` : "7문항 정밀 진단 받기 ›"}</button>
+      <div><span class="lb">무엇에 가치를 두나요? (여러 개)</span><div class="chips">${PREFS.map((x) => `<button class="chip ${p.prefs.includes(x) ? "on" : ""}" data-act="pref" data-v="${x}" aria-pressed="${p.prefs.includes(x)}">${x}</button>`).join("")}</div></div>
+      <div><span class="lb">요즘 돈 목표·고민 (여러 개)</span><div class="chips">${AIMS.map((x) => { const on = (p.aims || []).includes(x); return `<button class="chip ${on ? "on" : ""}" data-act="aim" data-v="${x}" aria-pressed="${on}">${AIM_LABEL[x]}</button>`; }).join("")}</div></div>
+      <div class="form"><span class="lb">관심 있는 분야 (여러 개)</span>${fieldChips(p.fields || [], "field")}</div>
+      <div><span class="lb">경제 지식 (루미가 설명 수준을 맞춰요)</span><div class="chips">${LEVELS.map((x, i) => `<button class="chip ${p.level === i ? "on" : ""}" data-act="set-level" data-v="${i}" aria-pressed="${p.level === i}">${x}</button>`).join("")}</div>${kqLink}</div>
+      <div><span class="lb">투자 경험</span><div class="chips">${EXPS.map((x, i) => `<button class="chip ${p.exp === i ? "on" : ""}" data-act="set-exp" data-v="${i}" aria-pressed="${p.exp === i}">${x}</button>`).join("")}</div></div>
+    </section>
+    `,
+    goals: goalsMy(p),
+    watch: `
+    <section class="card form" id="sec-watch">
+      <div class="sec-title"><h2>관심 종목</h2><span>보유 수량을 넣으면 손익을 보여줘요</span></div>
+      <div class="rows">${watchRows || `<p class="hint" style="margin:0">아직 없어요</p>`}</div>
+      ${stockSearch()}
+    </section>
+    `,
+    assets: `
+    <section class="card form" id="sec-assets">
+      <div class="sec-title"><h2>내 자산</h2><span>대략적인 금액도 괜찮아요</span></div>
+      <div class="grid2">
+        <div><label class="lb" for="f-cash">예금·현금</label><div class="money"><input class="field num" id="f-cash" inputmode="numeric" data-field="cash" value="${a.cash ?? ""}"><span class="unit">만원</span></div></div>
+        <div><label class="lb" for="f-invest">주식·펀드 등 투자</label><div class="money"><input class="field num" id="f-invest" inputmode="numeric" data-field="invest" value="${a.invest ?? ""}"><span class="unit">만원</span></div></div>
+        <div><label class="lb" for="f-other">기타 (보증금 등)</label><div class="money"><input class="field num" id="f-other" inputmode="numeric" data-field="other" value="${a.other ?? ""}"><span class="unit">만원</span></div></div>
+        <div><label class="lb" for="f-payday">월급날</label><div class="money"><input class="field num" id="f-payday" inputmode="numeric" data-field="payday" value="${p.payday ?? ""}"><span class="unit">일</span></div></div>
+      </div>
+    </section>
+    `,
+    debts: `
+    <section class="card form" id="sec-debts">
+      <div class="sec-title"><h2>부채</h2>${p.debts === null ? `<button class="link-btn" data-act="no-debt">대출 없어요</button>` : ""}</div>
+      ${debtRows || (p.debts ? `<p class="hint" style="margin:0">대출 없음</p>` : "")}
+      <button class="btn ghost" data-act="add-debt">+ 대출 추가</button>
+    </section>
+    `,
+    letters: `
+    <section class="card form" id="sec-letters">
+      <div class="sec-title"><h2>무료 경제 뉴스레터 TOP 5</h2><span>구독자 많은 순</span></div>
+      <div class="lt-list">${LETTERS.map((l, i) => { const on = p.letters.includes(l.id); return `<div class="lt-row"><span class="mp-no">${i + 1}</span>
+        <a class="lt-main" href="${l.url}" target="_blank" rel="noopener"><b>${l.name} <small class="hint">· ${l.by}</small></b><small class="hint">${l.desc}</small><small class="lt-subs">${l.subs}</small></a>
+        <button class="chip ${on ? "on" : ""}" data-act="letter" data-v="${l.id}" aria-pressed="${on}">${on ? "구독 중" : "+ 내 목록"}</button></div>`; }).join("")}</div>
+      <p class="hint" style="margin:0">모두 무료예요. 구독자 수는 각 뉴스레터가 공개한 수치(2026년)이고, 이름을 누르면 구독 페이지가 열려요. '내 목록'에 넣으면 홈에서 바로 열 수 있어요.</p>
+      <h3 class="mp-h" style="margin:4px 0 0">내가 직접 넣은 뉴스레터</h3>
+      <div class="chips">
+        ${p.customLetters.map((l, i) => `<span class="chip on">${esc(l.name)}<button class="icon-btn" style="width:28px;height:28px;color:#fff" data-act="rm-letter" data-i="${i}" aria-label="${esc(l.name)} 삭제">${ICON.x}</button></span>`).join("")}</div>
+      <div class="inline">
+        <label for="f-ln" class="sr">뉴스레터 이름</label><input class="field" id="f-ln" placeholder="이름" style="flex:1">
+        <label for="f-lu" class="sr">뉴스레터 주소</label><input class="field" id="f-lu" placeholder="https://" style="flex:1.4">
+        <button class="btn ghost" data-act="add-letter">추가</button>
+      </div>
+    </section>
+    `,
+    privacy: `
+    <section class="card form" id="sec-privacy">
+      <div class="sec-title"><h2>개인정보 관리</h2></div>
+      <p style="margin:0;font-size:calc(14px * var(--fs, 1));line-height:1.6">입력한 정보는 서버에 저장하지 않고 <b>이 기기(브라우저)에만</b> 저장돼요. 질문창을 쓸 때만 나이대·성향·금액 요약이 답변을 만드는 데 쓰여요 (닉네임은 보내지 않아요).</p>
+      <button class="btn danger" data-act="wipe">내 정보 전부 지우기</button>
+    </section>
+    `,
+  };
+}
+
+// 마이페이지: 나에 대한 정보만 (기본 정보·투자 성향)
+function viewMy() {
+  const S = mySections();
+  return `${pageHead("마이페이지")}
+  <main class="scroll">
+    ${S.profile}
+    ${syncCard()}
+    ${S.basic}
+    ${S.risk}
+    ${mixMyCard()}
+    <section class="card links">
+      <button class="lrow" data-act="nav" data-route="assets" data-target="sec-assets"><span class="lk">자산</span><span class="lv">자산·대출 입력과 진단은 <b>나의 자산관리</b>에서</span><span aria-hidden="true">›</span></button>
+      <button class="lrow" data-act="nav" data-route="etc" data-target=""><span class="lk">기타</span><span class="lv">개인정보·데이터 지우기, 앱 정보</span><span aria-hidden="true">›</span></button>
+    </section>
+    <p class="foot">나만의 경제 · 투자 권유가 아닌 참고용 정보예요.</p>
+    <div class="savebar">
+      <span>${ui.savedAt ? `저장됨 · ${ui.savedAt}` : "고친 내용은 이 기기에 저장돼요"}</span>
+      <button class="btn" data-act="save-my">저장하기</button>
+    </div>
+  </main>`;
+}
+// 홈 화면 꾸미기 (홈 화면 묶음)
+function viewLayout() {
+  return `${pageHead("홈 화면 꾸미기")}<main class="scroll">${mySections().layout}</main>`;
+}
+// 관심 종목 · 뉴스레터 (경제공부 묶음)
+function viewWatch() {
+  return `${pageHead("관심 종목")}<main class="scroll">${mySections().watch}<div class="savebar">
+      <span>${ui.savedAt ? `저장됨 · ${ui.savedAt}` : "고친 내용은 이 기기에 저장돼요"}</span>
+      <button class="btn" data-act="save-my">저장하기</button>
+    </div></main>`;
+}
+function viewLetters() {
+  return `${pageHead("뉴스레터")}<main class="scroll">${mySections().letters}
+    <button class="card line" data-act="news-brief"><span><b>뉴스레터 쉽게 풀이</b> <span class="hint">메일 본문을 붙여넣으면 쉬운 말로 풀어드려요</span></span><span aria-hidden="true">›</span></button>
+  </main>`;
+}
+// 기타: 아직 어디에 넣기 애매한 것들
+// ───────── 아침 알림 (웹 푸시): 매일 아침 8시쯤 한 번 "오늘 나에게 중요한 3가지"를 보러 오라고 알린다 ─────────
+// 켜면 이 기기의 알림 주소(endpoint)만 서버에 맡긴다(이름·기록은 보내지 않음). 문구는 sw.js가 /api/market?push=today 에서 받는다.
+// 아이폰은 사파리에서 '홈 화면에 추가'로 설치한 앱에서만 된다(iOS 16.4 이상).
+const PUSH_KEY = "myeco.push.v1";
+function pushState() {
+  if (!("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window)) return "unsupported";
+  try { return localStorage.getItem(PUSH_KEY) === "on" && Notification.permission === "granted" ? "on" : Notification.permission === "denied" ? "denied" : "off"; } catch { return "off"; }
+}
+function pushCard() {
+  const st = pushState();
+  const ios = /iPhone|iPad/.test(navigator.userAgent) && !window.matchMedia?.("(display-mode: standalone)").matches;
+  return `<section class="card form" id="sec-push">
+      <div class="sec-title"><h2>아침 알림</h2><span>매일 아침 8시쯤 한 번</span></div>
+      <p class="hint" style="margin:0">"오늘 나에게 중요한 3가지"를 보러 오라고 알려 드려요. 알림 주소만 서버에 맡기고, 이름이나 기록은 보내지 않아요.</p>
+      ${st === "unsupported" ? `<p style="margin:0;font-size:calc(14px * var(--fs, 1));line-height:1.6">${ios ? "아이폰은 사파리 아래쪽 공유 버튼 → <b>홈 화면에 추가</b>로 앱을 설치한 뒤, 그 앱에서 켤 수 있어요(iOS 16.4 이상)." : "이 브라우저는 알림을 지원하지 않아요. 크롬이나 사파리에서 열어 주세요."}</p>`
+        : st === "denied" ? `<p style="margin:0;font-size:calc(14px * var(--fs, 1));line-height:1.6">알림이 꺼져 있어요. 휴대폰 설정 → 이 앱(또는 브라우저) → 알림에서 허용한 뒤 다시 눌러 주세요.</p><button class="btn ghost" data-act="push-on">다시 시도</button>`
+        : st === "on" ? `<button class="btn ghost" data-act="push-off">아침 알림 끄기</button>` : `<button class="btn" data-act="push-on">아침 알림 받기</button>`}
+    </section>`;
+}
+function b64ToBytes(s) { const b = atob(s.replace(/-/g, "+").replace(/_/g, "/") + "===".slice((s.length + 3) % 4)); return Uint8Array.from(b, (c) => c.charCodeAt(0)); }
+async function pushOn() {
+  try {
+    const cfg = await getJson("/api/config");
+    if (!cfg.vapidPublic) return toast("알림 기능이 아직 준비되지 않았어요");
+    if ((await Notification.requestPermission()) !== "granted") { render(); return toast("알림을 허용해야 받을 수 있어요"); }
+    const reg = await navigator.serviceWorker.ready;
+    const sub = (await reg.pushManager.getSubscription()) || await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64ToBytes(cfg.vapidPublic) });
+    const j = await getJson("/api/market?push=subscribe", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ endpoint: sub.endpoint }) });
+    if (!j.ok) throw new Error(j.error || "저장 실패");
+    try { localStorage.setItem(PUSH_KEY, "on"); } catch {}
+    toast("내일 아침부터 알림을 보내 드려요");
+  } catch (e) { toast("알림을 켜지 못했어요. 잠시 후 다시 해 주세요"); }
+  render();
+}
+async function pushOff() {
+  try {
+    const sub = await (await navigator.serviceWorker.ready).pushManager.getSubscription();
+    if (sub) { await getJson("/api/market?push=unsubscribe", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ endpoint: sub.endpoint }) }).catch(() => {}); await sub.unsubscribe(); }
+  } catch {}
+  try { localStorage.removeItem(PUSH_KEY); } catch {}
+  toast("아침 알림을 껐어요");
+  render();
+}
+document.addEventListener("click", (e) => {
+  const el = e.target.closest("[data-act]");
+  if (el?.dataset.act === "push-on") pushOn();
+  else if (el?.dataset.act === "push-off") pushOff();
+});
+function viewEtc() {
+  const S = mySections();
+  return `${pageHead("기타")}
+  <main class="scroll">
+    <section class="card form" id="sec-fs">
+      <div class="sec-title"><h2>글자 크기</h2><span>모든 화면에 적용돼요</span></div>
+      <div class="chips">${FS_STEPS.map(([v, l]) => `<button class="chip ${(ui.fs || 1) === v ? "on" : ""}" data-act="set-fs" data-v="${v}" aria-pressed="${(ui.fs || 1) === v}">${l}</button>`).join("")}</div>
+      <p style="margin:0;font-size:calc(15px * var(--fs, 1));line-height:1.6">미리 보기: 오늘 코스피가 1.2% 올랐어요.</p>
+    </section>
+    <section class="card form" id="sec-lang">
+      <div class="sec-title"><h2>언어</h2><span translate="no">Language</span></div>
+      <div class="chips" translate="no">${[["ko", "한국어"], ["en", "English"]].map(([v, l]) => `<button class="chip ${(ui.lang || "ko") === v ? "on" : ""}" data-act="set-lang" data-v="${v}" aria-pressed="${(ui.lang || "ko") === v}">${l}</button>`).join("")}</div>
+      <p class="hint" style="margin:0">English는 화면 글자를 AI(구글 제미나이)로 번역해요. 처음 여는 화면은 1~2초 뒤에 영어로 바뀌고, 번역은 이 기기에 기억해 두어 다음부터는 바로 보여요. 루미의 설명·풀이는 처음부터 영어로 써요. 돈 정리 카드 같은 그림 속 글자는 한국어로 남아요.</p>
+    </section>
+    <section class="card form" id="sec-lumi">
+      <div class="sec-title"><h2>루미 움직임</h2><span>홈에서 코스피 분위기대로 움직여요</span></div>
+      <button class="btn ${ui.lumiStill ? "" : "ghost"}" data-act="lumi-move">${ui.lumiStill ? "움직이게 하기" : "멈추기"}</button>
+    </section>
+    ${pushCard()}
+    ${tabPickCard()}
+    ${S.privacy}
+    <section class="card" id="sec-info">
+      <div class="sec-title"><h2>앱 정보</h2><span>v0.5</span></div>
+      <p style="margin:0;font-size:calc(14px * var(--fs, 1));line-height:1.7">주가·지수: 공공데이터포털(금융위원회, 전일 종가) · 환율: 한국수출입은행 · 뉴스: 네이버·정책브리핑·NewsData(국내), GDELT·BBC(해외) — 제목·링크만 · 쉽게 풀이·화제순: 정책브리핑 정책뉴스 · 혜택: 정부24 공공서비스 정보 · AI: Google Gemini(무료 등급 먼저, 보낸 내용을 구글이 서비스 개선에 쓸 수 있음) · OpenAI</p>
+      <p class="hint" style="margin:8px 0 0">이 앱의 정보는 투자 권유가 아닌 참고용이에요.</p>
+    </section>
+  </main>`;
+}
+
+function stockResults() {
+  const s = ui.search;
+  const have = new Set(target().watch.map((w) => w.name));
+  const pop = POPULAR.filter((n) => !have.has(n));
+  return `${s.results.length ? `<div class="results" style="margin-top:6px">${s.results.map((r) => `<button data-act="add-watch" data-v="${esc(r.name)}"${have.has(r.name) ? " disabled" : ""}><span>${esc(r.name)}</span><span class="hint">${esc(r.market || "")} ${have.has(r.name) ? "추가됨" : "+ 추가"}</span></button>`).join("")}</div>`
+        : s.q && s.sample ? `<p class="hint">시세 키를 연결하면 검색돼요. 아래 인기 종목에서 골라보세요.</p>` : ""}
+      ${pop.length ? `<div class="chips" style="margin-top:10px"><span class="hint">인기</span>${pop.map((n) => `<button class="chip small" data-act="add-watch" data-v="${esc(n)}">+ ${esc(n)}</button>`).join("")}</div>` : ""}`;
+}
+function stockSearch() {
+  return `<div>
+      <label class="lb" for="stock-q">종목 검색</label>
+      <input class="field" id="stock-q" placeholder="종목 이름 (예: 삼성)" autocomplete="off" value="${esc(ui.search.q)}" data-search="1">
+      <div id="stock-results">${stockResults()}</div>
+    </div>`;
+}
+
+// ───────────────────────── 화면: 첫 설문 (3단계) ─────────────────────────
+function lumiSays(html, face, anim) {
+  return `<div class="lumi-says">${mascot(68, face, anim)}<p class="bubble-onb">${html}</p></div>`;
+}
+// 첫 설문 마지막 단계의 투자 성향: 7문항 진단을 한 문항씩 (진단 화면 RISK_TEST와 같은 문항·점수)
+function onbRiskTest(d) {
+  const T = ui.onb.rt || (ui.onb.rt = { step: 0, picks: [] });
+  if (d.riskTest) {
+    const type = riskType(d.avert);
+    return `<div class="card form"><span class="lb">투자 성향 진단 결과</span><b style="font-size:calc(20px * var(--fs, 1))">${type}</b><p class="hint" style="margin:0">${esc(RISK_DESC[type])}</p>
+      <button class="link-btn" data-act="onb-rt-restart" style="align-self:flex-start;padding-left:0">다시 하기</button></div>`;
+  }
+  const q = RISK_TEST[T.step];
+  return `<div class="card form"><span class="lb">투자 성향 진단 ${T.step + 1} / ${RISK_TEST.length}</span>
+      <p style="margin:0;font-size:calc(15px * var(--fs, 1));font-weight:700;line-height:1.5">${esc(q.q)}</p>
+      <div class="rt-opts">${q.a.map(([label, v]) => `<button class="rt-opt" data-act="onb-rt" data-v="${v}">${esc(label)}</button>`).join("")}</div>
+      <div style="display:flex;gap:12px">${T.step > 0 ? `<button class="link-btn" style="padding-left:0" data-act="onb-rt-back">‹ 이전 문항</button>` : ""}<button class="link-btn" style="padding-left:0" data-act="onb-manual">${ui.onb.manual ? "직접 고르기 닫기" : "진단 대신 직접 고를래요"}</button></div></div>`;
+}
+function viewOnboard() {
+  const st = ui.onb.step;
+  const d = ui.onb.draft || (ui.onb.draft = newProfile());
+  const LAST = 5;
+  const steps = `<div class="steps" aria-label="${st + 1}/${LAST + 1} 단계">${[0, 1, 2, 3, 4, 5].map((i) => `<i class="${i <= st ? "on" : ""}"></i>`).join("")}</div>`;
+  const chip = (act, v, on, label = v) => `<button class="chip ${on ? "on" : ""}" data-act="${act}" data-v="${v}" aria-pressed="${on}">${label}</button>`;
+  let body = "";
+  if (st === 0) body = `
+    ${lumiSays("안녕하세요! 저는 <b>이루미</b>, 루미라고 불러주세요.<br><b>나만의 경제</b>는 내 자산·성향·관심사에 맞춰 오늘의 경제 소식이 <b>나에게 어떤 의미인지</b> 쉬운 말로 알려주는 앱이에요.<br>나에게 꼭 맞는 소식을 고르려고 몇 가지 물어볼게요. 1분이면 끝나요!", "main", "up")}
+    <h1>먼저, 뭐라고 불러드릴까요?</h1>
+    <div class="form">
+      <div><label class="lb" for="o-nick">닉네임</label><input class="field" id="o-nick" maxlength="12" data-o="nickname" value="${esc(d.nickname)}" placeholder="예: 경제새싹"></div>
+      <div><label class="lb" for="o-age">만 나이</label><input class="field num" id="o-age" inputmode="numeric" data-o="age" value="${d.age ?? ""}" placeholder="예: 24"></div>
+      <p class="hint" style="margin:0">나이는 받을 수 있는 청년 혜택·정책을 찾는 데만 써요. 이 기기에만 저장돼요.</p>
+    </div>
+    ${sync.on ? `<div class="card" style="padding:12px 14px;font-size:calc(14px * var(--fs, 1));line-height:1.6">✓ <b>${esc(sync.email || "구글 계정")}</b>과 연결돼 있어요. 아직 불러올 기록이 없었어요. 기록이 있는 기기에서 같은 계정으로 연결한 뒤 눌러 주세요.<br><button class="btn ghost" style="margin-top:8px;width:100%" data-act="sync-pull">기록 다시 불러오기</button></div>`
+      : `<p class="hint" style="margin:0">구글로 로그인하면 다른 기기에서 쓰던 기록을 불러오고, 모의투자 순위도 볼 수 있어요. 로그인 없이도 모든 기능을 쓸 수 있어요.</p>`}`;
+  if (st === 1) body = `
+    ${lumiSays(`반가워요, ${esc(d.nickname || "")}님! 지금 상황과 사는 곳을 알면 받을 수 있는 혜택과 정책을 찾아드려요.`, "wave", "up")}
+    <h1>지금 어떤 상황이에요?</h1>
+    <div class="card form">
+      <span class="lb">지금 나는</span>
+      <div class="chips">${STATUSES.map((x) => chip("set-status", x, d.status === x)).join("")}</div>
+    </div>
+    <div class="card form">
+      <span class="lb">누구와 살아요?</span>
+      <div class="chips">${HOUSEHOLDS.map((x) => chip("set-household", x, d.household === x)).join("")}</div>
+      <p class="hint" style="margin:0">생활비 규모와 1인 가구 혜택을 가늠하는 데만 써요.</p>
+    </div>
+    <div class="card form">
+      <span class="lb">사는 곳</span>
+      <div class="grid2">
+        <div><label class="sr" for="o-sido">시·도</label><select class="field" id="o-sido" data-o="sido"><option value="">시·도 선택</option>${SIDO.map((s) => `<option ${d.region.sido === s ? "selected" : ""}>${s}</option>`).join("")}</select></div>
+        <div><label class="sr" for="o-sgg">시·군·구</label><input class="field" id="o-sgg" data-o="sigungu" maxlength="10" placeholder="예: 강남구" value="${esc(d.region.sigungu || "")}"></div>
+      </div>
+    </div>
+    <p class="hint" style="margin:0">모르겠거나 알려주기 싫으면 ‘건너뛰기’를 눌러도 돼요. 이 기기에만 저장돼요.</p>`;
+  if (st === 2) body = `
+    ${lumiSays("요즘 돈과 관련해서 이루고 싶은 것이나 고민이 있나요? 그 쪽 소식을 먼저 챙길게요.", "lookup", "up")}
+    <h1>요즘 돈 목표나<br>고민이 있나요?</h1>
+    <p class="hint" style="margin:-8px 0 0">여러 개 골라도 돼요.</p>
+    <div class="chips">${AIMS.map((x) => chip("aim", x, d.aims.includes(x), AIM_LABEL[x])).join("")}</div>`;
+  if (st === 3) body = `
+    ${lumiSays("관심 있는 종목과 분야를 알려주면 매일 챙겨볼게요.", "wave", "up")}
+    <h1>관심 있는 종목을<br>골라주세요</h1>
+    <p class="hint" style="margin:-8px 0 0">종목은 주식시장에서 사고파는 회사(예: 삼성전자)예요. 홈에서 가격과 등락을 바로 보여드려요.<br>잘 모르겠으면 고르지 않고 ‘다음’을 눌러도 돼요. 나중에 바꿀 수 있어요.</p>
+    <div class="chips">${d.watch.map((w, i) => `<span class="chip on">${esc(w.name)}<button class="icon-btn" style="width:28px;height:28px;color:#fff" data-act="rm-watch" data-i="${i}" aria-label="${esc(w.name)} 빼기">${ICON.x}</button></span>`).join("") || `<span class="hint">아직 고른 종목이 없어요</span>`}</div>
+    ${stockSearch()}
+    <div class="card form">
+      <span class="lb">관심 있는 분야 (여러 개)</span>
+      ${fieldChips(d.fields, "field")}
+      <p class="hint" style="margin:0">그 분야 뉴스와 모의투자 힌트를 먼저 보여드려요.</p>
+    </div>`;
+  if (st === 4) body = `
+    ${lumiSays("경제를 얼마나 아는지 알려주면, 같은 소식도 딱 맞는 말로 설명할게요.", "lookup", "up")}
+    <h1>경제, 얼마나<br>알고 있어요?</h1>
+    <div class="card form">
+      <span class="lb">경제 지식</span>
+      <div class="chips">${LEVELS.map((x, i) => chip("set-level", i, d.level === i, x)).join("")}</div>
+      ${kqLink}
+    </div>
+`;
+  if (st === 5) body = `
+    ${lumiSays("마지막이에요! 성향을 알면 같은 뉴스도 당신에게 맞게 풀어드릴 수 있어요.", "lookup", "flat")}
+    <h1>마지막으로,<br>당신의 성향을 알려주세요</h1>
+    ${onbRiskTest(d)}
+    <div class="card form" ${ui.onb.manual ? "" : 'style="display:none"'}>
+      <label class="lb" for="o-avert">위험을 얼마나 피하고 싶나요? <b class="num" id="avert-val" style="color:var(--ink)">${d.avert}/10</b> · <span class="type-pill" id="avert-type">${riskType(d.avert)}</span></label>
+      <input class="range" id="o-avert" type="range" min="1" max="10" step="1" value="${d.avert}" data-o="avert">
+      <div class="range-ends"><span>1 · 위험 괜찮아요</span><span>10 · 손실은 싫어요</span></div>
+      <p class="hint" id="avert-desc" style="margin:0">${riskShort(d.avert)}</p>
+    </div>
+    <div class="card form">
+      <span class="lb">무엇에 가치를 두나요? (여러 개)</span>
+      <div class="chips">${PREFS.map((x) => `<button class="chip ${d.prefs.includes(x) ? "on" : ""}" data-act="pref" data-v="${x}" aria-pressed="${d.prefs.includes(x)}">${x}</button>`).join("")}</div>
+    </div>
+    <div class="card form">
+      <span class="lb">구독 중인 뉴스레터가 있나요?</span>
+      <div class="chips">${LETTERS.map((l) => `<button class="chip ${d.letters.includes(l.id) ? "on" : ""}" data-act="letter" data-v="${l.id}" aria-pressed="${d.letters.includes(l.id)}">${l.name} · ${l.by}</button>`).join("")}
+        ${d.customLetters.map((l, i) => `<span class="chip on">${esc(l.name)}<button class="icon-btn" style="width:28px;height:28px;color:#fff" data-act="rm-letter" data-i="${i}" aria-label="${esc(l.name)} 빼기">${ICON.x}</button></span>`).join("")}</div>
+      <span class="hint">목록에 없으면 직접 넣어요</span>
+      <div class="inline"><label for="f-ln" class="sr">뉴스레터 이름</label><input class="field" id="f-ln" placeholder="이름" style="flex:1"><label for="f-lu" class="sr">뉴스레터 주소</label><input class="field" id="f-lu" placeholder="https://" style="flex:1.3"><button class="btn ghost" data-act="add-letter">추가</button></div>
+    </div>
+    <p class="hint" style="margin:0">자산·소득은 홈에서 하나씩 천천히 여쭤볼게요.</p>`;
+  const canNext = st === 0 ? d.nickname.trim() && d.age > 0 : true;
+  // 고른 게 없으면 '건너뛰기', 하나라도 골랐으면 '다음'
+  const picked = [true, d.status || d.region.sido || d.household, d.aims.length, d.watch.length || d.fields.length, d.level != null, true][st];
+  return `<main class="onb">${steps}${body}
+    <div style="margin-top:auto;display:flex;gap:8px">
+      ${st > 0 ? `<button class="btn ghost block" style="flex:0 0 96px" data-act="onb-back">이전</button>` : ""}
+      ${st === 0 && !sync.on ? `<button class="btn ghost block" style="flex:1" data-act="sync-start">구글 로그인하기</button>` : ""}
+      <button class="btn block" style="flex:1" data-act="onb-next" ${canNext ? "" : "disabled"}>${st === LAST ? "루미와 시작하기" : st === 0 && !sync.on ? "로그인 없이 시작하기" : picked ? "다음" : "건너뛰기"}</button>
+    </div></main>`;
+}
+
+// ───────────────────────── 모의투자 (실제 종목 게임) ─────────────────────────
+// 실제 종목·실제 가격(금융위원회 주식시세, 전일 종가)으로 겨룬다. 데이터는 /api/market?game=1 (대표 종목 12개 + 산 종목 + 실제 코스피 + 보도자료 힌트).
+// 시세는 공공누리 제4유형(상업적 이용 금지, 원천 한국거래소)이라 지금은 수익 없는 시제품에서만 쓴다. 광고·구독을 붙이기 전에 다시 검토한다.
+// 누구나 바로 시작: 시즌(한 달)마다 가상 1,000만 원. 가장 최근 종가로 언제든 바로 사고판다(거래 시간 제한 없음).
+// 채권·예금·CMA는 게임 금리만큼 날마다 이자. 기록은 이 기기에, 로그인하면 계정에도(SYNC_DATA). 순위는 로그인한 사람끼리(Firestore invest/{시즌}/players/{uid}).
+// 평가: 팔 때·시즌 끝에, 산 뒤 오른 비율을 같은 기간 코스피와 비교하고, 고른 힌트의 방향·기간이 맞았는지 본다.
+const INV_KEY = "myeco.invest.v3";
+const INV_START = 10000000;
+function seasonKey(d = new Date()) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`; }
+function seasonLabel(k) { return `${Number(k.slice(5))}월 시즌`; }
+function seasonLeft() { const d = new Date(); return new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate() - d.getDate(); }
+function invNewSeason() { return { season: seasonKey(), cash: INV_START, hold: {}, trades: [], orders: [], evals: [], bonus: { day: "", amt: 0 }, bonusTotal: 0, idx0: null, bomb: null }; }
+function loadInv() {
+  try { const v = JSON.parse(localStorage.getItem(INV_KEY)); if (v && v.season) return { seasons: [], badges: {}, px: {}, good: 0, orders: [], ...v }; } catch {}
+  return { ...invNewSeason(), seasons: [], badges: {}, px: {}, good: 0, seed: Math.random().toString(36).slice(2, 10) };
+}
+let inv = loadInv();
+try { ["myeco.invest.v1", "myeco.invest.v2"].forEach((k) => localStorage.removeItem(k)); } catch {} // 예전 게임(실제 종목 1차·가상 시장) 기록은 지운다
+if (!inv.seed) inv.seed = Math.random().toString(36).slice(2, 10);
+function saveInv() { try { localStorage.setItem(INV_KEY, JSON.stringify(inv)); } catch {} syncSoon(); }
+// 1일 그래프용: 그때그때 내 포트폴리오 전체 값을 [시각, 원]으로 남긴다. 값이 100원 넘게 바뀌었거나 1시간이 지났을 때만, 최근 3일치
+function invTick() {
+  if (!invData.game) return;
+  const now = Date.now(), v = Math.round(invTotal());
+  const T = (inv.ticks || []).filter((t) => t[0] > now - 3 * 86400e3);
+  const last = T[T.length - 1];
+  if (!last || Math.abs(v - last[1]) >= 100 || now - last[0] >= 3600e3) T.push([now, v]);
+  inv.ticks = T.slice(-300);
+}
+function saveInvQuiet() { try { localStorage.setItem(INV_KEY, JSON.stringify(inv)); } catch {} }
+const invData = { game: null, rank: null, loading: false, extra: [], search: [] };
+
+// 이자 상품: 실제 금리를 받지 않고 '루미의 경제 진단'으로 정한 게임 금리 (실제 금리 아님)
+// 진단(가정): 기준금리 2%대 중반, 물가는 안정 흐름 → 단기(CMA) < 예금 < 국고채 < 회사채 순으로 조금씩 높게
+const RATE_NOTE = "게임 금리예요. 루미가 '기준금리 2%대 중반, 물가 안정'으로 진단해 정했어요 (실제 금리 아님).";
+const RATES = [
+  { id: "cma", name: "CMA", group: "예금·CMA", rate: 2.2, words: ["cma", "씨엠에이", "파킹", "예금"], desc: "언제든 넣고 뺄 수 있는 통장이에요. 이자는 가장 낮아요." },
+  { id: "dep", name: "정기예금 1년", group: "예금·CMA", rate: 2.8, words: ["예금", "정기예금", "적금", "은행"], desc: "은행에 맡겨 두는 돈이에요. 원금이 지켜져요." },
+  { id: "ktb3", name: "국고채 3년", group: "채권", rate: 2.7, words: ["채권", "국고채", "국채", "나라"], desc: "나라에 돈을 빌려주고 이자를 받아요. 가장 안전한 채권이에요." },
+  { id: "corp3", name: "회사채 3년", group: "채권", rate: 3.3, words: ["채권", "회사채", "회사"], desc: "회사에 돈을 빌려주고 이자를 받아요. 나라보다 조금 위험한 만큼 이자가 높아요." },
+];
+function rateProducts() { return RATES; }
+function rateById(id) { return RATES.find((p) => p.id === id); }
+
+// ── 시세 값 ──
+function company(id) { return invData.game?.companies.find((c) => c.id === id); }
+function quote(id) { // 오늘 시가·종가와 어제보다
+  const s = invData.game?.series[id];
+  if (!s?.length) return null;
+  const [d, o, c] = s[s.length - 1], prev = s.length > 1 ? s[s.length - 2][2] : o;
+  return { date: d, o, v: c, pct: Math.round(((c - prev) / prev) * 10000) / 100 };
+}
+function invPrice(id) { return quote(id)?.v ?? inv.px[id] ?? null; }
+function idxName() { return invData.game?.indexName || inv.idxName || "코스피"; }
+// 미국 종목: id가 "US:티커", 값은 원화(그날 종가 × 유럽중앙은행 기준 환율). 비교 지수는 S&P 500을 따라가는 SPY
+const isUS = (id) => String(id).startsWith("US:");
+const US_IDX_NAME = "S&P 500(SPY)";
+function usIdx() { const I = invData.game?.us?.index; return I?.length ? I[I.length - 1][1] : inv.lastUsIdx ?? null; }
+function idxFor(id) { return isUS(id) ? usIdx() : curIdx(); }
+function idxLabel(id) { return isUS(id) ? US_IDX_NAME : idxName(); }
+function usdQuote(id) { const s = invData.game?.us?.usd?.[id]; if (!s?.length) return null; const [d, o, c] = s[s.length - 1]; return { date: d, o, v: c }; }
+const usd$ = (v) => `$${Number(v).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+function curIdx() { const I = invData.game?.index; return I?.length ? I[I.length - 1][1] : inv.lastIdx ?? null; }
+function lotValue(l, at = Date.now()) { return l.amt * (1 + (l.rate / 100) * Math.max(0, at - l.at) / (365 * 86400e3)); }
+function holdValue(h, at) {
+  if (h.kind === "rate") return h.lots.reduce((s, l) => s + lotValue(l, at), 0);
+  const p = invPrice(h.id);
+  return p != null ? h.qty * p : h.cost;
+}
+function invReserved() { return (inv.orders || []).reduce((s, o) => s + (o.side === "buy" ? o.reserve || 0 : 0), 0); } // 사기 주문에 묶어 둔 돈
+function invTotal() { return inv.cash + invReserved() + Object.values(inv.hold).reduce((s, h) => s + holdValue(h), 0); }
+function invBase() { return INV_START + (inv.bonusTotal || 0); }
+function invRet() { return (invTotal() / invBase() - 1) * 100; }
+function invGroups() {
+  const g = { 주식: 0, 채권: 0, "예금·CMA": 0, 현금: inv.cash + invReserved() };
+  for (const h of Object.values(inv.hold)) g[h.kind === "stock" ? "주식" : rateById(h.id)?.group || "예금·CMA"] += holdValue(h);
+  return g;
+}
+const INV_COLORS = { 주식: "#245296", 채권: "#4E9BD1", "예금·CMA": "#9DB8E0", 현금: "#D2D6DD" };
+
+// ── 힌트 (/api/market?game=hints): 시장 소식(코스피·크게 움직인 종목, 늘 있음) + 제미나이가 검수한 보도자료 소식.
+// 시장 소식은 모두에게, 보도자료 소식은 사람마다(기기마다) 날마다 다르게 3개를 고른다 ──
+function hashStr(s) { let h = 2166136261; for (const ch of s) h = Math.imul(h ^ ch.charCodeAt(0), 16777619); return (h >>> 0) / 4294967296; }
+function hintText(h) {
+  if (h.why) return h.why;
+  const names = h.stocks.map((id) => company(id)?.name || id).join("·");
+  return `${h.sector} 소식이에요. ${names}에 ${h.dir === "up" ? "좋은" : "부담이 되는"} 영향이 있을 수 있어요.`;
+}
+function invHints() {
+  const pool = invData.hints?.pool || [];
+  const day = invData.game?.today || ymd(today0());
+  const r = (h) => hashStr(`${inv.seed}|${day}|${h.id}`);
+  const market = pool.filter((h) => h.kind === "market").slice(0, 2);
+  const words = (profile?.fields || []).map((f) => FIELD_HINT[f]).filter(Boolean);
+  const mine = (h) => (words.some((w) => String(h.sector || "").includes(w)) ? 0 : 1); // 관심 분야 소식이 먼저, 그 안에서는 사람마다 날마다 다르게
+  const news = pool.filter((h) => h.kind === "news").sort((a, b) => mine(a) - mine(b) || r(a) - r(b)).slice(0, 3);
+  return [...news, ...market];
+}
+function hintById(id) { return (invData.hints?.pool || []).find((h) => h.id === id); }
+const DIR = { up: ["오를 수도", "up"], down: ["내릴 수도", "down"], swing: ["크게 출렁일 수도", "swing"] };
+function dirPill(dir) { const [t, c] = DIR[dir] || DIR.swing; return `<span class="badge b-${c === "swing" ? "warn" : c}">${t}</span>`; }
+function daysText(d) { return d <= 3 ? "오늘~며칠" : d <= 7 ? "일주일쯤" : d <= 14 ? "며칠~2주" : "몇 주~한 달"; }
+
+// ── 불러오기 ──
+async function loadInvest() {
+  if (invData.loading) { invData.again = true; return; }
+  invData.loading = true;
+  try {
+    const core = new Set((invData.game?.companies || []).filter((c) => c.core).map((c) => c.id));
+    const extra = [...new Set([...Object.values(inv.hold).filter((h) => h.kind === "stock").map((h) => h.id), ...(inv.orders || []).map((o) => o.sid), ...invData.extra])].filter((n) => !core.has(n)).slice(0, 10);
+    const g = await getJson(`/api/market?game=1${extra.length ? `&extra=${encodeURIComponent(extra.join(","))}` : ""}`);
+    invData.game = g;
+    for (const c of g.companies) { const q = quote(c.id); if (q) inv.px[c.id] = q.v; }
+    if (g.indexName && inv.idxName !== g.indexName) { // 비교 지수가 바뀌면(루미지수 → 코스피) 예전 기준값은 버린다
+      inv.idxName = g.indexName; inv.idx0 = null;
+      for (const h of Object.values(inv.hold)) for (const l of h.lots || []) if (h.kind === "stock") l.idx = null;
+    }
+    if (inv.idx0 == null && g.index?.length) inv.idx0 = g.index[0][1];
+    inv.lastIdx = curIdx();
+    if (g.us?.index?.length) inv.lastUsIdx = usIdx();
+    fillOrders();
+    invTick();
+    saveInvQuiet();
+  } catch { invData.error = true; }
+  await Promise.all([loadRank(), invData.hints ? null : getJson("/api/market?game=hints").then((j) => (invData.hints = j)).catch(() => (invData.hints = { pool: [] }))]);
+  invData.loading = false;
+  if (invData.again) { invData.again = false; return loadInvest(); } // 불러오는 사이 새로 연 종목이 있으면 한 번 더
+  pushRank();
+  if (route() === "invest") render();
+}
+
+
+// ── 시즌: 달이 바뀌면 마지막 값으로 평가하고 기록을 남긴 뒤 1,000만 원으로 다시 시작 ──
+function rollSeason() {
+  if (inv.season === seasonKey()) return;
+  const k = inv.lastIdx;
+  const ends = []; // 시즌 끝에 갖고 있던 주식의 평가는 새 시즌 화면에 남긴다
+  for (const h of Object.values(inv.hold)) if (h.kind === "stock" && h.qty > 0) {
+    const p = inv.px[h.id];
+    if (p != null) ends.push(evalLots(h.name, h.lots, p, isUS(h.id) ? inv.lastUsIdx : k, true, idxLabel(h.id)));
+  }
+  inv.good = (inv.good || 0) + ends.filter((e) => e.good).length;
+  const total = invTotal(), ret = (total / invBase() - 1) * 100;
+  const kret = inv.idx0 && k ? (k / inv.idx0 - 1) * 100 : null;
+  inv.seasons = [...(inv.seasons || []), { season: inv.season, total: Math.round(total), ret: Math.round(ret * 100) / 100, kret: kret == null ? null : Math.round(kret * 100) / 100, rank: inv.lastRank || null }].slice(-12);
+  if (kret != null && ret > kret) inv.badges.beat = inv.badges.beat || Date.now();
+  inv.badges.season = inv.badges.season || Date.now();
+  Object.assign(inv, invNewSeason());
+  inv.px = {};
+  inv.evals = ends;
+  invData.game = null; invData.started = false;
+  saveInv();
+  toast(`${seasonLabel(inv.season)}이 시작됐어요! 가상 1,000만 원으로 다시 시작해요`);
+}
+
+// ── 사고팔기 ──
+function holdKey(kind, id) { return `${kind}:${id}`; }
+// ── 주문: 누른 순간 체결하지 않고, 주문한 뒤 처음 끝나는 장의 종가로 체결한다 (늦게 올라오는 종가로 미리 아는 값에 사고파는 것 막기)
+// 국내는 장 마감 15:30(한국), 미국은 16:00(뉴욕). 그 전에 주문하면 그날 종가, 뒤나 주말이면 다음 거래일 종가. 공휴일이면 그다음 거래일 종가.
+// 로그인했으면 주문 시각은 서버가 받은 시각(/api/market?game=order)으로 정한다 → 순위 계산도 그 시각으로 검사
+function fillDay(id, at) {
+  const us = isUS(id);
+  const p = Object.fromEntries(new Intl.DateTimeFormat("en-US", { timeZone: us ? "America/New_York" : "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(new Date(at)).map((x) => [x.type, x.value]));
+  const d = new Date(Date.UTC(+p.year, +p.month - 1, +p.day));
+  if ([0, 6].includes(d.getUTCDay()) || +p.hour * 60 + +p.minute >= (us ? 960 : 930)) { do d.setUTCDate(d.getUTCDate() + 1); while ([0, 6].includes(d.getUTCDay())); }
+  return d.toISOString().slice(0, 10).replace(/-/g, "");
+}
+function closeAt(id, d) { return Date.UTC(+d.slice(0, 4), +d.slice(4, 6) - 1, +d.slice(6, 8), isUS(id) ? 21 : 6, isUS(id) ? 0 : 30); } // 그날 장 마감 시각(대략)
+function fillRow(id, day) { return (invData.game?.series?.[id] || []).find((r) => r[0] >= day) || null; }
+function idxOn(id, d) { const I = isUS(id) ? invData.game?.us?.index : invData.game?.index; return seriesAt(I, d)?.[1] ?? idxFor(id); }
+function sellingQty(id) { return (inv.orders || []).filter((o) => o.side === "sell" && o.sid === id).reduce((s, o) => s + o.qty, 0); }
+function orderWhen(day) { // "오늘 장 마감(11월 25일) 종가" 같은 말
+  const kst = new Date(Date.now() + 9 * 3600e3), today = kst.toISOString().slice(0, 10).replace(/-/g, "");
+  return `${day === today ? "오늘 " : ""}${ymdLabel(day)} 종가`;
+}
+async function placeOrder(side, id, qty, reason) {
+  const name = company(id)?.name || id, P = invPrice(id);
+  if (!(qty > 0) || !(P > 0)) return toast("수량을 확인해 주세요");
+  if (side === "buy" && qty * P > inv.cash) return toast(`현금이 모자라요. 최대 ${fmt(Math.floor(inv.cash / P))}주까지 주문할 수 있어요`);
+  if (side === "sell" && qty > (inv.hold[holdKey("stock", id)]?.qty || 0) - sellingQty(id)) return toast("팔 수 있는 수량을 확인해 주세요");
+  const oid = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  let at = Date.now();
+  if (sync.on) { // 로그인했으면 서버가 주문 시각을 정한다
+    try {
+      const u = await invUser();
+      if (u) {
+        const j = await getJson("/api/market?game=order", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${await u.getIdToken()}` }, body: JSON.stringify({ oid, id }) });
+        if (!j.at) throw new Error(j.error || "주문 실패");
+        at = j.at;
+      }
+    } catch (e) { return toast(e.body?.error || "주문을 넣지 못했어요. 잠시 후 다시 해 주세요"); }
+  }
+  const day = fillDay(id, at), reserve = side === "buy" ? qty * P : 0;
+  inv.cash -= reserve;
+  inv.orders = [...(inv.orders || []), { oid, at, side, sid: id, name, qty, reason: side === "buy" ? reason : null, day, reserve }];
+  afterTrade(`${name} ${fmt(qty)}주 ${side === "buy" ? "사기" : "팔기"} 주문을 넣었어요. ${orderWhen(day)}로 체결돼요`);
+  fillOrders(true); // 이미 그 종가가 있으면(드문 경우) 바로
+}
+function cancelOrder(oid) {
+  const o = (inv.orders || []).find((x) => x.oid === oid);
+  if (!o) return;
+  inv.cash += o.reserve || 0;
+  inv.orders = inv.orders.filter((x) => x.oid !== oid);
+  saveInv(); render(); toast(`${o.name} ${o.side === "buy" ? "사기" : "팔기"} 주문을 취소했어요`);
+}
+// 체결: 주문한 종목의 시세에 체결일(또는 그 뒤 첫 거래일) 종가가 들어와 있으면 그 값으로
+function fillOrders(quiet) {
+  if (!invData.game || !(inv.orders || []).length) return;
+  const done = [], msgs = [];
+  let lastEval = null;
+  for (const o of [...inv.orders].sort((a, b) => a.at - b.at)) {
+    const row = fillRow(o.sid, o.day);
+    if (!row) continue;
+    const price = row[2], at = Math.max(o.at, closeAt(o.sid, row[0]));
+    done.push(o.oid);
+    if (o.side === "buy") {
+      const avail = inv.cash + (o.reserve || 0), q = Math.min(o.qty, Math.floor(avail / price));
+      inv.cash = avail;
+      if (q <= 0) { msgs.push(`${o.name} 사기 주문은 현금이 모자라 취소됐어요`); continue; }
+      const k = holdKey("stock", o.sid);
+      const h = inv.hold[k] || (inv.hold[k] = { kind: "stock", id: o.sid, name: o.name, qty: 0, cost: 0, lots: [] });
+      h.qty += q; h.cost += q * price; h.lots.push({ at, qty: q, price, idx: idxOn(o.sid, row[0]), reason: o.reason || { type: "none" } });
+      inv.cash -= q * price;
+      inv.trades.push({ at, oat: o.at, oid: o.oid, d: row[0], kind: "stock", side: "buy", id: o.sid, name: o.name, qty: q, price, reason: o.reason });
+      msgs.push(`${o.name} ${fmt(q)}주가 ${ymdLabel(row[0])} 종가 ${won(price)}에 체결됐어요${q < o.qty ? " (현금이 모자라 일부만)" : ""}`);
+    } else {
+      const k = holdKey("stock", o.sid), h = inv.hold[k], q = Math.min(o.qty, h?.qty || 0);
+      if (q <= 0) continue;
+      let left = q; const sold = []; // 먼저 산 것부터 판다
+      while (left > 0 && h.lots.length) {
+        const l = h.lots[0], n = Math.min(l.qty, left);
+        sold.push({ ...l, qty: n }); l.qty -= n; left -= n;
+        if (!l.qty) h.lots.shift();
+      }
+      h.qty -= q; h.cost -= sold.reduce((s2, l) => s2 + l.qty * l.price, 0);
+      inv.cash += q * price;
+      const ev = evalLots(h.name, sold, price, idxOn(o.sid, row[0]), false, idxLabel(o.sid));
+      inv.evals.unshift(ev); lastEval = ev;
+      if (ev.good) inv.good = (inv.good || 0) + 1;
+      if (!h.qty) delete inv.hold[k];
+      inv.trades.push({ at, oat: o.at, oid: o.oid, d: row[0], kind: "stock", side: "sell", id: o.sid, name: h.name, qty: q, price });
+      msgs.push(`${h.name} ${fmt(q)}주가 ${ymdLabel(row[0])} 종가 ${won(price)}에 팔렸어요`);
+    }
+  }
+  if (!done.length) return;
+  inv.orders = inv.orders.filter((o) => !done.includes(o.oid));
+  inv.trades.sort((a, b) => b.at - a.at); // 최근 것이 앞
+  if (lastEval && !ui.modal && route() === "invest") ui.modal = { kind: "inv-eval", route: "invest", id: lastEval.id };
+  checkInvBadges(); saveInv();
+  if (!quiet || msgs.length) { toast(msgs.join(" · ")); pushRank(); }
+  if (route() === "invest") render();
+}
+// 체결 기다리는 주문 (내 포트폴리오 위)
+function ordersBlock() {
+  const O = inv.orders || [];
+  if (!O.length) return "";
+  return `<section class="card"><div class="sec-title" style="margin:0"><h2>체결 기다리는 주문</h2><span>${O.length}개</span></div>
+    ${O.map((o) => `<div class="r" style="padding:8px 0;border-bottom:1px solid var(--line)"><span><b>${esc(o.name)}</b> ${fmt(o.qty)}주 ${o.side === "buy" ? "사기" : "팔기"}<br><small class="hint">${orderWhen(o.day)}로 체결 · 그 종가는 다음 거래일 오후에 들어와요</small></span>
+      <button class="chip small" data-act="inv-cancel" data-id="${o.oid}">취소</button></div>`).join("")}
+    <p class="hint" style="margin:6px 0 0">주문한 뒤 처음 끝나는 장의 종가로 체결돼요. 미리 아는 가격으로 사고팔 수 없게 하려는 규칙이에요.</p></section>`;
+}
+function depositRate(id, amt) {
+  const pr = rateById(id);
+  if (!pr || !(amt > 0)) return toast("금액을 적어 주세요");
+  if (amt > inv.cash) return toast(`현금이 모자라요. 최대 ${won(inv.cash)}까지 넣을 수 있어요`);
+  addRateLot(id, amt);
+  afterTrade(`${pr.name}에 ${won(amt)}을 넣었어요 (연 ${fmt(pr.rate, 1)}%)`);
+}
+function addRateLot(id, amt) {
+  const pr = rateById(id), k = holdKey("rate", id);
+  const h = inv.hold[k] || (inv.hold[k] = { kind: "rate", id, name: pr.name, lots: [] });
+  h.lots.push({ at: Date.now(), amt, rate: pr.rate });
+  inv.cash -= amt;
+  inv.trades.unshift({ at: Date.now(), kind: "rate", side: "buy", name: pr.name, id, amt, rate: pr.rate });
+}
+function withdrawRate(id) {
+  const k = holdKey("rate", id), h = inv.hold[k];
+  if (!h) return;
+  const v = holdValue(h), principal = h.lots.reduce((s, l) => s + l.amt, 0);
+  inv.cash += v;
+  delete inv.hold[k];
+  inv.trades.unshift({ at: Date.now(), kind: "rate", side: "sell", name: h.name, id, amt: v });
+  afterTrade(`${h.name}에서 ${won(v)}을 뺐어요 (이자 ${won(v - principal)})`);
+}
+function afterTrade(msg, keepModal) {
+  tutDone("invest");
+  if (!keepModal) ui.modal = null;
+  invTick();
+  checkInvBadges();
+  saveInv();
+  render();
+  toast(msg);
+  pushRank();
+}
+
+// ── 평가: 산 뒤 오른 비율 vs 같은 기간 시장 지수(코스피), 고른 힌트의 방향·기간 ──
+function evalLots(name, lots, price, idxNow, seasonEnd, idxNm = idxName()) {
+  const qty = lots.reduce((s, l) => s + l.qty, 0) || 1;
+  const cost = lots.reduce((s, l) => s + l.qty * l.price, 0) || 1;
+  const ret = (price * qty / cost - 1) * 100;
+  const kl = lots.filter((l) => l.idx && idxNow);
+  const kret = kl.length ? kl.reduce((s, l) => s + (idxNow / l.idx - 1) * l.qty * l.price, 0) / kl.reduce((s, l) => s + l.qty * l.price, 0) * 100 : null;
+  const heldDays = Math.round(lots.reduce((s, l) => s + (Date.now() - l.at) * l.qty, 0) / qty / 86400e3);
+  const hl = lots.find((l) => l.reason?.type === "hint" && l.reason.dir);
+  let hint = null;
+  if (hl) {
+    const r = hl.reason, early = heldDays < r.days;
+    const ok = r.dir === "up" ? ret > 0 : r.dir === "down" ? ret < 0 : Math.abs(ret) >= 3;
+    hint = { title: r.title, dir: r.dir, days: r.days, rumor: !!r.rumor, early, ok: early ? null : ok };
+  }
+  const reasonText = lots.map((l) => (l.reason?.type === "mine" || l.reason?.type === "etc" ? l.reason.text : "")).find(Boolean) || "";
+  const excess = kret == null ? null : ret - kret;
+  const beat = excess != null && excess >= 0;
+  let text;
+  if (hint?.rumor) text = ret > 0 ? "소문을 믿고 샀는데 이번엔 운이 좋았어요. 다음엔 기업 정보를 먼저 확인해 봐요." : "소문만 믿고 샀다가 잃었어요. 근거 없는 소문은 조심해야 해요.";
+  else if (hint && hint.early) text = `힌트 기간(${daysText(hint.days)})보다 일찍 정리해서 근거가 맞았는지는 아직 판단하기 어려워요. ${beat ? "그래도 시장보다는 잘했어요." : "시장보다는 덜 올랐어요."}`;
+  else if (hint && hint.ok) text = beat ? "근거도 맞고 시장보다도 잘했어요!" : "근거는 맞았는데 시장 전체가 더 많이 움직였어요.";
+  else if (hint) text = ret > 0 ? "힌트와 다르게 움직였지만 결과는 좋았어요. 다른 이유가 있었는지 살펴봐요." : "힌트와 반대로 움직였어요. 같은 기간 다른 소식이 있었는지 살펴봐요.";
+  else text = excess == null ? (ret >= 0 ? "벌었어요!" : "이번엔 잃었어요.") : beat ? `시장(${idxNm})보다 잘했어요.` : `이번엔 시장(${idxNm})보다 덜 올랐어요.`;
+  return { id: String(Date.now()) + Math.random().toString(36).slice(2, 5), at: Date.now(), name, qty, heldDays, ret: Math.round(ret * 100) / 100,
+    kret: kret == null ? null : Math.round(kret * 100) / 100, idxName: idxNm, hint, reasonText, text, seasonEnd, good: !!(hint && !hint.rumor && hint.ok && beat) };
+}
+
+function invMan(n) { n = Math.round(n || 0); return n < 1e4 ? won(n) : `${fmt(Math.round(n / 1e4))}만 원`; }
+
+// ── 배지 ──
+function invBadgeList() {
+  const groups = Object.entries(invGroups()).filter(([g, v]) => g !== "현금" && v > 0).length;
+  return [
+    { id: "first", icon: "💰", name: "첫 매매", desc: "처음으로 사 봤어요", ok: !!inv.badges.first || inv.trades.some((t) => t.kind !== "bonus") },
+    { id: "mix", icon: "🧺", name: "나눠 담기", desc: "주식·채권·예금 중 두 종류 이상을 함께 가졌어요", ok: !!inv.badges.mix || groups >= 2 },
+    { id: "analyst", icon: "🔍", name: "분석왕", desc: "근거도 맞고 시장보다 잘한 매매 3번", ok: (inv.good || 0) >= 3 },
+    { id: "season", icon: "🏁", name: "시즌 완주", desc: "한 시즌을 끝까지 했어요", ok: !!inv.badges.season },
+    { id: "beat", icon: "🏆", name: "시장 이기기", desc: "한 시즌 수익률이 시장 지수(코스피)보다 높았어요", ok: !!inv.badges.beat },
+  ];
+}
+function checkInvBadges() {
+  for (const b of invBadgeList()) if (b.ok && !inv.badges["got-" + b.id]) {
+    inv.badges["got-" + b.id] = Date.now();
+    if (b.id === "first" || b.id === "mix") inv.badges[b.id] = Date.now();
+    setTimeout(() => toast(`모의투자 배지 획득 ${b.icon} ${b.name}`), 900);
+  }
+}
+
+// ── 순위 (구글 로그인한 사람끼리) ──
+async function invUser() {
+  if (!sync.on) return null;
+  await loadFirebase();
+  await fb.auth.authStateReady?.();
+  return fb.auth.currentUser;
+}
+// 순위는 서버가 정한다: 휴대폰은 거래 기록만 올리고(invest/{시즌}/trades/{uid}), 서버(/api/market?game=settle·매일 아침)가
+// 공식 종가로 다시 계산해 invest/{시즌}/players에 쓴다. 휴대폰은 자기 점수를 직접 쓸 수 없다(Firestore 규칙).
+async function pushRank() {
+  try {
+    const u = await invUser();
+    if (!u) return;
+    const log = inv.trades.filter((t) => t.kind === "stock" || t.kind === "rate")
+      .map(({ at, oid, kind, side, id, qty, price, amt }) => ({ at, oid, kind, side, id, qty, price, amt }));
+    await fb.F.setDoc(fb.F.doc(fb.db, "invest", inv.season, "trades", u.uid), { nick: String(profile?.nickname || "익명").slice(0, 12), log: JSON.stringify(log), at: Date.now() });
+  } catch {}
+}
+// 공유 동의·가입일(이 앱에 처음 구글 로그인한 날)은 서버로 보낸다. 서버가 로그인 표로 본인인지 확인하고 순위를 바로 다시 계산한다
+async function pushShare(loud) {
+  try {
+    const u = await invUser();
+    if (!u) return false;
+    const made = u.metadata?.creationTime ? new Date(u.metadata.creationTime) : null;
+    const j = await getJson("/api/market?game=share", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${await u.getIdToken()}` },
+      body: JSON.stringify({ share: inv.share === true, joined: made && !isNaN(made) ? ymd(made) : null }) });
+    if (j.error) throw new Error(j.error);
+    inv.shareSent = inv.share === true; saveInvQuiet();
+    return true;
+  } catch (e) { if (loud) toast(e.body?.error || e.message || "공유 설정을 저장하지 못했어요. 잠시 후 다시 해 주세요"); return false; }
+}
+async function loadRank() {
+  if (!sync.on) { invData.rank = null; return; }
+  try {
+    const u = await invUser();
+    if (!u) { invData.rank = null; return; }
+    await pushRank();
+    if (!invData.shareSynced) { invData.shareSynced = true; if (!(await pushShare(false))) await getJson("/api/market?game=settle").catch(() => {}); } // 보내면 서버가 바로 다시 계산함
+    else await getJson("/api/market?game=settle").catch(() => {}); // 서버가 다시 계산 (10분에 한 번만 실제로 함)
+    const F = fb.F;
+    const snap = await F.getDocs(F.query(F.collection(fb.db, "invest", inv.season, "players"), F.orderBy("total", "desc"), F.limit(50)));
+    const list = snap.docs.map((d) => ({ uid: d.id, ...d.data() }));
+    if (!list.some((x) => x.uid === u.uid)) list.push({ uid: u.uid, nick: profile?.nickname || "나", total: Math.round(invTotal()), ret: invRet(), pending: true });
+    list.sort((a, b) => b.total - a.total);
+    const me = list.findIndex((x) => x.uid === u.uid);
+    invData.rank = { list, me, n: list.length };
+    inv.lastRank = { rank: me + 1, of: list.length };
+  } catch (e) { invData.rank = { error: true }; }
+}
+
+// ── 그래프 ──
+function seriesAt(arr, d) { let v = null; for (const x of arr || []) { if (x[0] <= d) v = x; else break; } return v; }
+// 날짜 d(YYYYMMDD) 끝의 내 자산: 이번 시즌 거래를 그날까지 다시 따라간다. useOpen이면 그날 시가로
+function valueOn(d, useOpen) {
+  const H = invData.game?.series || {};
+  let cash = INV_START;
+  const end = new Date(`${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6, 8)}T23:59:59`).getTime();
+  const qty = {}, last = {}, lots = [];
+  for (const t of [...inv.trades].reverse()) {
+    if (t.at > end) break;
+    if (t.kind === "bonus") cash += t.amt;
+    else if (t.kind === "stock") { qty[t.id] = (qty[t.id] || 0) + (t.side === "buy" ? t.qty : -t.qty); cash += (t.side === "buy" ? -1 : 1) * t.qty * t.price; last[t.id] = t.price; }
+    else if (t.side === "buy") { cash -= t.amt; lots.push({ ...t }); }
+    else { cash += t.amt; for (let i = lots.length - 1; i >= 0; i--) if (lots[i].id === t.id) lots.splice(i, 1); }
+  }
+  let v = cash + lots.reduce((s, l) => s + lotValue(l, end), 0);
+  for (const [id, q] of Object.entries(qty)) if (q > 0) {
+    const row = seriesAt(H[id], d);
+    v += q * (row ? (useOpen && row[0] === d ? row[1] : row[2]) : last[id]);
+  }
+  return v;
+}
+function invChartPoints(period) {
+  const K = invData.game?.index || [];
+  if (!K.length) return [];
+  const ds = period === "3d" ? K.slice(-3) : period === "1w" ? K.slice(-5) : K; // 3일·1주는 거래일 기준(주말·휴일 빼고)
+  const k0 = ds[0]?.[1];
+  const pts = ds.map((x) => ({ d: x[0], v: valueOn(x[0]), k: x[1] }));
+  if (pts.length) { const v0 = pts[0].v; pts.forEach((p) => (p.kv = k0 ? v0 * (p.k / k0) : null)); }
+  // 가격은 전 거래일 종가라, 그 뒤(오늘)에 사고판 것은 날짜 점에 안 들어간다 → 맨 끝에 '지금' 값을 하나 더
+  if (pts.length) pts.push({ d: "", v: invTotal(), kv: pts[pts.length - 1].kv, label: "지금" });
+  return pts;
+}
+// 시각 at(ms)의 내 자산: 그때까지의 거래를 따라가고, 주식은 그때 알 수 있던 가격(그 종목의 마지막 거래 가격, 없으면 그 전날까지의 종가)
+function valueAt(at) {
+  const H = invData.game?.series || {}, day = ymd(new Date(at)).replace(/-/g, "");
+  let cash = INV_START;
+  const qty = {}, last = {}, lots = [];
+  for (const t of [...inv.trades].reverse()) {
+    if (t.at > at) break;
+    if (t.kind === "bonus") cash += t.amt;
+    else if (t.kind === "stock") { qty[t.id] = (qty[t.id] || 0) + (t.side === "buy" ? t.qty : -t.qty); cash += (t.side === "buy" ? -1 : 1) * t.qty * t.price; last[t.id] = t.price; }
+    else if (t.side === "buy") { cash -= t.amt; lots.push({ ...t }); }
+    else { cash += t.amt; for (let i = lots.length - 1; i >= 0; i--) if (lots[i].id === t.id) lots.splice(i, 1); }
+  }
+  let v = cash + lots.reduce((s, l) => s + lotValue(l, at), 0);
+  for (const [id, q] of Object.entries(qty)) if (q > 0) v += q * (last[id] ?? (H[id] || []).filter((r) => r[0] < day).pop()?.[2] ?? 0);
+  return v;
+}
+// 1일: 최근 24시간 내 포트폴리오 전체 값을 시간 순서대로(계단 모양). 값은 새 종가가 들어올 때·사고팔 때 바뀐다
+function dayChart() {
+  const now = Date.now(), from = now - 86400e3;
+  // 기록(ticks)이 없던 때도 보이게, 최근 24시간에 사고판 시각의 값은 거래 기록으로 다시 계산해 넣는다
+  const fromTrades = inv.trades.filter((t) => t.at >= from && t.kind !== "bonus").map((t) => [t.at, Math.round(valueAt(t.at))]);
+  const T = [...(inv.ticks || []), ...fromTrades].filter((t) => t[0] <= now).sort((a, b) => a[0] - b[0]);
+  const before = T.filter((t) => t[0] < from).pop();
+  const pts = [...(before ? [[from, before[1]]] : []), ...T.filter((t) => t[0] >= from), [now, Math.round(invTotal())]];
+  if (pts.length < 2 || pts[0][0] === now) return "";
+  const W = 320, H = 132, P = 8, t0 = from; // 가로축은 늘 '24시간 전 → 지금
+  const vals = pts.map((p) => p[1]);
+  let lo = Math.min(...vals, invBase()), hi = Math.max(...vals, invBase());
+  if (hi - lo < 1) { hi += 1; lo -= 1; }
+  const pad = (hi - lo) * 0.12; lo -= pad; hi += pad;
+  const x = (t) => P + ((t - t0) / Math.max(1, now - t0)) * (W - P * 2);
+  const y = (v) => P + (1 - (v - lo) / (hi - lo)) * (H - P * 2 - 16);
+  const d = pts.map((p, i) => (i ? `H${x(p[0]).toFixed(1)}V${y(p[1]).toFixed(1)}` : `M${x(p[0]).toFixed(1)},${y(p[1]).toFixed(1)}`)).join("");
+  const up = pts[pts.length - 1][1] >= invBase();
+  const hh = (t) => `${new Date(t).getHours()}시`;
+  // 가운데 눈금: 이 기기 시각으로 0·6·12·18시
+  const marks = [], m = new Date(t0); m.setMinutes(0, 0, 0); m.setHours(Math.ceil((m.getHours() + 1) / 6) * 6);
+  for (let t = m.getTime(); t < now - 2 * 3600e3; t += 21600e3) if (t > t0 + 2 * 3600e3) marks.push(t);
+  const dots = pts.slice(1, -1).map((p) => `<circle cx="${x(p[0]).toFixed(1)}" cy="${y(p[1]).toFixed(1)}" r="2.2" class="dot ${up ? "up" : "down"}"/>`).join("");
+  return `<svg class="inv-chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="최근 24시간 내 포트폴리오 그래프">
+    <line x1="${P}" y1="${y(invBase()).toFixed(1)}" x2="${W - P}" y2="${y(invBase()).toFixed(1)}" class="base"/>
+    <path d="${d}" class="me ${up ? "up" : "down"}"/>${dots}
+    <circle cx="${x(now).toFixed(1)}" cy="${y(pts[pts.length - 1][1]).toFixed(1)}" r="3.5" class="dot ${up ? "up" : "down"}"/>
+    <text x="${P}" y="${H - 2}" class="lb">어제 ${hh(t0)}</text>
+    ${marks.map((t) => `<text x="${x(t).toFixed(1)}" y="${H - 2}" class="lb" text-anchor="middle">${hh(t)}</text>`).join("")}
+    <text x="${W - P}" y="${H - 2}" class="lb" text-anchor="end">지금</text>
+  </svg>`;
+}
+function lineChart(pts, opts = {}) {
+  const W = 320, H = opts.h || 132, P = 8;
+  const vals = pts.flatMap((p) => [p.v, p.kv].filter((x) => x != null));
+  let lo = Math.min(...vals), hi = Math.max(...vals);
+  if (hi - lo < 1) { hi += 1; lo -= 1; }
+  const pad = (hi - lo) * 0.12; lo -= pad; hi += pad;
+  const x = (i) => P + (i * (W - P * 2)) / Math.max(1, pts.length - 1);
+  const y = (v) => P + (1 - (v - lo) / (hi - lo)) * (H - P * 2 - 16);
+  const path = (key) => pts.map((p, i) => (p[key] == null ? "" : `${i ? "L" : "M"}${x(i).toFixed(1)},${y(p[key]).toFixed(1)}`)).join("");
+  const up = pts[pts.length - 1].v >= pts[0].v;
+  const lab = (p) => p.label || `${Number(p.d.slice(4, 6))}/${Number(p.d.slice(6, 8))}`;
+  const base = opts.base ?? invBase();
+  return `<svg class="inv-chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="${opts.label || "내 자산 그래프"}">
+    ${base >= lo && base <= hi ? `<line x1="${P}" y1="${y(base).toFixed(1)}" x2="${W - P}" y2="${y(base).toFixed(1)}" class="base"/>` : ""}
+    ${pts.some((p) => p.kv != null) ? `<path d="${path("kv")}" class="k"/>` : ""}
+    <path d="${path("v")}" class="me ${up ? "up" : "down"}"/>
+    <circle cx="${x(pts.length - 1).toFixed(1)}" cy="${y(pts[pts.length - 1].v).toFixed(1)}" r="3.5" class="dot ${up ? "up" : "down"}"/>
+    <text x="${P}" y="${H - 2}" class="lb">${lab(pts[0])}</text><text x="${W - P}" y="${H - 2}" class="lb" text-anchor="end">${lab(pts[pts.length - 1])}</text>
+  </svg>`;
+}
+function chartBlock() {
+  const per = ["1d", "3d", "1w", "1m"].includes(ui.invPeriod) ? ui.invPeriod : "1d";
+  const seg = [["1d", "1일"], ["3d", "3일"], ["1w", "1주"], ["1m", "1개월"]].map(([v, t]) => `<button class="${per === v ? "on" : ""}" data-act="inv-period" data-v="${v}">${t}</button>`).join("");
+  let body;
+  if (per === "1d") {
+    const c = dayChart();
+    body = c ? `${c}<div class="inv-legend"><span><i class="me"></i>내 포트폴리오 전체</span><span><i class="base"></i>시작 금액</span></div>
+      <p class="hint" style="margin:6px 0 0;font-size:calc(12px * var(--fs, 1))">가격은 하루 한 번 들어오는 전 거래일 종가라, 하루 안에서는 새 종가가 들어올 때와 사고팔 때 값이 바뀌어요.</p>`
+      : `<p class="hint inv-empty">${invData.game ? "앱을 열고 사고팔 때마다 점이 찍혀요." : "그래프를 불러오는 중…"}</p>`;
+  } else {
+    const pts = invChartPoints(per);
+    body = pts.length >= 2 ? `${lineChart(pts)}<div class="inv-legend"><span><i class="me"></i>내 자산</span>${per !== "1d" ? `<span><i class="k"></i>${idxName()} (같은 비율로)</span>` : ""}<span><i class="base"></i>시작 금액</span></div>`
+      : `<p class="hint inv-empty">${invData.game ? "날이 쌓이면 그래프가 그려져요." : "그래프를 불러오는 중…"}</p>`;
+  }
+  return `<div class="inv-seg" role="tablist">${seg}</div>${body}`;
+}
+
+// ── 성향별 나눠 담기 예시 (투자 성향 진단 결과 기준, 일반 참고치 · 특정 종목 추천 아님) ──
+// 주식 비중은 investGuide()의 성향별 범위 안에서 가운데쯤으로 잡았다
+const INV_MIX = {
+  안정형: { 주식: 5, 채권: 35, "예금·CMA": 50, 현금: 10 },
+  안정추구형: { 주식: 20, 채권: 40, "예금·CMA": 30, 현금: 10 },
+  위험중립형: { 주식: 40, 채권: 30, "예금·CMA": 20, 현금: 10 },
+  적극투자형: { 주식: 60, 채권: 20, "예금·CMA": 10, 현금: 10 },
+  공격투자형: { 주식: 80, 채권: 10, "예금·CMA": 5, 현금: 5 },
+};
+const MIX_WHY = {
+  안정형: "잃지 않는 게 가장 중요해서, 이자가 붙는 예금·CMA와 채권을 중심으로 담아요.",
+  안정추구형: "조금은 불려 보되 크게 흔들리지 않게, 채권을 가장 많이 담아요.",
+  위험중립형: "오르내림을 어느 정도 견딜 수 있어서, 주식과 채권·예금을 비슷하게 나눠요.",
+  적극투자형: "더 크게 불리려고 주식을 절반 넘게 담고, 나머지로 흔들림을 줄여요.",
+  공격투자형: "크게 오르내려도 괜찮아서 주식을 대부분 담아요. 그만큼 크게 잃을 수도 있어요.",
+};
+// 나눠 담기 기준 비율: 마이페이지에서 직접 고친 비율(합 100)이 있으면 그것, 없으면 투자 성향 예시
+function myMix() {
+  const m = profile.mix;
+  if (m && Object.keys(INV_MIX.위험중립형).every((g) => Number.isFinite(m[g])) && Object.values(m).reduce((a, b) => a + b, 0) === 100) return { mix: m, label: "내가 정한 비율", own: true };
+  const type = riskType(profile.avert);
+  return { mix: INV_MIX[type], label: `${type} 예시`, own: false };
+}
+// 지금 비율이 성향 예시보다 어디에 더·덜 담겼는지 한 줄로 (5%p 넘게 차이 나는 것만, 큰 순서로 둘)
+function mixCompare() {
+  const { mix, label, own } = myMix(), G = invGroups(), total = invTotal();
+  if (!inv.trades.some((t) => t.kind !== "bonus") || !total) return "";
+  const diffs = Object.keys(mix).map((g) => [g, Math.round((G[g] / total) * 100 - mix[g])]).filter(([, d]) => Math.abs(d) > 5).sort((a, b) => Math.abs(b[1]) - Math.abs(a[1])).slice(0, 2);
+  if (!diffs.length) return `${own ? "내가 정한 비율과" : `${label} 비율과`} 거의 비슷하게 나눠 담았어요.`;
+  return `${label}보다 ${diffs.map(([g, d]) => `${g}에 ${Math.abs(d)}%p ${d > 0 ? "더" : "덜"}`).join(", ")} 담았어요.`;
+}
+// 모의투자 탭에는 첫 거래 전에만 보여 주는 추천 (거래 뒤에는 마이페이지에서 보고 고친다)
+function mixBlock() {
+  const type = riskType(profile.avert), { mix, own } = myMix(), G = invGroups(), total = invTotal();
+  const bar = (vals) => `<div class="mix-bar">${Object.entries(vals).filter(([, v]) => v > 0).map(([g, v]) => `<i style="width:${v}%;background:${INV_COLORS[g]}"></i>`).join("")}</div>`;
+  const now = Object.fromEntries(Object.entries(G).map(([g, v]) => [g, (v / total) * 100]));
+  const need = ["채권", "예금·CMA"].map((g) => [g, Math.floor(Math.max(0, (mix[g] / 100) * total - G[g]) / 1e4) * 1e4]);
+  const canFill = need.some(([, v]) => v > 0) && inv.cash > 1e4;
+  return `<section class="card inv-mixrec">
+    <div class="sec-title" style="margin:0"><h2>투자하기 전에, 내 성향에 맞는 비율 알려드려요!</h2><span class="badge b-green">${own ? "내 비율" : type}</span></div>
+    <p class="hint" style="margin:0">${own ? "마이페이지에서 직접 정한 비율이에요" : profile.riskTest ? `${profile.riskTest.date} 투자 성향 진단 결과 기준` : "첫 설문의 성향 기준이에요"} · 정답이 아니라 참고 비율이에요. 첫 거래를 하면 이 칸은 사라지고, 마이페이지에서 언제든 보고 고칠 수 있어요</p>
+    <div class="mix-row"><span class="hint">예시</span>${bar(mix)}</div>
+    <div class="mix-row"><span class="hint">지금</span>${bar(now)}</div>
+    <div class="mix-leg">${Object.keys(mix).map((g) => `<div><i style="background:${INV_COLORS[g]}"></i><span>${g}</span><b class="num">${mix[g]}%</b><small class="hint num">지금 ${fmt(Math.round(now[g]))}%</small></div>`).join("")}</div>
+    ${mixCompare() ? `<p class="mix-cmp">${esc(mixCompare())}</p>` : ""}
+    <div class="lumi-says inv-says">${mascot(36)}<p class="bubble-onb">${own ? "직접 정한 비율대로 담아 볼까요?" : MIX_WHY[type]} 주식 ${mix.주식}%(약 ${invMan(total * mix.주식 / 100)})는 아래 주식 시장에서 직접 골라 보세요.</p></div>
+    ${canFill ? `<button class="btn ghost block inv-fill" data-act="inv-fill">예시 비율만큼 채권·예금 담기<small>${need.filter(([, v]) => v > 0).map(([g, v]) => `${g} ${invMan(v)}`).join(" · ")}</small></button>` : ""}
+    <button class="link-btn" data-act="inv-risktest" style="align-self:flex-start;padding-left:0">${profile.riskTest ? "투자 성향 진단 다시 받기 ›" : "7문항 투자 성향 진단 받기 ›"}</button>
+  </section>`;
+}
+function fillMix() {
+  const { mix } = myMix(), G = invGroups(), total = invTotal();
+  const plan = [["ktb3", "채권"], ["cma", "예금·CMA"]].map(([id, g]) => [id, Math.floor(Math.max(0, (mix[g] / 100) * total - G[g]) / 1e4) * 1e4]).filter(([, v]) => v > 0);
+  let done = 0;
+  for (const [id, v] of plan) {
+    const amt = Math.min(v, Math.floor(inv.cash / 1e4) * 1e4);
+    if (amt <= 0) continue;
+    addRateLot(id, amt);
+    done += amt;
+  }
+  if (done) afterTrade(`채권·예금에 ${invMan(done)}을 나눠 담았어요. 종목은 아래 주식 시장에서 골라 보세요`);
+}
+// 마이페이지: 나눠 담기 비율 보기·고치기 + 지금 모의투자와 비교
+function mixMyCard() {
+  const type = riskType(profile.avert), { mix, own } = myMix(), ex = INV_MIX[type];
+  const G = invGroups(), total = invTotal(), traded = inv.trades.some((t) => t.kind !== "bonus");
+  return `<section class="card form" id="sec-mix">
+      <div class="sec-title"><h2>나눠 담기 비율</h2><span class="badge b-green">${own ? "내가 정한 비율" : `${type} 예시`}</span></div>
+      <p class="hint" style="margin:0">모의투자에서 주식·채권·예금·현금을 어떤 비율로 담을지 정해요. 처음엔 투자 성향 예시(${type}: ${Object.entries(ex).map(([g, v]) => `${g} ${v}%`).join(" · ")})로 채워 두었어요. 정답이 아니라 참고 비율이에요.</p>
+      <div class="grid2">${Object.keys(ex).map((g, i) => `<div><label class="lb" for="mix-${i}">${g}${traded && total ? ` <small class="hint num">지금 ${fmt(Math.round((G[g] / total) * 100))}%</small>` : ""}</label><div class="money"><input class="field num" id="mix-${i}" inputmode="numeric" maxlength="3" value="${mix[g]}"><span class="unit">%</span></div></div>`).join("")}</div>
+      ${traded && mixCompare() ? `<p class="mix-cmp" style="margin:0">${esc(mixCompare())}</p>` : ""}
+      <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" data-act="inv-mixsave">비율 저장</button>${own ? `<button class="btn ghost" data-act="inv-mixreset">성향 예시로 되돌리기</button>` : ""}</div>
+    </section>`;
+}
+
+// ── 화면 ──
+function lumiInvestLine() {
+  if (!invData.game) return "시세를 불러오는 중이에요…";
+  if (!inv.trades.some((t) => t.kind !== "bonus")) return "가상 1,000만 원이 들어왔어요! 대표 종목이나 검색으로 첫 종목을 골라 볼까요? 오늘 힌트도 있어요.";
+  const best = Object.values(inv.hold).filter((h) => h.kind === "stock").map((h) => ({ h, r: (holdValue(h) / h.cost - 1) * 100 })).sort((a, b) => Math.abs(b.r) - Math.abs(a.r))[0];
+  if (best && Math.abs(best.r) >= 1) return `${esc(best.h.name)}${josa(best.h.name, "이", "가")} 산 뒤로 ${fmt(Math.abs(best.r), 1)}% ${best.r > 0 ? "올랐어요" : "내렸어요"}. 왜 그런지 힌트를 볼까요?<br><button class="link-btn inv-why" data-act="inv-hints" data-k="${esc(best.h.id)}">${esc(best.h.name)} 왜 ${best.r > 0 ? "올랐는지" : "내렸는지"} 보기 ›</button>`;
+  if (invGroups().현금 / invTotal() > 0.8) return "아직 현금이 많아요. 주식이 부담되면 채권이나 CMA에 조금 넣어 두는 방법도 있어요.";
+  return `${seasonLabel(inv.season)}이 ${seasonLeft()}일 남았어요. ${idxName()}보다 잘하는 게 목표예요!`;
+}
+// 순위의 수익: 소수 둘째 자리 % + 번 돈(100원 단위). 예금 이자처럼 작은 차이도 보이게 (순서는 원래부터 1원 단위 총액)
+function rkGain(x) { return Math.round((x.total - INV_START) / 100) * 100 || 0; }
+function rkRetPct(x) { return ((x.total / INV_START) - 1) * 100; }
+function rkRet(x) {
+  const g = rkGain(x), r = rkRetPct(x);
+  return `<span class="num rk-ret ${g > 0 ? "up" : g < 0 ? "down" : ""}">${r > 0 ? "+" : ""}${fmt(r, 2)}%<small>${g > 0 ? "+" : ""}${fmt(g)}원</small></span>`;
+}
+function rankBlock() {
+  if (!sync.on) return `<section class="card inv-rank"><div class="sec-title" style="margin:0"><h2>순위</h2><span>${seasonLabel(inv.season)}</span></div>
+      <div class="inv-lock">${mascot(36, "wave")}<p>구글로 로그인하면 같은 시즌 사람들과 순위를 겨뤄요. 로그인하지 않아도 게임과 배지는 그대로 할 수 있어요.</p></div>
+      <button class="btn ghost block" data-act="sync-start">구글로 로그인하고 순위 보기</button></section>`;
+  const R = invData.rank;
+  if (!R) return `<section class="card inv-rank"><div class="sec-title" style="margin:0"><h2>순위</h2><span>${seasonLabel(inv.season)}</span></div><p class="hint" style="margin:0">불러오는 중…</p></section>`;
+  if (R.error) return `<section class="card inv-rank"><div class="sec-title" style="margin:0"><h2>순위</h2><span>${seasonLabel(inv.season)}</span></div><p class="hint" style="margin:0">순위표를 아직 불러오지 못했어요. 잠시 후 다시 열어 주세요.</p></section>`;
+  const top = R.list.slice(0, 5), mx = Math.max(...R.list.map((x) => x.total), 1), mn = Math.min(...R.list.map((x) => x.total), INV_START) * 0.98;
+  const jd = (s) => (s ? `${Number(s.slice(2, 4))}.${Number(s.slice(5, 7))}.${Number(s.slice(8, 10))} 가입` : "");
+  const row = (x, i) => `<div class="rk ${i === R.me ? "me" : ""}"><b class="num">${i + 1}</b><button class="nm rk-nm" data-act="inv-player" data-i="${i}" aria-label="${esc(x.nick || "익명")}님 투자 정보 보기"><span>${esc(x.nick || "익명")}${i === R.me ? " (나)" : ""}${x.share ? ` <span class="rk-share">공유</span>` : ""} ›</span>${x.joined ? `<small class="hint rk-join">${jd(x.joined)}</small>` : ""}</button>
+      <span class="bar"><i style="width:${Math.max(6, Math.round(((x.total - mn) / (mx - mn || 1)) * 100))}%"></i></span>${rkRet(x)}</div>`;
+  return `<section class="card inv-rank"><div class="sec-title" style="margin:0"><h2>순위</h2><span>${seasonLabel(inv.season)} · ${R.n}명</span></div>
+    <p style="margin:0">로그인한 ${R.n}명 중 <b style="color:var(--green)">${R.me + 1}위</b>예요</p>
+    <p class="hint" style="margin:0">${R.list[R.me]?.pending ? "내 순위는 서버가 확인하는 중이에요(최대 10분)." : "순위는 서버가 모두의 거래를 공식 종가로 다시 계산한 값이에요."}${R.list[R.me]?.bad ? ` 확인되지 않은 거래 ${R.list[R.me].bad}건은 빼고 계산했어요.` : ""}</p>
+    <div class="rk-list">${ui.rankAll ? R.list.map(row).join("") : top.map(row).join("") + (R.me >= 5 ? `${R.me > 5 ? `<button class="rk-gap" data-act="inv-rank-all" aria-label="가운데 순위 모두 보기">… ${R.me - 5}명 더 보기</button>` : ""}${row(R.list[R.me], R.me)}` : "")}</div>
+    ${R.list.length > 5 ? `<button class="link-btn" data-act="inv-rank-all" style="align-self:center">${ui.rankAll ? "접기" : `전체 순위 보기 (${R.list.length}명)`}</button>` : ""}
+    <label class="rk-consent"><input type="checkbox" data-act="inv-share" ${inv.share ? "checked" : ""}><span><b>내 투자 정보 공유하기</b><small class="hint">켜면 어떤 종목을 얼마나 샀는지 공유한 사람끼리 서로 볼 수 있어요. 끄면 바로 안 보여요.</small></span></label>
+    <p class="hint" style="margin:0">이름을 누르면 투자 비중을, 둘 다 공유했다면 산 종목·수량까지 볼 수 있어요.</p></section>`;
+}
+// 주식 시장 목록: 대표 종목 12개(+ 산 종목). 검색하면 모든 종목에서 찾는다
+function invMarketList() {
+  const G = invData.game;
+  if (!G) return `<p class="hint">${invData.error ? "시세를 불러오지 못했어요. 잠시 후 다시 열어 주세요." : "시세를 불러오는 중…"}</p>`;
+  const q = (ui.invQ || "").trim().toLowerCase(), us = ui.invMkt === "us";
+  const hit = (c) => (q ? `${c.name} ${c.sector} ${c.ticker || ""}`.toLowerCase().includes(q) : !!c.us === us);
+  const tabs = q ? "" : `<div class="inv-seg" style="margin:0 0 6px"><button class="${us ? "" : "on"}" data-act="inv-mkt" data-m="kr">국내</button><button class="${us ? "on" : ""}" data-act="inv-mkt" data-m="us">미국</button></div>`;
+  const rates = RATES.filter((p) => !q || p.name.toLowerCase().includes(q) || p.words.some((w) => w.includes(q) || q.includes(w)));
+  const row = (c) => {
+    const Q = quote(c.id);
+    const D = c.us ? usdQuote(c.id) : null;
+    return `<button class="inv-sr" data-act="inv-open" data-k="stock:${esc(c.id)}"><span><b>${esc(c.name)}</b><small class="hint">${esc(c.sector || "")}${D ? ` · ${usd$(D.v)}` : ""}</small></span>
+      <span class="inv-px"><b class="num">${Q ? fmt(Q.v) : "-"}원</b><small class="num ${tone(Q?.pct)}">${Q ? pct(Q.pct) : ""}</small></span></button>`;
+  };
+  const shown = G.companies.filter(hit);
+  const usWait = !q && us && !shown.length ? `<p class="hint">${G.us?.ready ? "미국 종가를 모으는 중이에요. 잠시 뒤 다시 열어 주세요." : "미국 주식은 준비 중이에요. 곧 열려요!"}</p>` : "";
+  const more = q ? (invData.search || []).filter((r) => !G.companies.some((c) => c.id === (r.id || r.name))).slice(0, 8)
+    .map((r) => `<button class="inv-sr" data-act="inv-open" data-k="stock:${esc(r.id || r.name)}"><span><b>${esc(r.name)}</b><small class="hint">${esc(r.market || "")}</small></span><span class="inv-px"><small class="hint">눌러서 가격 보기 ›</small></span></button>`).join("") : "";
+  const rr = rates.map((p) => `<button class="inv-sr" data-act="inv-open" data-k="rate:${p.id}"><span><b>${esc(p.name)}</b><small class="hint">${p.group}</small></span><span class="inv-px"><b class="num">연 ${fmt(p.rate, 1)}%</b><small class="hint">게임 금리</small></span></button>`).join("");
+  return `${tabs}${usWait}${shown.length ? `<p class="hint inv-sub">${q ? "찾은 종목" : us ? "미국 대표 종목 · 원화로 바꾼 값" : "대표 종목"} · ${ymdLabel(quote(shown[0].id)?.date)} 종가${!q && us ? " (뉴욕)" : !us && nextCloseNote(quote(shown[0].id)?.date) ? ` · ${nextCloseNote(quote(shown[0].id)?.date)}` : ""}</p>${shown.map(row).join("")}` : ""}${more}
+    ${q && ui.invSearching ? `<p class="hint">찾는 중…</p>` : ""}
+    ${rr ? `<p class="hint inv-sub">채권 · 예금 · CMA</p>${rr}` : ""}${!shown.length && !more && !rr && !ui.invSearching ? `<p class="hint">찾는 종목이 없어요. 이름을 조금 다르게 적어 보세요.</p>` : ""}`;
+}
+function holdRow(h) {
+  const v = holdValue(h);
+  if (h.kind === "rate") {
+    const pr = rateById(h.id), principal = h.lots.reduce((s, l) => s + l.amt, 0);
+    return `<button class="inv-hold" data-act="inv-open" data-k="rate:${h.id}"><span class="dotc" style="background:${INV_COLORS[pr?.group || "예금·CMA"]}"></span>
+      <span class="hm"><b>${esc(h.name)}</b><small class="hint">연 ${fmt(h.lots[h.lots.length - 1].rate, 1)}% · 넣은 돈 ${won(principal)}</small></span>
+      <span class="hv"><b class="num">${won(v)}</b><small class="num up">+${won(v - principal)}</small></span></button>`;
+  }
+  const r = (v / h.cost - 1) * 100, Q = quote(h.id);
+  const lot = h.lots[h.lots.length - 1], rs = lot?.reason;
+  const dd = Math.floor((Date.now() - (lot?.at || 0)) / 86400e3);
+  const why = rs?.type === "hint" ? (rs.rumor ? "소문 보고 삼" : dd >= rs.days ? "힌트 기간이 지났어요 · 팔면 평가" : `힌트 확인 D+${dd} / ${rs.days}일`) : rs?.text ? esc(rs.text.slice(0, 12)) : "";
+  return `<button class="inv-hold" data-act="inv-open" data-k="stock:${h.id}"><span class="dotc" style="background:${INV_COLORS.주식}"></span>
+    <span class="hm"><b>${esc(h.name)} <small class="hint">${fmt(h.qty)}주</small></b><small class="hint num">${Q ? `시가 ${fmt(Q.o)} · 종가 ${fmt(Q.v)}` : "가격 불러오는 중"}${why ? ` · ${why}` : ""}</small></span>
+    <span class="hv"><b class="num">${won(v)}</b><small class="num ${tone(r)}">${r > 0 ? "+" : ""}${fmt(r, 2)}%</small></span></button>`;
+}
+function donut(groups, total) {
+  let acc = 0;
+  const stops = Object.entries(groups).filter(([, v]) => v > 0).map(([g, v]) => { const a = acc; acc += (v / total) * 100; return `${INV_COLORS[g]} ${a.toFixed(2)}% ${acc.toFixed(2)}%`; });
+  return `<div class="inv-donut" style="background:conic-gradient(${stops.join(",") || "#D2D6DD 0 100%"})"><span><small>투자 비중</small><b class="num">${fmt(Math.round(((total - groups.현금) / total) * 100))}%</b></span></div>`;
+}
+function evalCard(e, full) {
+  const h = e.hint;
+  return `<div class="inv-eval">
+    <div class="sec-title" style="margin:0"><h3>${esc(e.name)}</h3><span>${e.seasonEnd ? "시즌 끝 평가" : `${e.heldDays}일 갖고 있다가 팜`}</span></div>
+    <div class="ev-grid">
+      <span class="hint">내 수익</span><b class="num ${tone(e.ret)}">${e.ret > 0 ? "+" : ""}${fmt(e.ret, 2)}%</b>
+      <span class="hint">같은 기간 ${e.idxName || idxName()}</span><span class="num">${e.kret == null ? "-" : `${e.kret > 0 ? "+" : ""}${fmt(e.kret, 2)}%`}</span>
+      ${e.kret == null ? "" : `<span class="hint">시장보다</span><b class="num" style="color:var(--green)">${e.ret - e.kret >= 0 ? "+" : ""}${fmt(e.ret - e.kret, 2)}%p ${e.ret - e.kret >= 0 ? "잘했어요" : "덜 올랐어요"}</b>`}
+      ${h ? `<span class="hint">고른 ${h.rumor ? "소문" : "힌트"} · ${DIR[h.dir]?.[0] || ""}</span><span>${h.rumor ? `<span class="badge b-warn">근거 없음</span>` : h.early ? `<span class="badge b-flat">기간 전</span>` : h.ok ? `<span class="badge b-ok">방향 맞음</span>` : `<span class="badge b-no">방향 다름</span>`}</span>` : ""}
+      ${!h && e.reasonText ? `<span class="hint">내가 적은 이유</span><span>${esc(e.reasonText)}</span>` : ""}
+    </div>
+    <div class="lumi-says inv-says">${mascot(36, e.good ? "happy" : "wave")}<p class="bubble-onb">${esc(e.text)}${full && h ? `<br><small class="hint">${h.rumor ? "소문" : "힌트"}: ${esc(h.title)} (${daysText(h.days)})</small>` : ""}</p></div>
+  </div>`;
+}
+function viewInvest() {
+  rollSeason();
+  if (!invData.started) { invData.started = true; loadInvest(); }
+  const total = invTotal(), ret = invRet(), G = invGroups();
+  const holds = Object.values(inv.hold).sort((a, b) => holdValue(b) - holdValue(a));
+  const hints = invHints();
+  const badges = invBadgeList();
+  const traded = inv.trades.some((t) => t.kind !== "bonus");
+  const portfolio = `<section class="card">
+      <div class="sec-title" style="margin:0"><h2>내 포트폴리오</h2><span>${holds.length ? `${holds.length}개 상품` : "아직 없어요"}</span></div>
+      ${holds.length ? `<div class="inv-holds">${holds.map(holdRow).join("")}</div>` : `<p class="hint" style="margin:0">아래 주식 시장에서 종목이나 채권·예금을 골라 담아 보세요.</p>`}
+      <div class="inv-mix">${donut(G, total)}
+        <div class="inv-leg">${Object.entries(G).map(([g, v]) => `<div><i style="background:${INV_COLORS[g]}"></i><span>${g}</span><b class="num">${fmt(Math.round((v / total) * 100))}%</b><small class="hint num">${invMan(v)}</small></div>`).join("")}</div>
+      </div>
+      ${traded ? `<button class="link-btn" data-act="nav" data-route="my" data-target="sec-mix" style="align-self:flex-start;padding-left:0">${esc(mixCompare() || "나눠 담기 비율")} 마이페이지에서 보기 ›</button>` : ""}
+    </section>`;
+  return `${tabHead("모의투자")}
+  <main class="scroll inv">
+    <div class="lumi-says inv-says">${mascot(44, ...lumiMood())}<p class="bubble-onb">${lumiInvestLine()}</p></div>
+
+    ${ordersBlock()}
+    ${traded ? portfolio : mixBlock()}
+
+    <section class="card inv-top">
+      <div class="sec-title" style="margin:0"><span class="hint">내 가상 자산</span><span class="badge b-flat">${seasonLabel(inv.season)} · D-${seasonLeft()}</span></div>
+      <div class="inv-total"><b class="num">${won(Math.round(total))}</b><span class="badge b-${tone(ret)}">${ret > 0 ? "+" : ""}${fmt(ret, 2)}%</span></div>
+      <p class="hint num" style="margin:0">현금 ${won(Math.round(inv.cash))} · 투자 ${won(Math.round(total - inv.cash))}${inv.bonusTotal ? ` · 보너스 +${won(inv.bonusTotal)}` : ""}${invData.game?.sample ? ` <span class="badge b-sample">예시 데이터</span>` : ""}</p>
+      ${chartBlock()}
+    </section>
+
+    <section class="card inv-hintbar">
+      <button class="inv-hint-open" data-act="inv-hints">${mascot(30)}<span><b>루미의 오늘 힌트</b><small class="hint">${invData.hints ? `${hints.length}개 · 시장 소식과 나에게만 고른 정책 소식` : "만드는 중…"}</small></span><span class="plus" aria-hidden="true">+</span></button>
+    </section>
+
+    <section class="card inv-search">
+      <div class="sec-title" style="margin:0 0 8px"><h2>주식 시장</h2><span>${idxName()} ${curIdx() ? fmt(curIdx(), 2) : "-"}${invData.game?.indexDate ? ` · ${ymdLabel(invData.game.indexDate)} 종가` : ""}</span></div>
+      <div class="searchbox inv-sbox">${SEARCH_ICON}<label for="inv-q" class="sr">종목·채권·예금 찾기</label>
+        <input id="inv-q" type="search" autocomplete="off" placeholder="종목 이름으로 찾기 (예: 하이닉스, 애플, TSLA, 채권)" value="${esc(ui.invQ || "")}"></div>
+      <div id="inv-results">${invMarketList()}</div>
+    </section>
+
+    ${traded ? "" : portfolio}
+
+    ${rankBlock()}
+
+    ${inv.evals.length ? `<section class="card"><div class="sec-title" style="margin:0"><h2>루미의 매매 평가</h2><span>팔 때 · 시즌 끝에</span></div>
+      ${inv.evals.slice(0, ui.invEvalAll ? 30 : 2).map((e) => evalCard(e)).join("")}
+      ${inv.evals.length > 2 ? `<button class="link-btn" data-act="inv-eval-all">${ui.invEvalAll ? "접기" : `평가 ${inv.evals.length}개 모두 보기`} ›</button>` : ""}</section>` : ""}
+
+
+    <section class="card"><div class="sec-title" style="margin:0"><h2>모의투자 배지</h2><span>${badges.filter((b) => b.ok).length}/${badges.length}</span></div>
+      <div class="inv-badges">${badges.map((b) => `<div class="${b.ok ? "ok" : ""}" title="${esc(b.desc)}"><span>${b.icon}</span><b>${b.name}</b><small>${esc(b.desc)}</small></div>`).join("")}</div></section>
+
+    <p class="foot">가상 돈으로 하는 게임이에요. 주식 가격은 실제 종가(금융위원회 자료)이고, 사고팔기는 주문한 뒤 처음 끝나는 장의 종가로 체결돼요(국내 15:30·미국 16:00 뉴욕 기준). 코스피도 실제 값이에요. ${RATE_NOTE} 힌트와 평가는 투자 권유가 아닌 공부용 참고예요.</p>
+  </main>`;
+}
+// 힌트 팝업
+function hintCard(h) {
+  return `<div class="inv-hint">
+      <div class="r">${h.kind === "market" ? `<span class="badge b-flat">시장 소식</span>` : dirPill(h.dir)}<span class="hint">${daysText(h.days)}</span></div>
+      <b>${esc(h.title)}</b><p>${esc(hintText(h))}</p>
+      <div class="r"><span class="hint">${h.sources.length ? `근거 ${h.sources.map((s) => (s.url ? `<a href="${href(s.url)}" target="_blank" rel="noopener">${esc(s.source)}${h.kind === "news" ? " 보도자료" : ""}</a>` : esc(s.source))).join(" · ")}` : "예시 소식"}</span>
+        <span class="inv-hs">${h.stocks.map((id) => `<button class="chip small" data-act="inv-open" data-k="stock:${esc(id)}">${esc(company(id)?.name || id)}</button>`).join("")}</span></div>
+    </div>`;
+}
+// 한 종목이 왜 올랐·내렸는지: 내 수익 vs 같은 기간 코스피, 그 종목·업종 힌트, 관련 뉴스 제목(NewsData, 제목·링크만)
+function stockWhy(id) {
+  const h = inv.hold[holdKey("stock", id)], c = company(id), name = h?.name || c?.name || id, Q = quote(id);
+  const ev = h && inv.px[id] != null ? evalLots(name, h.lots, inv.px[id], idxFor(id), false, idxLabel(id)) : null;
+  const pool = invData.hints?.pool || [];
+  const mine = pool.filter((x) => x.stocks.includes(id));
+  const sector = c?.sector ? pool.filter((x) => !mine.includes(x) && x.kind === "news" && x.sector && (x.sector === c.sector || c.sector.includes(x.sector) || x.sector.includes(c.sector))).slice(0, 2) : [];
+  const news = invData.why?.[name];
+  if (news === undefined) {
+    (invData.why ||= {})[name] = null;
+    getJson(`/api/news?q=${encodeURIComponent(name)}`).then((j) => { invData.why[name] = j.items || []; }).catch(() => { invData.why[name] = []; }).then(() => { if (ui.modal?.kind === "inv-hints") render(); });
+  }
+  let say = "";
+  if (ev && ev.kret != null) {
+    const gap = ev.ret - ev.kret;
+    say = (ev.ret >= 0) === (ev.kret >= 0) && Math.abs(gap) < 2
+      ? Math.abs(ev.kret) < 0.1 && Math.abs(ev.ret) < 0.1 ? `산 뒤로 ${idxName()}도 ${esc(name)}도 거의 그대로예요.`
+        : `같은 기간 ${idxName()}도 ${fmt(Math.abs(ev.kret), 1)}% ${ev.kret >= 0 ? "올라서" : "내려서"}, 시장 전체 흐름을 따라간 쪽에 가까워요.`
+      : `같은 기간 ${idxName()}는 ${ev.kret > 0 ? "+" : ""}${fmt(ev.kret, 1)}%인데 ${esc(name)}${josa(name, "은", "는")} ${ev.ret > 0 ? "+" : ""}${fmt(ev.ret, 1)}%예요. 시장보다 ${gap > 0 ? "더 올라서" : "더 내려서"}, 회사나 업종에 따로 소식이 있었을 수 있어요.`;
+  }
+  return `<div class="sec-title" style="margin:0"><h2>${esc(name)} 왜 움직였을까?</h2><span>참고용</span></div>
+    ${ev ? `<div class="ev-grid">
+      <span class="hint">산 뒤로 내 수익</span><b class="num ${tone(ev.ret)}">${ev.ret > 0 ? "+" : ""}${fmt(ev.ret, 2)}%</b>
+      <span class="hint">같은 기간 ${idxName()}</span><span class="num">${ev.kret == null ? "-" : `${ev.kret > 0 ? "+" : ""}${fmt(ev.kret, 2)}%`}</span>
+      ${Q ? `<span class="hint">마지막 거래일</span><span class="num">${fmt(Q.v)}원 (${pct(Q.pct)})</span>` : ""}
+    </div>` : ""}
+    ${say ? `<div class="lumi-says inv-says">${mascot(36)}<p class="bubble-onb">${say}</p></div>` : ""}
+    <h3 style="margin:4px 0 0;font-size:calc(15px * var(--fs, 1))">루미의 힌트</h3>
+    ${mine.length || sector.length ? [...mine, ...sector].map(hintCard).join("") : `<p class="hint" style="margin:0">${invData.hints ? `오늘은 ${esc(name)} 힌트가 없어요. 아래 뉴스 제목에서 이유를 찾아봐요.` : "힌트를 만드는 중이에요…"}</p>`}
+    <h3 style="margin:4px 0 0;font-size:calc(15px * var(--fs, 1))">${esc(name)} 최근 뉴스</h3>
+    <div class="nl">${!news ? `<p class="hint">불러오는 중…</p>` : news.length ? news.slice(0, 3).map((it) => newsLine(it, true)).join("") : `<p class="hint">관련 뉴스를 찾지 못했어요.</p>`}</div>
+    <p class="hint" style="margin:0">뉴스는 제목·링크 그대로예요. 사라·팔라는 뜻이 아니에요.</p>
+    <div style="display:flex;gap:8px"><button class="btn ghost" style="flex:1" data-act="inv-open" data-k="stock:${esc(id)}">${esc(name)} 사고팔기</button><button class="btn" style="flex:1" data-act="modal-close">닫기</button></div>`;
+}
+// 순위의 한 사람: 국내 주식·미국 주식·채권·예금·CMA·현금 비중(%)만. 종목 이름은 서버도 순위표에 쓰지 않는다
+const MIX_PARTS = [["kr", "국내 주식", "#245296"], ["us", "미국 주식", "#5A4FCF"], ["bond", "채권", "#4E9BD1"], ["dep", "예금·CMA", "#9DB8E0"], ["cash", "현금", "#D2D6DD"]];
+function myPartMix() {
+  const total = invTotal() || 1, m = { kr: 0, us: 0, bond: 0, dep: 0, cash: inv.cash };
+  for (const h of Object.values(inv.hold)) {
+    const v = holdValue(h);
+    if (h.kind === "stock") m[isUS(h.id) ? "us" : "kr"] += v; else m[rateById(h.id)?.group === "채권" ? "bond" : "dep"] += v;
+  }
+  return Object.fromEntries(Object.entries(m).map(([k, v]) => [k, Math.round((v / total) * 100)]));
+}
+function modalInvPlayer(m) {
+  const R = invData.rank, x = R?.list?.[m.i];
+  if (!x) return "";
+  const me = m.i === R.me, mix = me ? myPartMix() : x.mix;
+  const sum = mix ? MIX_PARTS.reduce((s, [k]) => s + (Number(mix[k]) || 0), 0) : 0;
+  const parts = mix && sum ? MIX_PARTS.filter(([k]) => mix[k] > 0) : [];
+  const stockPct = mix ? (Number(mix.kr) || 0) + (Number(mix.us) || 0) : 0;
+  return `<div class="sec-title" style="margin:0"><h2>${esc(x.nick || "익명")}${me ? " (나)" : ""}</h2><span>${m.i + 1}위 · <b class="num ${rkGain(x) >= 0 ? "up" : "down"}">${rkRetPct(x) > 0 ? "+" : ""}${fmt(rkRetPct(x), 2)}% (${rkGain(x) > 0 ? "+" : ""}${fmt(rkGain(x))}원)</b></span></div>
+    ${parts.length ? `<div class="mix-bar" role="img" aria-label="투자 비중">${parts.map(([k, , c]) => `<i style="width:${(mix[k] / sum) * 100}%;background:${c}"></i>`).join("")}</div>
+    <div class="rows">${parts.map(([k, name, c]) => `<div class="row" style="min-height:36px"><span><i class="tx-dot" style="display:inline-block;margin-right:6px;background:${c}"></i>${name}</span><b class="num">${mix[k]}%</b></div>`).join("")}</div>
+    <p style="margin:0;font-size:calc(14px * var(--fs, 1))">${stockPct >= 70 ? "주식에 많이 담은 공격적인 포트폴리오예요." : stockPct >= 40 ? "주식과 안전한 상품을 섞은 포트폴리오예요." : stockPct > 0 ? "안전한 쪽에 더 많이 담은 포트폴리오예요." : "아직 주식은 담지 않았어요."}</p>`
+      : `<p class="hint" style="margin:0">${mix ? "아직 아무것도 사지 않고 현금으로 들고 있어요." : "투자 비중은 다음 순위 계산 때(최대 10분) 보여드려요."}</p>`}
+    ${playerHold(m, x, me)}
+    <p class="hint" style="margin:0">${me ? "내 비중은 지금 값이에요." : "서버가 공식 종가로 계산한 값이에요."}</p>
+    <button class="btn ghost" data-act="modal-close">닫기</button>`;
+}
+// 산 종목·수량: 나는 늘, 다른 사람은 나와 그 사람이 둘 다 공유에 동의했을 때만 (서버가 확인)
+function playerHold(m, x, me) {
+  const list = (hold) => hold.length ? `<div class="rows">${hold.map((h) => `<div class="row" style="min-height:36px"><span>${esc(h.name)}${h.qty ? ` <small class="hint">${fmt(h.qty)}주</small>` : ""}</span><b class="num">${won(h.value)}</b></div>`).join("")}</div>` : `<p class="hint" style="margin:0">아직 산 종목이 없어요.</p>`;
+  const head = `<h3 class="mp-h" style="margin:4px 0 0">산 종목</h3>`;
+  if (me) return head + list(Object.values(inv.hold).map((h) => ({ name: h.name, qty: h.kind === "stock" ? h.qty : 0, value: Math.round(holdValue(h)) })).sort((a, b) => b.value - a.value)) + (inv.share ? "" : `<p class="hint" style="margin:0">지금은 나만 볼 수 있어요. 순위 아래 '내 투자 정보 공유하기'를 켜면 공유한 사람들도 볼 수 있어요.</p>`);
+  if (!inv.share) return head + `<p class="hint" style="margin:0">순위 아래 '내 투자 정보 공유하기'를 켜면, 공유한 사람들의 종목을 볼 수 있어요.</p>`;
+  if (!x.share) return head + `<p class="hint" style="margin:0">이 사람은 종목을 공유하지 않았어요.</p>`;
+  if (!m.hold) {
+    m.hold = { loading: true };
+    (async () => {
+      try {
+        const u = await invUser(), tok = await u?.getIdToken();
+        const j = await getJson(`/api/market?game=hold&uid=${encodeURIComponent(x.uid)}`, { headers: { Authorization: `Bearer ${tok}` } });
+        m.hold = j.hold ? { hold: j.hold } : { error: j.error || "불러오지 못했어요" };
+      } catch (e) { m.hold = { error: e.body?.error || "불러오지 못했어요. 잠시 후 다시 눌러 주세요." }; }
+      if (ui.modal === m) render();
+    })();
+  }
+  return head + (m.hold.loading ? `<p class="hint" style="margin:0">불러오는 중…</p>` : m.hold.error ? `<p class="hint" style="margin:0">${esc(m.hold.error)}</p>` : list(m.hold.hold));
+}
+function modalInvHints(m) {
+  if (m?.stock) return stockWhy(m.stock);
+  const hints = invHints();
+  return `<div class="sec-title" style="margin:0"><h2>루미의 오늘 힌트</h2><span>나에게만 고른 ${hints.length}개</span></div>
+    <p class="hint" style="margin:0">정책 소식은 사람마다 다르게 골라요. 실제 정부 보도자료에서 왔고, 관련 없는 소식은 AI(제미나이)가 한 번 걸러 냈어요. 시장 소식은 실제 코스피·종목의 마지막 거래일 움직임이에요. 실제 주가가 꼭 그렇게 움직이지는 않아요.</p>
+    ${hints.length ? hints.map(hintCard).join("") : `<p class="hint">${invData.hints ? "힌트를 불러오지 못했어요. 잠시 후 다시 열어 주세요." : "힌트를 만드는 중이에요…"}</p>`}
+    <p class="hint" style="margin:0">사라·팔라는 뜻이 아니에요.</p>
+    <button class="btn ghost" data-act="modal-close">닫기</button>`;
+}
+// 회사 그래프(이번 시즌 종가)
+function companyChart(id) {
+  const s = invData.game?.series[id] || [];
+  if (s.length < 2) return "";
+  const ss = s.filter((r) => r[0] >= inv.season.replace("-", "") + "01"); const use = ss.length >= 2 ? ss : s;
+  return lineChart(use.map((r) => ({ d: r[0], v: r[2] })), { h: 96, base: use[0][2], label: "이번 시즌 가격" });
+}
+// 사고팔기 팝업 (주식은 회사 정보·폭탄주 신고 포함)
+function modalInvTrade(m) {
+  const [kind, id] = [m.k.slice(0, m.k.indexOf(":")), m.k.slice(m.k.indexOf(":") + 1)];
+  const side = m.side || "buy";
+  const close = `<button class="icon-btn" data-act="modal-close" aria-label="닫기">${ICON.close}</button>`;
+  if (kind === "rate") {
+    const pr = rateById(id), h = inv.hold[holdKey("rate", id)];
+    if (!pr) return "";
+    const v = h ? holdValue(h) : 0, principal = h ? h.lots.reduce((s, l) => s + l.amt, 0) : 0;
+    return `<div class="sec-title" style="margin:0"><h2>${esc(pr.name)}</h2>${close}</div>
+      <div class="inv-q"><div class="r"><span class="hint">${pr.group} · 1년 기준</span><b class="num">연 ${fmt(pr.rate, 1)}%</b></div>
+        <p class="hint" style="margin:6px 0 0">${pr.desc} 넣어 둔 날만큼 이자가 붙어요.<br>${RATE_NOTE}</p></div>
+      ${h ? `<div class="inv-q"><div class="r"><span class="hint">지금 가진 것</span><b class="num">${won(v)}</b></div><div class="r"><span class="hint">넣은 돈 · 붙은 이자</span><span class="num">${won(principal)} · +${won(v - principal)}</span></div></div>` : ""}
+      <div><label class="lb" for="inv-amt">넣을 금액 (만원)</label><input class="field num" id="inv-amt" inputmode="numeric" placeholder="예: 100" value="${m.amt ?? ""}"><p class="hint" style="margin:4px 0 0">넣을 수 있는 현금 ${won(Math.floor(inv.cash))}</p></div>
+      <button class="btn" data-act="inv-deposit" data-id="${id}">넣기</button>
+      ${h ? `<button class="btn ghost" data-act="inv-withdraw" data-id="${id}">전부 빼기 (${won(v)})</button>` : ""}`;
+  }
+  const c = company(id), Q = quote(id), h = inv.hold[holdKey("stock", id)];
+  if (!c || !Q) {
+    if (invData.game && !invData.extra.includes(id)) { invData.extra.push(id); loadInvest(); }
+    return `<div class="sec-title" style="margin:0"><h2>${esc(isUS(id) ? id.slice(3) : id)}</h2>${close}</div><p class="hint">${invData.game && invData.extra.includes(id) && !invData.loading ? "이 종목의 가격을 찾지 못했어요. 검색에서 정확한 이름을 골라 주세요." : "가격을 불러오는 중이에요…"}</p>`;
+  }
+  const qty = Math.max(1, m.qty || 1), max = side === "buy" ? Math.floor(inv.cash / Q.v) : Math.max(0, (h?.qty || 0) - sellingQty(id));
+  const fd = fillDay(id, Date.now());
+  const rel = invHints().filter((x) => x.dir).sort((a, b) => b.stocks.includes(id) - a.stocks.includes(id)).slice(0, 3);
+  const rs = m.reason || {};
+  const chip = (type, label, extra = "") => `<button class="chip ${rs.type === type && (type !== "hint" || rs.hintId === extra) ? "on" : ""}" data-act="inv-reason" data-t="${type}" data-h="${extra}">${label}</button>`;
+  return `<div class="sec-title" style="margin:0"><h2>${esc(c.name)}</h2>${close}</div>
+    <p class="hint" style="margin:-4px 0 0">${esc(c.sector || "주식")}${c.code ? ` · <a href="https://finance.naver.com/item/main.naver?code=${esc(c.code)}" target="_blank" rel="noopener">네이버 증권에서 회사 정보 보기 ›</a>` : ""}${c.us ? ` · <a href="https://search.naver.com/search.naver?query=${encodeURIComponent(c.ticker + " 주가")}" target="_blank" rel="noopener">네이버에서 ${esc(c.ticker)} 보기 ›</a>` : ""}</p>
+    ${h ? `<div class="inv-seg"><button class="${side === "buy" ? "on" : ""}" data-act="inv-side" data-v="buy">사기</button><button class="${side === "sell" ? "on" : ""}" data-act="inv-side" data-v="sell">팔기 (${fmt(h.qty)}주)</button></div>` : ""}
+    <div class="inv-q">
+      ${c.us && usdQuote(id) ? (() => { const D = usdQuote(id); return `<div class="r"><span class="hint">${ymdLabel(D.date)} 뉴욕 시가 · 종가</span><span class="num">${usd$(D.o)} · ${usd$(D.v)}</span></div>
+      <div class="r"><span class="hint">환율 (유럽중앙은행 기준)</span><span class="num">1달러 = ${fmt(Math.round(Q.v / D.v * 100) / 100, 2)}원</span></div>`; })() : ""}
+      <div class="r"><span class="hint">${ymdLabel(Q.date)} 시가${c.us ? " (원화)" : ""}</span><span class="num">${fmt(Q.o)}원</span></div>
+      <div class="r"><span class="hint">${ymdLabel(Q.date)} 종가${c.us ? " (원화)" : ""} · 참고 값</span><b class="num">${fmt(Q.v)}원</b></div>
+      <div class="r"><span class="hint">전날보다</span><span class="num ${tone(Q.pct)}">${pct(Q.pct)}</span></div>
+      ${invData.game.sample ? `<span class="badge b-sample">예시 데이터</span>` : ""}
+      ${companyChart(id)}
+    </div>
+    <div class="r"><b>수량</b><span class="inv-step"><button class="icon-btn" data-act="inv-qty" data-d="-1" aria-label="하나 빼기">−</button>
+      <input class="field num" id="inv-qty" inputmode="numeric" value="${qty}" aria-label="수량"><button class="icon-btn" data-act="inv-qty" data-d="1" aria-label="하나 더하기">+</button>
+      <button class="chip small" data-act="inv-max">최대 ${fmt(max)}</button></span></div>
+    <p class="hint" style="margin:0;padding:10px 12px;border-radius:12px;background:var(--soft)">지금 주문하면 <b>${orderWhen(fd)}</b>로 체결돼요. 그 종가는 다음 거래일 오후에 들어오고, 체결 전에는 취소할 수 있어요. 아래 금액은 위 참고 값으로 계산한 예상이에요.</p>
+    <div class="r"><span class="hint">${side === "buy" ? "예상 필요한 돈 · 남는 현금" : "예상 받는 돈"}</span><span class="num" id="inv-cost">${side === "buy" ? `${won(qty * Q.v)} · ${won(Math.max(0, inv.cash - qty * Q.v))}` : won(qty * Q.v)}</span></div>
+    ${side === "buy" ? `<div><b>왜 사나요?</b> <span class="hint">안 골라도 돼요</span>
+      <div class="chips" style="margin-top:8px">${rel.map((x) => chip("hint", (x.kind === "rumor" ? "소문: " : "") + esc(x.title.length > 18 ? x.title.slice(0, 17) + "…" : x.title), x.id)).join("")}${chip("mine", "내 판단")}${chip("etc", "기타")}</div>
+      ${rs.type === "mine" || rs.type === "etc" ? `<input class="field" id="inv-why" maxlength="40" style="margin-top:8px" placeholder="${rs.type === "etc" ? "이유를 직접 적어 주세요 (예: 이 회사 제품을 자주 써요)" : "어떻게 판단했는지 한 줄 (안 적어도 돼요)"}" value="${esc(rs.text || "")}">` : ""}</div>` : ""}
+    <button class="btn" data-act="inv-do">${fmt(qty)}주 ${side === "buy" ? "사기" : "팔기"} 주문</button>`;
+}
+function modalInvEval(m) {
+  const e = inv.evals.find((x) => x.id === m.id);
+  if (!e) return "";
+  return `<div class="sec-title" style="margin:0"><h2>루미의 매매 평가</h2><span>참고용</span></div>${evalCard(e, true)}<button class="btn" data-act="modal-close">확인</button>`;
+}
+
+// ── 모의투자 누르기·입력 ──
+document.addEventListener("click", (e) => {
+  const el = e.target.closest("[data-act]");
+  if (!el || !el.dataset.act.startsWith("inv-")) return;
+  const act = el.dataset.act, m = ui.modal;
+  switch (act) {
+    case "inv-period": ui.invPeriod = el.dataset.v; render(); break;
+    case "inv-hints": openModal("inv-hints", el.dataset.k ? { stock: el.dataset.k } : {}); break;
+    case "inv-player": openModal("inv-player", { i: Number(el.dataset.i) }); break;
+    case "inv-rank-all": ui.rankAll = !ui.rankAll; render(); break;
+    case "inv-share": {
+      inv.share = el.checked; saveInv(); render(); toast(inv.share ? "공유를 켜는 중이에요…" : "공유를 끄는 중이에요…");
+      pushRank().then(() => pushShare(true)).then((ok) => { if (ok) { toast(inv.share ? "공유를 켰어요. 공유한 사람들의 종목을 볼 수 있어요" : "공유를 껐어요. 이제 내 종목이 안 보여요"); loadRank().then(() => render()); } });
+      break;
+    }
+    case "inv-mixsave": {
+      const keys = Object.keys(INV_MIX.위험중립형);
+      const v = keys.map((g, i) => Number(document.getElementById(`mix-${i}`)?.value));
+      if (v.some((x) => !Number.isInteger(x) || x < 0 || x > 100)) { toast("0~100 사이 정수로 넣어 주세요"); break; }
+      const sum = v.reduce((a, b) => a + b, 0);
+      if (sum !== 100) { toast(`합이 100%가 되어야 해요 (지금 ${sum}%)`); break; }
+      profile.mix = Object.fromEntries(keys.map((g, i) => [g, v[i]])); saveProfile(); render(); toast("나눠 담기 비율을 저장했어요");
+      break;
+    }
+    case "inv-mixreset": delete profile.mix; saveProfile(); render(); toast("투자 성향 예시 비율로 되돌렸어요"); break;
+    case "inv-eval-all": ui.invEvalAll = !ui.invEvalAll; render(); break;
+    case "inv-open": {
+      ui.modal = { kind: "inv-trade", route: routeKey(), k: el.dataset.k, side: "buy", qty: 1, reason: null };
+      render();
+      break;
+    }
+    case "inv-side": m.side = el.dataset.v; m.qty = 1; render(); break;
+    case "inv-qty": m.qty = Math.max(1, (parseInt(document.getElementById("inv-qty")?.value, 10) || 1) + Number(el.dataset.d)); render(); break;
+    case "inv-max": {
+      const id = m.k.slice(6), P = invPrice(id);
+      const mx = m.side === "sell" ? (inv.hold[holdKey("stock", id)]?.qty || 0) - sellingQty(id) || 1 : Math.floor(inv.cash / (P || 1));
+      m.qty = Math.max(1, mx); render(); break;
+    }
+    case "inv-reason": {
+      const t = el.dataset.t, text = document.getElementById("inv-why")?.value || m.reason?.text || "";
+      m.qty = parseInt(document.getElementById("inv-qty")?.value, 10) || m.qty;
+      m.reason = m.reason?.type === t && (t !== "hint" || m.reason.hintId === el.dataset.h) ? null : { type: t, hintId: el.dataset.h, text: t === "hint" ? "" : text };
+      render();
+      if (t !== "hint") document.getElementById("inv-why")?.focus();
+      break;
+    }
+    case "inv-do": {
+      const id = m.k.slice(6), qty = parseInt(document.getElementById("inv-qty")?.value, 10) || 0;
+      if (m.side === "sell") { placeOrder("sell", id, qty); break; }
+      let reason = { type: "none" };
+      if (m.reason?.type === "hint") { const h = hintById(m.reason.hintId); if (h) reason = { type: "hint", hintId: h.id, title: h.title, dir: h.dir, days: h.days, rumor: h.kind === "rumor" }; }
+      else if (m.reason) {
+        const text = (document.getElementById("inv-why")?.value || "").trim().slice(0, 40);
+        if (m.reason.type === "etc" && !text) { toast("기타 이유를 적어 주세요"); break; }
+        reason = { type: m.reason.type, text };
+      }
+      placeOrder("buy", id, qty, reason);
+      break;
+    }
+    case "inv-cancel": cancelOrder(el.dataset.id); break;
+    case "inv-deposit": depositRate(el.dataset.id, Math.round((parseFloat(document.getElementById("inv-amt")?.value) || 0) * 10000)); break;
+    case "inv-withdraw": withdrawRate(el.dataset.id); break;
+    case "inv-fill": fillMix(); break;
+    case "inv-risktest": ui.rtFrom = "invest"; ui.rt = null; go("#risktest"); break;
+  }
+});
+let invTimer;
+document.addEventListener("toggle", (e) => { if (e.target.classList?.contains("inv-info") && ui.modal?.kind === "inv-trade") ui.modal.info = e.target.open; }, true);
+document.addEventListener("input", (e) => {
+  const el = e.target;
+  if (el.id === "dr-q") { ui.drQ = el.value; const box = document.getElementById("dr-list"); if (box) box.innerHTML = drawerList(); return; }
+  if (el.id === "inv-q") {
+    ui.invQ = el.value;
+    const q = el.value.trim();
+    const paint = () => { const box = document.getElementById("inv-results"); if (box) box.innerHTML = invMarketList(); };
+    clearTimeout(invTimer);
+    invData.search = []; ui.invSearching = q.length >= 1;
+    paint();
+    if (!q) return;
+    invTimer = setTimeout(async () => {
+      try { const j = await getJson(`/api/market?search=${encodeURIComponent(q)}`); if ((ui.invQ || "").trim() === q) invData.search = j.results || []; } catch { invData.search = []; }
+      ui.invSearching = false; paint();
+    }, 300);
+    return;
+  }
+  if (el.id === "inv-qty" && ui.modal?.kind === "inv-trade") {
+    const m = ui.modal, P = invPrice(m.k.slice(6)), q = Math.max(0, parseInt(el.value, 10) || 0);
+    m.qty = q || 1;
+    const box = document.getElementById("inv-cost");
+    if (box && P) box.textContent = m.side === "buy" ? `${won(q * P)} · ${won(Math.max(0, inv.cash - q * P))}` : won(q * P);
+    const btn = document.querySelector('[data-act="inv-do"]');
+    if (btn) btn.textContent = `${fmt(q)}주 ${m.side === "buy" ? "사기" : "팔기"} 주문`;
+  }
+  if (el.id === "inv-why" && ui.modal?.reason) ui.modal.reason.text = el.value;
+});
+
+// ───────────────────────── 첫 튜토리얼 · 아래 탭 고르기 ─────────────────────────
+// 첫 설문을 마치면 루미와 함께 탭마다 핵심 기능을 하나씩 직접 써 본다(건너뛰기 없음, 순서는 자유).
+// 네 개를 다 쓰면 홈은 남기고 경제 공부·내 돈·모의투자 중 무엇을 아래 탭에 둘지 고른다(기타에서 다시 바꿈).
+const TUT = [
+  { id: "home", tab: "home", label: "홈", title: "루미에게 물어보기",
+    say: "여기는 <b>홈</b>이에요. 오늘 경제 소식이 나에게 어떤 의미인지 모아 보여줘요. 궁금한 건 맨 위 검색창에 적어 <b>저에게 물어볼 수</b> 있어요. 아래 버튼으로 한 번 물어봐 주세요!",
+    btn: ["ask", "금리가 오르면 나한테 뭐가 달라져?", "‘금리가 오르면 나한테 뭐가 달라져?’ 물어보기"] },
+  { id: "learn", tab: "learn", label: "경제 공부", title: "퀴즈 한 문제 풀기",
+    say: "<b>경제 공부</b> 탭에서는 퀴즈로 경제를 익혀요. 처음엔 공부 방법을 고르고, <b>문제 하나만</b> 풀어 보세요. 틀려도 괜찮아요!" },
+  { id: "ledger", tab: "ledger", label: "내 돈", title: "가계부 한 줄 기록하기",
+    say: "<b>내 돈</b> 탭은 가계부와 자산관리예요. 오늘 쓴 돈을 <b>하나만 기록</b>해 보세요. 연습으로 적은 건 나중에 지워도 돼요.",
+    btn: ["nav", "ledger|m-quick", "직접 입력 열기"] },
+  { id: "invest", tab: "invest", label: "모의투자", title: "가상 돈으로 한 번 사기",
+    say: "<b>모의투자</b>는 실제 종목·실제 가격으로 가상 1,000만 원을 굴려요. 주식 1주를 사거나 채권·예금을 담아 보세요. 진짜 돈은 안 들어요!" },
+];
+const OPT_TABS = ["learn", "ledger", "invest"];
+function tutOn() { return !!(profile?.tut && !profile.tut.end); }
+function tutNext() { return tutOn() ? TUT.find((s) => !profile.tut.done?.[s.id]) || null : null; }
+function tutDone(id) {
+  if (!tutOn() || profile.tut.done?.[id]) return;
+  profile.tut.done = { ...(profile.tut.done || {}), [id]: Date.now() };
+  saveProfile();
+  const n = tutNext();
+  if (n) setTimeout(() => toast(`잘했어요! 다음은 ‘${n.label}’ 탭이에요`), 2300); // 마지막엔 바로 탭 고르기 화면이 뜸
+}
+function tabsOff() { return (profile?.tabsOff || []).filter((t) => OPT_TABS.includes(t)); }
+function shownTabs() { return TABS.filter(([id]) => !tabsOff().includes(id)); }
+function tabGroup(r) { return ["money", "assets", "ledger"].includes(r) ? "ledger" : ["learn", "solved", "review", "quiz", "news", "letters"].includes(r) ? "learn" : r === "invest" ? "invest" : "home"; }
+// 화면 아래 루미 안내 카드 (팝업·답변 창·목차가 열려 있으면 숨김)
+function viewTutCoach(r) {
+  const s = tutNext();
+  if (!s || ui.modal || ui.sheet || ui.drawer) return "";
+  const n = TUT.filter((x) => profile.tut.done?.[x.id]).length;
+  const here = tabGroup(r) === s.tab;
+  const btn = !here ? `<button class="btn" data-act="tab" data-t="${s.tab}">‘${s.label}’ 탭으로 가기</button>`
+    : s.btn ? `<button class="btn" data-act="${s.btn[0]}" ${s.btn[0] === "ask" ? `data-q="${esc(s.btn[1])}"` : `data-route="${s.btn[1].split("|")[0]}" data-target="${s.btn[1].split("|")[1]}"`}>${esc(s.btn[2])}</button>` : "";
+  return `<aside class="tut-coach" aria-label="루미와 써 보기 ${n + 1}/4">
+    <div class="tut-top">${mascot(44, here ? "happy" : "wave")}<div style="flex:1;min-width:0"><span class="tut-step">루미와 써 보기 ${n + 1} / ${TUT.length} · ${esc(s.title)}</span>
+      <div class="tut-dots">${TUT.map((x) => `<i class="${profile.tut.done?.[x.id] ? "on" : x === s ? "cur" : ""}"></i>`).join("")}</div></div>
+      <button class="link-btn" data-act="tut-fold" aria-expanded="${!ui.tutFold}" style="color:var(--sub)">${ui.tutFold ? "펼치기" : "접기"}</button></div>
+    ${ui.tutFold ? "" : `<p>${s.say}</p>${btn}`}
+  </aside>`;
+}
+// 네 가지를 다 써 본 뒤: 아래 탭 고르기 (홈은 늘 있음)
+function tabPickBody(off) {
+  const row = ([id, label, icon]) => {
+    const keep = !off.includes(id);
+    return `<button class="tut-pick ${keep ? "on" : ""}" data-act="tut-tab" data-t="${id}" aria-pressed="${keep}">${icon}<span style="flex:1;text-align:left"><b>${label}</b><small>${{ learn: "퀴즈·개념 공부·뉴스", ledger: "가계부·자산관리", invest: "가상 돈 모의투자·순위" }[id]}</small></span><span class="tut-sw">${keep ? "유지" : "없앰"}</span></button>`;
+  };
+  return `<div class="tut-pick on fixed">${TABS[0][2]}<span style="flex:1;text-align:left"><b>홈</b><small>늘 있어요</small></span><span class="tut-sw">유지</span></div>
+    ${TABS.filter(([id]) => OPT_TABS.includes(id)).map(row).join("")}`;
+}
+function viewTabPick() {
+  const off = ui.tabDraft || (ui.tabDraft = [...tabsOff()]);
+  return `<div class="tut-full" role="dialog" aria-modal="true" aria-label="아래 탭 고르기"><div class="tut-card">
+    ${lumiSays(`${esc(profile.nickname || "")}님, 네 탭을 모두 써 봤어요! 👏<br>이제 <b>나에게 필요한 탭만</b> 골라요. 홈은 늘 있고, 없앤 탭은 <b>기타 → 아래 탭 고르기</b>에서 언제든 다시 켤 수 있어요.`, "happy", "up")}
+    <h1 style="margin:4px 0 0">아래 탭에 무엇을 둘까요?</h1>
+    ${tabPickBody(off)}
+    <button class="btn" data-act="tut-finish" style="width:100%">이대로 시작하기</button>
+  </div></div>`;
+}
+function tabPickCard() {
+  const off = tabsOff();
+  return `<section class="card form" id="sec-tabs">
+      <div class="sec-title"><h2>아래 탭 고르기</h2><span>홈은 늘 있어요</span></div>
+      ${tabPickBody(off)}
+      <button class="link-btn" data-act="tut-restart" style="align-self:flex-start;padding-left:0">루미와 써 보기(튜토리얼) 다시 하기</button>
+    </section>`;
+}
+
+// ───────────────────────── 라우팅 / 그리기 ─────────────────────────
+function route() {
+  if (!profile) return "onboard";
+  const h = location.hash.slice(1);
+  return ["my", "news", "schedule", "learn", "invest", "benefits", "risktest", "money", "assets", "ledger", "layout", "watch", "letters", "etc", "solved", "review", "quiz"].includes(h) ? h : "home";
+}
+function render() {
+  const r = route();
+  const app = document.getElementById("app");
+  const y = window.scrollY;
+  const focusId = document.activeElement?.id;
+  app.innerHTML = ({ onboard: viewOnboard, my: viewMy, news: viewNews, schedule: viewSchedule, learn: viewLearn, invest: viewInvest, benefits: viewBenefits, risktest: viewRiskTest, money: viewLedger, ledger: viewLedger, assets: viewAssets, layout: viewLayout, watch: viewWatch, letters: viewLetters, etc: viewEtc, solved: viewSolved, review: viewReview, quiz: viewQuizPage }[r] || viewHome)()
+    + (r !== "onboard" && !LEARN_POP.includes(r) ? tabBar(r) : "")
+    + (ui.drawer && r !== "onboard" ? viewDrawer() : "")
+    + viewModal()
+    + (ui.openAd && r !== "onboard" ? viewOpenAd() : "")
+    + (r !== "onboard" ? viewTutCoach(r) : "")
+    + (r !== "onboard" && tutOn() && !tutNext() ? viewTabPick() : "");
+  document.body.classList.toggle("tut-pad", r !== "onboard" && !!tutNext());
+  document.body.style.overflow = ui.modal ? "hidden" : "";
+  window.scrollTo(0, y);
+  if (focusId) document.getElementById(focusId)?.focus();
+  startArcade();
+}
+function go(hash) {
+  if (location.hash === hash || (!location.hash && hash === "#home")) { render(); window.scrollTo(0, 0); }
+  else location.hash = hash;
+}
+window.addEventListener("hashchange", () => {
+  if (ui.modal && routeKey() !== ui.modal.route) { location.hash = ui.modal.route === "home" ? "" : "#" + ui.modal.route; toast("팝업에서 취소나 저장을 먼저 눌러주세요"); return; } ui.search = { q: "", results: [], sample: false }; ui.searchOpen = false; render(); window.scrollTo(0, 0); });
+
+// 지금 편집 중인 프로필 (첫 설문 중이면 초안)
+function target() { return profile || ui.onb.draft; }
+function commit() { if (profile) saveProfile(); render(); }
+
+// ───────────────────────── 이벤트 ─────────────────────────
+document.addEventListener("click", async (e) => {
+  const el = e.target.closest("[data-act]");
+  if (!el) return;
+  if ((el.classList.contains("sheet-back") || el.classList.contains("drawer-back")) && e.target.closest("[data-stop]")) return; // 안쪽 빈 곳 클릭은 닫지 않음
+  const act = el.dataset.act;
+  const t = target();
+
+  switch (act) {
+    case "go-my": {
+      // 칸마다 사는 화면이 다르다
+      const where = { layout: "layout", diag: "assets", assets: "assets", debts: "assets", goals: "assets", watch: "watch", letters: "letters", privacy: "etc" }[el.dataset.focus] || "my";
+      navTo(where, el.dataset.focus ? "sec-" + el.dataset.focus : "");
+      break;
+    }
+    case "go-home": go("#home"); break;
+    case "refresh": loadAll(true); break;
+    case "next-line": ui.bubble++; render(); break;
+    case "focus-ask": window.scrollTo(0, 0); document.getElementById("q")?.focus(); break;
+    case "ask": askAi(el.dataset.q); break;
+    case "news-more": openNews("brief"); break; // 더보기를 누르면 쉽게 풀이부터
+    case "news-brief": openNews("brief"); break;
+    case "news-foryou": openNews("foryou"); break;
+    case "letter-brief": {
+      const text = (document.getElementById("letter-text")?.value || "").trim();
+      if (text.length < 50) { ui.letter = { text, loading: false, result: null, error: "내용을 조금 더 붙여넣어 주세요 (50자 이상)" }; render(); break; }
+      if (!aiLeft()) { ui.letter = { text, loading: false, result: null, error: outOfFb(), limited: true }; render(); break; }
+      ui.letter = { text, loading: true, result: null, error: "" };
+      render();
+      try {
+        const j = await getJson("/api/brief", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text, lv: profile.level ?? null, lang: ui.lang || "ko" }) });
+        if (j.available !== false) aiCount();
+        ui.letter = { text, loading: false, result: j.available === false ? null : j, error: j.available === false ? "AI 키가 연결되면 풀이할 수 있어요" : "" };
+      } catch (err) {
+        ui.letter = { text, loading: false, result: null, error: err.body?.error || "풀이를 만들지 못했어요" };
+      }
+      if (route() === "news") render();
+      break;
+    }
+    case "news-tab": openNews(el.dataset.t); break;
+    case "add-watch-s": {
+      const v = el.dataset.v;
+      if (profile.watch.length >= 10) { toast("관심 종목은 10개까지예요"); break; }
+      profile.watch.push({ name: v, qty: null }); saveProfile();
+      ui.q = ""; ui.sremote = []; ui.searchOpen = false; render(); loadAll();
+      toast(`${v}${josa(v, "을", "를")} 관심 종목에 추가했어요`);
+      break;
+    }
+    case "kw": ui.q = ""; ui.searchOpen = false; openNews("kw:" + el.dataset.k); break;
+    case "answer": {
+      const c = conceptById(el.dataset.id), lv = Number(el.dataset.lv || 0);
+      const q = c && quizzesOf(c)[lv];
+      if (!q) break;
+      const pick = q.type === "short" ? el.closest("form")?.querySelector("input")?.value.trim() : el.dataset.o;
+      if (!pick) { toast("답을 입력해 주세요"); break; }
+      const key = `${c.id}:${lv}`;
+      learnState.answers[key] = { pick, ok: isRight(q, pick), at: Date.now() };
+      scoreAdd(learnState.answers[key].ok);
+      saveLearn(); markAttend(); checkProgress();
+      render();
+      break;
+    }
+    case "retry": delete learnState.answers[`${el.dataset.id}:${el.dataset.lv || 0}`]; saveLearn(); render(); break;
+    case "quiz-dismiss": if (learnState.today) { learnState.today.dismissed = true; saveLearn(); } render(); break;
+    case "net-sel": ui.netSel = Number(el.dataset.i); render(); break;
+    case "budget-edit": openModal("budget"); break;
+    case "ledger-export": exportLedgerCsv(); break;
+    case "mcard-open": openModal("mcard", { per: "last" }); break;
+    case "mcard-per": if (ui.modal?.kind === "mcard") { ui.modal = { kind: "mcard", route: ui.modal.route, per: el.dataset.p }; render(); } break;
+    case "mcard-save": moneyCardOut(false); break;
+    case "mcard-share": moneyCardOut(true); break;
+    case "insight-ask": askInsight(); break;
+    case "inv-mkt": ui.invMkt = el.dataset.m; { const box = document.getElementById("inv-results"); if (box) box.innerHTML = invMarketList(); } break;
+    case "mp-toggle": ui.mpOpen = !ui.mpOpen; render(); if (ui.mpOpen) document.getElementById("sec-check")?.scrollIntoView({ block: "start" }); break;
+    case "budget-save": {
+      const B = {};
+      document.querySelectorAll(".bud-form input[data-c]").forEach((inp) => { const v = parseInt(inp.value.replace(/[^0-9]/g, ""), 10); if (v > 0) B[inp.dataset.c] = v; });
+      profile.budgets = B; saveProfile(); ui.modal = null; render(); toast(Object.keys(B).length ? "예산을 저장했어요" : "예산을 모두 비웠어요");
+      break;
+    }
+    case "stage-open": ui.learnStage = el.dataset.c; render(); window.scrollTo(0, 0); break;
+    case "stage-close": ui.learnStage = null; ui.learnIsland = null; ui.learnTopic = null; render(); window.scrollTo(0, 0); break;
+    case "topic-open": ui.learnTopic = el.dataset.c; ui.topicInput = false; render(); window.scrollTo(0, 0); break;
+    case "topic-input": ui.topicInput = !ui.topicInput; render(); if (ui.topicInput) document.getElementById("topicIn")?.focus(); break;
+    case "topic-make": makeTopic(); break;
+    case "topic-del": {
+      if (!confirm("직접 만든 이 주제를 지울까요? 푼 기록도 함께 목록에서 사라져요.")) break;
+      const id = el.dataset.c;
+      learnState.custom = (learnState.custom || []).filter((t) => t.id !== id);
+      if (data.learn) data.learn.concepts = data.learn.concepts.filter((c) => c.cat !== id);
+      saveLearn(); ui.learnTopic = null; render(); window.scrollTo(0, 0); break;
+    }
+    case "cnews-toggle": {
+      const c = conceptById(el.dataset.id); if (!c) break;
+      ui.cnewsOpen = ui.cnewsOpen === c.id ? null : c.id;
+      if (ui.cnewsOpen) loadConceptNews(conceptKw(c));
+      render(); break;
+    }
+    case "island-open": ui.learnIsland = Number(el.dataset.i); render(); window.scrollTo(0, 0); break;
+    case "island-close": ui.learnIsland = null; render(); window.scrollTo(0, 0); break;
+    case "island-locked": toast("앞 섬의 문제를 모두 맞히면 열려요"); break;
+    case "node-locked": toast("앞 개념의 1단계를 먼저 맞혀 보세요"); break;
+    case "concept-open": { const c = conceptById(el.dataset.id); if (c) openQuizPage("concept", { id: c.id, lv: Math.min(quizzesOf(c).length - 1, mastered(c) ? 2 : curLv(c)) }); break; }
+    case "learn-mode": learnState.mode = el.dataset.v; saveLearn(); render(); window.scrollTo(0, 0); break;
+    case "qp-back": if (ui.qpPushed) { ui.qpPushed = false; history.back(); } else go("#learn"); break;
+    case "badges-open": if (el.dataset.jump) { ui.q = ""; ui.searchOpen = false; } openModal("badges"); break;
+    case "notes-open": if (el.dataset.jump) { ui.q = ""; ui.searchOpen = false; } openModal("notes"); break;
+    case "qq-start": { const qs = pickQuick(); if (!qs.length) { toast("풀 수 있는 문제가 없어요"); break; } openQuizPage("quick", { qs, i: 0, ok: 0, combo: 0, xp: 0, bonus: 0, res: [], picked: null }); break; }
+    case "qq-answer": {
+      const m = ui.qp; if (!m || m.picked) break;
+      const cur = m.qs[m.i], c = conceptById(cur.id), q = quizzesOf(c)[cur.lv];
+      const pick = q.type === "short" ? el.closest("form")?.querySelector("input")?.value.trim() : el.dataset.o;
+      if (!pick) { toast("답을 입력해 주세요"); break; }
+      const ok = isRight(q, pick);
+      m.picked = pick; m.res[m.i] = ok; m.lastBonus = 0;
+      if (!cur.review) learnState.answers[`${c.id}:${cur.lv}`] = { pick, ok, at: Date.now() };
+      scoreAdd(ok);
+      if (ok) {
+        m.ok++; m.combo++;
+        if (!cur.review) m.xp += XP_LV[cur.lv];
+        if (m.combo >= 2) { m.lastBonus = 5; m.bonus += 5; m.xp += 5; learnState.bonus = (learnState.bonus || 0) + 5; }
+      } else m.combo = 0;
+      if (m.i === m.qs.length - 1 && m.ok === m.qs.length) { learnState.perfect = true; }
+      saveLearn(); markAttend(); checkProgress(); render();
+      break;
+    }
+    case "qq-next": { const m = ui.qp; if (!m) break; if (m.i + 1 < m.qs.length) { m.i++; m.picked = null; } else m.done = true; render(); break; }
+    case "quiz-open": openQuizPage("quiz", { id: el.dataset.id, lv: Number(el.dataset.lv || 0) }); break;
+    case "quiz-next": { const c = conceptById(el.dataset.id); if (c && ui.qp && !mastered(c)) ui.qp.lv = curLv(c); render(); break; }
+    case "go-learn": if (!LEARN_POP.includes(route())) ui.learnFrom = route(); go("#learn"); break;
+    case "learn-close": { const f = ui.learnFrom; ui.learnFrom = null; go(f && f !== "home" ? "#" + f : "#home"); break; }
+    case "ledger-tab": ui.ledgerTab = el.dataset.v; render(); window.scrollTo(0, 0); break;
+    case "asset-tab": ui.assetTab = el.dataset.v; render(); window.scrollTo(0, 0); break;
+    case "money-seg": ui[el.dataset.k] = el.dataset.v; go("#" + el.dataset.r); window.scrollTo(0, 0); break;
+    case "assets-edit": openModal("assets", { draft: assetDraft() }); break;
+    case "asset-debt-add": syncAssetDraft(); ui.modal.draft.debts.push({ name: "", amount: null, rate: null, kind: "변동", day: null }); render(); break;
+    case "asset-debt-rm": syncAssetDraft(); ui.modal.draft.debts.splice(Number(el.dataset.i), 1); render(); break;
+    case "fb-need-ledger": toast("가계부 입력을 먼저 해주셔야 정확한 결과를 볼 수 있어요!"); break;
+    case "assets-save": {
+      syncAssetDraft();
+      const D = ui.modal.draft;
+      profile.assets = { ...profile.assets, cash: D.cash, invest: D.invest, other: D.other };
+      profile.payday = D.payday;
+      profile.monthlyIncome = D.monthlyIncome; profile.extraIncome = D.extraIncome;
+      profile.debts = D.debts.filter((d) => d.name || d.amount);
+      recordNet();
+      saveProfile(); ui.modal = null; render(); toast("저장했어요");
+      break;
+    }
+    case "goal-new": openModal("goal"); break;
+    case "goal-edit": openModal("goal", { i: Number(el.dataset.i) }); break;
+    case "goal-save": {
+      const i = ui.modal.i;
+      const name = document.getElementById("g-name").value.trim().slice(0, 20);
+      const target = readAmount("g-target");
+      if (!name || !(target > 0)) { toast("목표 이름과 금액을 적어주세요"); break; }
+      const g = { name, target, due: readDue("g-due"), saved: i !== undefined ? readAmount("g-saved") ?? 0 : 0 };
+      if (i !== undefined) profile.goals[i] = { ...profile.goals[i], ...g };
+      else profile.goals = [...(profile.goals || []), g];
+      saveProfile(); ui.modal = null; render(); toast(i !== undefined ? "목표를 고쳤어요" : "목표를 만들었어요");
+      break;
+    }
+    case "set-fs": ui.fs = Number(el.dataset.v); saveUi(); applyDisplay(); render(); break;
+    case "set-lang": {
+      const v = el.dataset.v === "en" ? "en" : "ko";
+      if ((ui.lang || "ko") === v) break;
+      ui.lang = v; saveUi(); applyDisplay();
+      data.brief = null; // 쉽게 풀이는 그 언어로 다시
+      if (v === "ko") location.reload(); // 이미 바꿔 끼운 영어를 모두 한국어로 되돌리려면 새로 그린다
+      else { render(); toast("Switching to English…"); }
+      break;
+    }
+    case "lumi-move": ui.lumiStill = !ui.lumiStill; saveUi(); render(); toast(ui.lumiStill ? "루미가 멈췄어요" : "루미가 다시 움직여요"); break;
+    case "open-drawer": ui.drawer = true; ui.searchOpen = false; render(); document.querySelector(".drawer .dr-item")?.focus(); break;
+    case "close-drawer": ui.drawer = false; ui.drQ = ""; render(); break;
+    case "dr-fold": { const o = ui.drOpen || (ui.drOpen = new Set()); o.has(el.dataset.g) ? o.delete(el.dataset.g) : o.add(el.dataset.g); const box = document.getElementById("dr-list"); if (box) box.innerHTML = drawerList(); break; }
+    case "nav": ui.q = ""; ui.searchOpen = false; navTo(el.dataset.route, el.dataset.target, el.dataset.sub); break; // 검색 결과에서 눌러도 검색창을 닫고 간다
+    case "sec-move": {
+      const L = layout(); const i = L.order.indexOf(el.dataset.id); const j = i + Number(el.dataset.d);
+      if (j < 0 || j >= L.order.length) break;
+      [L.order[i], L.order[j]] = [L.order[j], L.order[i]];
+      profile.layout = { order: L.order, hidden: [...L.hidden] }; saveProfile(); render();
+      break;
+    }
+    case "sec-toggle": {
+      const L = layout(); const id = el.dataset.id;
+      if (L.hidden.has(id)) L.hidden.delete(id); else L.hidden.add(id);
+      profile.layout = { order: L.order, hidden: [...L.hidden] }; saveProfile(); render();
+      break;
+    }
+    case "watch-move": {
+      const i = Number(el.dataset.i), j = i + Number(el.dataset.d);
+      if (j < 0 || j >= profile.watch.length) break;
+      [profile.watch[i], profile.watch[j]] = [profile.watch[j], profile.watch[i]];
+      saveProfile(); render();
+      break;
+    }
+    case "layout-reset": delete profile.layout; saveProfile(); render(); toast("홈 화면을 처음 모양으로 돌렸어요"); break;
+    case "learn-tab": ui.learnTab = el.dataset.t; render(); break;
+    case "learn-sort": ui.learnSort = el.dataset.s; render(); break;
+    case "learn-expand": ui.learnExpand = { ...ui.learnExpand, [el.dataset.c]: !ui.learnExpand[el.dataset.c] }; render(); break;
+    case "toggle-concept": ui.learnOpen = ui.learnOpen === el.dataset.id ? null : el.dataset.id; render(); break;
+    case "open-concept": { const c = conceptById(el.dataset.id); ui.q = ""; ui.searchOpen = false; if (c) openQuizPage("concept", { id: c.id, lv: mastered(c) ? 2 : curLv(c) }); break; }
+    case "go-schedule": ui.schedAll = el.dataset.all === "1"; ui.q = ""; ui.searchOpen = false; go("#schedule"); break;
+    case "sched-all": ui.schedAll = el.dataset.v === "1"; render(); break;
+    case "go-benefits": go("#benefits"); break;
+    case "ben-tab": ui.benTab = el.dataset.t; render(); break;
+    case "set-region": {
+      const sido = document.getElementById("q-sido").value;
+      if (!sido) { toast("시·도를 골라주세요"); break; }
+      t.region = { sido, sigungu: document.getElementById("q-sgg").value.trim().slice(0, 10) };
+      commit(); loadBenefits(); toast("우리 지역 혜택을 찾고 있어요");
+      break;
+    }
+    case "ad-open": startAd(el.dataset.k); break;
+    case "openad-close": ui.openAd = false; render(); break;
+    case "ad-reward": rewardAd(); break;
+    case "ad-close": clearInterval(ui.adTimer); ui.modal = null; render(); break;
+    case "set-status": t.status = el.dataset.v; commit(); loadBenefits(); break;
+    case "close-sheet": ui.sheet = null; lastSet("sheet", null); render(); break;
+    case "skip": t.skipped = { ...(t.skipped || {}), [el.dataset.k]: true }; commit(); break;
+    case "no-debt": t.debts = []; commit(); toast("대출 없음으로 저장했어요"); break;
+    case "set-income": t.income = Number(el.dataset.v); commit(); break;
+    case "set-household": t.household = el.dataset.v; commit(); break;
+    case "add-field": { // 관심 분야 '기타' 직접 적기 (첫 설문·마이페이지·홈 맞춤 질문)
+      const v = (document.getElementById("f-field-add")?.value || "").trim().replace(/\s+/g, " ").slice(0, 12);
+      if (!v) { toast("관심 분야를 적어 주세요"); break; }
+      if (el.dataset.k === "fields") { ui.qSel = ui.qSel || {}; ui.qSel.fields = [...new Set([...(ui.qSel.fields || []), v])]; render(); break; }
+      t.fields = [...new Set([...(t.fields || []), v])]; commit(); toast(`'${v}'${josa(v, "을", "를")} 관심 분야에 넣었어요`); break;
+    }
+    case "kq-open": openModal("kquiz", { i: 0, right: 0, pick: null }); break;
+    case "kq-pick": if (ui.modal?.kind === "kquiz" && ui.modal.pick == null) { const m = ui.modal; m.pick = Number(el.dataset.v); if (m.pick === KQ[m.i].c) m.right++; render(); } break;
+    case "kq-next": if (ui.modal?.kind === "kquiz") { ui.modal.i++; ui.modal.pick = null; render(); } break;
+    case "kq-apply": { t.level = Number(el.dataset.v); ui.modal = null; if (profile) data.brief = null; commit(); toast(`'${LEVELS[t.level]}'로 정했어요`); break; }
+    case "onb-rt": {
+      const T = ui.onb.rt; T.picks[T.step] = Number(el.dataset.v);
+      if (T.step === 0) t.exp = T.picks[0] <= 1 ? 0 : T.picks[0] === 2 ? 1 : 2; // 진단 1번 = 투자 경험
+      T.step++;
+      if (T.step >= RISK_TEST.length) { const score = T.picks.reduce((s, v) => s + v, 0); t.avert = riskScoreToAvert(score); t.riskTest = { score, type: riskType(t.avert), date: new Date().toISOString().slice(0, 10) }; }
+      render(); break;
+    }
+    case "onb-rt-back": ui.onb.rt.step = Math.max(0, ui.onb.rt.step - 1); render(); break;
+    case "onb-rt-restart": ui.onb.rt = { step: 0, picks: [] }; t.riskTest = null; render(); break;
+    case "onb-manual": ui.onb.manual = !ui.onb.manual; render(); break;
+    case "set-gender": t.gender = el.dataset.v; commit(); break;
+    case "set-level": t.level = Number(el.dataset.v); commit(); if (profile) { data.brief = null; } break;
+    case "set-exp": t.exp = Number(el.dataset.v); commit(); break;
+    case "aim": case "field": { // 첫 설문·마이페이지의 돈 목표·관심 분야 (여러 개)
+      const k = act === "aim" ? "aims" : "fields", v = el.dataset.v, cur = t[k] || [];
+      t[k] = cur.includes(v) ? cur.filter((x) => x !== v) : [...cur, v];
+      commit();
+      if (profile) { data.news = null; data.brief = null; loadAll(); }
+      break;
+    }
+    case "q-toggle": { // 홈 질문 카드: 골라 두었다가 '저장'
+      const k = el.dataset.k, v = el.dataset.v;
+      ui.qSel = ui.qSel || {};
+      const cur = ui.qSel[k] || [];
+      ui.qSel[k] = cur.includes(v) ? cur.filter((x) => x !== v) : [...cur, v];
+      render(); break;
+    }
+    case "q-save": {
+      const k = el.dataset.k;
+      t[k] = [...(ui.qSel?.[k] || [])]; if (ui.qSel) delete ui.qSel[k];
+      commit(); toast("루미가 기억할게요. 뉴스와 중요한 3가지에 반영해요");
+      data.news = null; data.brief = null; loadAll();
+      break;
+    }
+    case "set-cash": {
+      const v = parseInt(document.getElementById("q-cash").value.replace(/[^0-9]/g, ""), 10);
+      if (Number.isFinite(v)) { t.assets.cash = v; commit(); toast("마이페이지에서 자산 진단을 볼 수 있어요"); }
+      break;
+    }
+    case "set-payday": {
+      const v = parseInt(document.getElementById("q-pay").value, 10);
+      if (v >= 1 && v <= 31) { t.payday = v; commit(); }
+      break;
+    }
+    case "toggle-hide": ui.hideMoney = !ui.hideMoney; saveUi(); render(); break;
+    case "save-my": saveMy(); break;
+    case "go-money": ui.capture = null; go("#ledger"); break;
+    case "tab": ui.drawer = false; go(el.dataset.t === "home" ? "#home" : "#" + el.dataset.t); break;
+    case "money-kind": ui.moneyKind = el.dataset.v; ui.moneyFb = lastFb(el.dataset.v); render(); break;
+    case "money-all": ui.moneyAll = true; render(); break;
+    case "cap-cancel": ui.capture = null; render(); break;
+    case "cap-save": {
+      const n = addTx(ui.capture.items.filter((t) => !t.skip).map(({ skip, dup, ...t }) => ({ ...t, added: Date.now() })));
+      ui.capture = null; render(); toast(n ? `${n}건을 기록했어요` : "새로 기록할 거래가 없었어요");
+      break;
+    }
+    case "q-cat": // 화면을 다시 그리면 적어둔 금액이 지워져서, 칩 모양만 바꾼다
+      ui.quickCat = ui.quickCat === el.dataset.v ? null : el.dataset.v;
+      document.querySelectorAll('[data-act="q-cat"]').forEach((b) => b.classList.toggle("on", b.dataset.v === ui.quickCat));
+      break;
+    case "q-add": {
+      const amount = parseInt(document.getElementById("q-amt").value.replace(/[^0-9]/g, ""), 10);
+      if (!(amount > 0)) { toast("금액을 적어주세요"); break; }
+      const dir = document.getElementById("q-dir").value;
+      const cat = document.getElementById("q-cat").value || (dir === "in" ? "급여·수입" : "기타");
+      addTx([{ date: document.getElementById("q-date").value || ymd(today0()), merchant: document.getElementById("q-memo").value.trim().slice(0, 20) || cat, amount, dir, cat, src: "직접 기록", added: Date.now() }]);
+      ui.modal = null; render(); toast("기록했어요");
+      break;
+    }
+    case "tx-rm": if (!confirm("이 기록을 지울까요?")) break; ledger.tx = ledger.tx.filter((t) => t.id !== el.dataset.id); ui.modal = ui.modal?.back || null; saveLedger(); render(); break;
+    case "tx-edit": openModal("tx-edit", { id: el.dataset.id, back: ui.modal?.kind === "catDetail" ? ui.modal : null }); break; // 분류 상세에서 열었으면 닫을 때 그 목록으로
+    case "tx-add": openModal("tx-add"); break;
+    case "cat-detail": openModal("catDetail", { c: el.dataset.c, period: ui.moneyKind || "week" }); break;
+    case "sync-start": openModal("consent"); break;
+    case "sync-agree":
+      if (!document.getElementById("consent-ok")?.checked) { toast("동의에 체크해 주세요"); break; }
+      login();
+      break;
+    case "sync-pull":
+      try {
+        await loadFirebase(); await fb.auth.authStateReady();
+        if (!fb.auth.currentUser) { sync = {}; saveSync(); render(); alert("로그인이 풀렸어요. 다시 로그인해 주세요"); break; }
+        const res = await reconcile(true);
+        if (res === "empty") alert("아직 계정에 저장된 기록이 없어요. 기록이 있는 컴퓨터에서 마이페이지 → 기기 연결로 같은 계정에 로그인해 주세요.");
+      } catch (err) { loginError(err); }
+      break;
+    case "sync-logout": if (confirm("로그아웃할까요? 이 기기의 기록은 그대로 남아요.")) logout(); break;
+    case "cat-open": ui.catPick = { forId: el.dataset.for, internal: !!el.dataset.internal, edit: false, adding: false }; drawCatPicker(); break;
+    case "cat-close": ui.catPick = null; drawCatPicker(); break;
+    case "cat-edit": ui.catPick.edit = !ui.catPick.edit; drawCatPicker(); break;
+    case "cat-noop": break;
+    case "cat-pick": {
+      const v = el.dataset.v, P = ui.catPick;
+      const input = document.getElementById(P.forId), btn = document.querySelector(`[data-act="cat-open"][data-for="${P.forId}"]`);
+      if (input) { input.value = v; input.dataset.picked = "1"; }
+      if (btn) { btn.querySelector("span").textContent = v; btn.querySelector(".tx-dot").style.background = catColor(v); }
+      ui.catPick = null; drawCatPicker();
+      break;
+    }
+    case "cat-add": ui.catPick.adding = true; drawCatPicker(); break;
+    case "cat-add-cancel": ui.catPick.adding = false; drawCatPicker(); break;
+    case "cat-add-save": {
+      const name = (document.getElementById("cat-new")?.value || "").trim().replace(/\s+/g, " ").slice(0, 8);
+      if (!name) { toast("분류 이름을 적어주세요"); break; }
+      if (MONEY_CATS.includes(name) && ledger.cats.hidden.includes(name)) ledger.cats.hidden = ledger.cats.hidden.filter((c) => c !== name);
+      else if (MONEY_CATS.includes(name) || ledger.cats.added.includes(name)) { toast("이미 있는 분류예요"); break; }
+      else ledger.cats.added.push(name);
+      saveLedger(); ui.catPick.adding = false; drawCatPicker(); toast(`‘${name}’ 분류를 추가했어요`);
+      break;
+    }
+    case "cat-rm": {
+      e.stopPropagation();
+      const v = el.dataset.v;
+      if (CAT_KEEP.includes(v)) break;
+      if (ledger.cats.added.includes(v)) ledger.cats.added = ledger.cats.added.filter((c) => c !== v);
+      else if (!ledger.cats.hidden.includes(v)) ledger.cats.hidden.push(v);
+      saveLedger(); drawCatPicker();
+      break;
+    }
+    case "cat-restore": ledger.cats.hidden = ledger.cats.hidden.filter((c) => c !== el.dataset.v); saveLedger(); drawCatPicker(); break;
+    case "fixed-new": openModal("fixed"); break;
+    case "fixed-edit": openModal("fixed", { id: el.dataset.id }); break;
+    case "fixed-save": {
+      const amount = parseInt(document.getElementById("fx-amt").value.replace(/[^0-9]/g, ""), 10);
+      const day = parseInt(document.getElementById("fx-day").value.replace(/[^0-9]/g, ""), 10);
+      const name = document.getElementById("fx-name").value.trim().slice(0, 20);
+      if (!name || !(amount > 0)) { toast("이름과 금액을 적어주세요"); break; }
+      if (!(day >= 1 && day <= 31)) { toast("매월 며칠인지 1~31 사이로 적어주세요"); break; }
+      const v = { name, amount, day, dir: document.getElementById("fx-dir").value, cat: document.getElementById("fx-cat").value };
+      const f = ui.modal.id && ledger.fixed.find((x) => x.id === ui.modal.id);
+      if (f) Object.assign(f, v);
+      else ledger.fixed.push({ id: "f" + Date.now().toString(36), ...v, start: ymd(today0()).slice(0, 7), made: {} });
+      saveLedger(); applyFixed();
+      const isSalary = v.dir === "in" && (v.cat === "급여·수입" || /월급|급여/.test(v.name));
+      if (isSalary) { profile.monthlyIncome = Math.round(v.amount / 1e4); profile.payday = v.day; saveProfile(); }
+      ui.modal = null; render(); toast((f ? "고쳤어요" : "추가했어요. 매달 자동으로 기록돼요") + (isSalary ? " · 자산의 월 소득·월급날에도 넣었어요" : ""));
+      break;
+    }
+    case "fixed-rm":
+      if (!confirm("이 고정 수입·지출을 지울까요? 이미 기록된 내역은 남아요.")) break;
+      ledger.fixed = ledger.fixed.filter((x) => x.id !== el.dataset.id); saveLedger(); ui.modal = null; render();
+      break;
+    case "modal-close": ui.modal = ui.modal?.back || null; ui.catPick = null; drawCatPicker(); render(); break;
+    case "tx-save": {
+      const t = ledger.tx.find((x) => x.id === el.dataset.id);
+      if (!t) break;
+      const amount = parseInt(document.getElementById("e-amt").value.replace(/[^0-9]/g, ""), 10);
+      if (!(amount > 0)) { toast("금액을 적어주세요"); break; }
+      Object.assign(t, { amount, dir: document.getElementById("e-dir").value, cat: document.getElementById("e-cat").value,
+        merchant: document.getElementById("e-merch").value.trim().slice(0, 20) || t.merchant, date: document.getElementById("e-date").value || t.date });
+      ledger.tx.sort((a, b) => b.date.localeCompare(a.date));
+      ui.modal = ui.modal?.back || null; saveLedger(); render(); toast("고쳤어요");
+      break;
+    }
+    case "cal-move":
+      if ((ui.moneyKind || "week") === "week") ui.calWOff = Math.min(0, (ui.calWOff || 0) + Number(el.dataset.v));
+      else ui.calOff = Math.min(0, (ui.calOff || 0) + Number(el.dataset.v));
+      ui.calDay = null; render(); break;
+    case "cal-day": ui.calDay = ui.calDay === el.dataset.d ? null : el.dataset.d; render(); break;
+    case "money-feedback": {
+      const kind = ui.moneyKind || "week";
+      const s = spendSummary(kind), pv = spendSummary(kind, true);
+      const summary = {
+        period: kind === "week" ? "이번 주" : "이번 달", total: s.total, previousTotal: pv.total, income: s.income,
+        byCategory: s.byCat, previousByCategory: pv.byCat, topPlaces: s.top,
+        countByCategory: s.list.filter((x) => x.dir === "out").reduce((o, x) => ((o[x.cat] = (o[x.cat] || 0) + 1), o), {}),
+        guidePercentOfIncome: GUIDE_INCOME, job: profile.status || undefined,
+        values: profile.prefs, riskType: riskType(profile.avert),
+        goals: (profile.goals || []).map((g) => ({ name: g.name, leftMan: goalCalc(g).left, monthlyMan: goalCalc(g).monthly })),
+        // 이번 주(월~일) 쓴 돈·번 돈
+        thisWeek: (() => { const w = spendSummary("week"); return { spent: w.total, earned: w.list.filter((x) => x.dir === "in" && x.cat === "급여·수입").reduce((a, x) => a + x.amount, 0) }; })(),
+        // 매달 고정으로 들어오고 나가는 돈
+        fixedMonthly: ledger.fixed.map((f) => ({ name: f.name, dir: f.dir === "in" ? "수입" : "지출", amount: f.amount, day: f.day, cat: f.cat })),
+        // 나이대·자산·부채 요약 (닉네임은 보내지 않음, 금액은 만원)
+        ageGroup: profile.age ? `${Math.floor(profile.age / 10) * 10}대` : undefined,
+        incomeYear: INCOME[profile.income] || undefined,
+        assetsMan: { cash: profile.assets.cash, invest: profile.assets.invest, other: profile.assets.other },
+        debts: (profile.debts || []).map((d) => ({ amountMan: d.amount, rate: d.rate, kind: d.kind })),
+      };
+      if (!aiLeft()) break; // 버튼 아래에 다 썼다는 안내와 광고 버튼이 이미 보인다
+      ui.moneyFb = { loading: true }; render();
+      try {
+        const j = await getJson("/api/receipts", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode: "feedback", summary }) });
+        aiCount();
+        ui.moneyFb = { text: j.text, fb: j.fb };
+        if (j.text) lastSet("fb-" + kind, { from: periodRange(kind)[0], text: j.text, fb: j.fb });
+      } catch (err) { ui.moneyFb = { error: err.body?.error || "피드백을 만들지 못했어요" }; }
+      if (["money", "ledger"].includes(route())) render();
+      break;
+    }
+    case "go-goals": navTo("assets", "sec-goals"); break;
+    case "goal-rm": if (!confirm("이 목표를 지울까요?")) break; profile.goals.splice(Number(el.dataset.i), 1); ui.modal = null; saveProfile(); render(); break;
+    case "go-risktest": ui.rt = { step: 0, picks: [] }; go("#risktest"); break;
+    case "rt-pick": ui.rt.picks[ui.rt.step] = Number(el.dataset.v); ui.rt.step++; render(); window.scrollTo(0, 0); break;
+    case "rt-back": ui.rt.step = Math.max(0, ui.rt.step - 1); render(); break;
+    case "rt-restart": ui.rt = { step: 0, picks: [] }; render(); break;
+    case "rt-apply": {
+      profile.avert = Number(el.dataset.v);
+      profile.riskTest = { score: Number(el.dataset.s), type: riskType(profile.avert), date: new Date().toISOString().slice(0, 10) };
+      saveProfile(); toast(`${profile.riskTest.type}으로 반영했어요`);
+      if (ui.rtFrom === "invest") { ui.rtFrom = null; go("#invest"); } else navTo("my", "sec-risk");
+      break;
+    }
+    case "note-toggle": {
+      const id = el.dataset.id;
+      if (learnState.notes[id]) delete learnState.notes[id]; else learnState.notes[id] = Date.now();
+      saveLearn(); render();
+      break;
+    }
+    case "pref": {
+      const v = el.dataset.v;
+      t.prefs = t.prefs.includes(v) ? t.prefs.filter((x) => x !== v) : [...t.prefs, v];
+      commit();
+      if (profile) { data.news = null; loadAll(); }
+      break;
+    }
+    case "letter": {
+      const v = el.dataset.v;
+      t.letters = t.letters.includes(v) ? t.letters.filter((x) => x !== v) : [...t.letters, v];
+      commit(); break;
+    }
+    case "add-letter": {
+      const name = document.getElementById("f-ln").value.trim();
+      let url = document.getElementById("f-lu").value.trim();
+      if (!name || !url) { toast("이름과 주소를 모두 적어주세요"); break; }
+      if (!/^https?:\/\//.test(url)) url = "https://" + url;
+      t.customLetters.push({ name: name.slice(0, 20), url }); commit(); toast(`${name.slice(0, 20)}${josa(name.slice(0, 20), "을", "를")} 추가했어요`); break;
+    }
+    case "rm-letter": t.customLetters.splice(Number(el.dataset.i), 1); commit(); break;
+    case "add-watch": {
+      const v = el.dataset.v;
+      if (!t.watch.some((w) => w.name === v)) {
+        if (t.watch.length >= 10) { toast("관심 종목은 10개까지예요"); break; }
+        t.watch.push({ name: v, qty: null });
+      }
+      ui.search = { q: "", results: [], sample: false };
+      commit();
+      if (profile) loadAll();
+      break;
+    }
+    case "rm-watch": t.watch.splice(Number(el.dataset.i), 1); commit(); if (profile) loadAll(); break;
+    case "add-debt": t.debts = [...(t.debts || []), { name: "", amount: null, rate: null, kind: "변동", day: null }]; commit(); break;
+    case "rm-debt": t.debts.splice(Number(el.dataset.i), 1); commit(); break;
+    case "wipe":
+      if (confirm(sync.on ? "이 기기와 구글 계정에 저장된 내 정보를 모두 지우고 연결도 끊을까요? 되돌릴 수 없어요." : "이 기기에 저장된 내 정보를 모두 지울까요? 되돌릴 수 없어요.")) {
+        await deleteRemote();
+        try { [STORE_KEY, UI_KEY, LEARN_KEY, LEDGER_KEY, AI_KEY, LAST_KEY, INV_KEY, PUSH_KEY].forEach((k) => localStorage.removeItem(k)); } catch {}
+        ledger.tx = []; ledger.uploads = {}; ledger.fixed = []; ledger.cats = { added: [], hidden: [] }; learnState.answers = {}; learnState.scores = {}; learnState.notes = {}; learnState.days = {}; learnState.today = null;
+        profile = null; ui.onb = { step: 0, draft: null }; location.hash = ""; render();
+      }
+      break;
+    case "tut-fold": ui.tutFold = !ui.tutFold; render(); break;
+    case "tut-tab": {
+      const id = el.dataset.t, inPick = tutOn() && !tutNext();
+      const off = inPick ? ui.tabDraft || (ui.tabDraft = [...tabsOff()]) : [...tabsOff()];
+      const i = off.indexOf(id);
+      if (i >= 0) off.splice(i, 1); else off.push(id);
+      if (!inPick) { profile.tabsOff = off; saveProfile(); toast(off.includes(id) ? "아래 탭에서 뺐어요" : "아래 탭에 다시 넣었어요"); }
+      render(); break;
+    }
+    case "tut-finish":
+      profile.tabsOff = [...(ui.tabDraft || [])]; ui.tabDraft = null;
+      profile.tut = { ...profile.tut, end: Date.now() }; saveProfile();
+      go("#home"); toast("준비 끝! 이제 마음껏 써 보세요");
+      break;
+    case "tut-restart":
+      profile.tut = { done: {} }; ui.tutFold = false; saveProfile(); go("#home");
+      break;
+    case "onb-back": ui.onb.step--; ui.search = { q: "", results: [], sample: false }; render(); break;
+    case "onb-next":
+      if (ui.onb.step < 5) { ui.onb.step++; ui.search = { q: "", results: [], sample: false }; render(); window.scrollTo(0, 0); }
+      else { profile = ui.onb.draft; profile.tut = { done: {} }; saveProfile(); ui.onb = { step: 0, draft: null }; location.hash = ""; render(); loadAll(); }
+      break;
+  }
+});
+
+// 값 입력 (바꾼 뒤 칸을 벗어날 때 저장)
+// 나간 돈/들어온 돈을 바꾸면 분류도 맞춰 바꾼다 (직접 고른 분류는 건드리지 않음)
+document.addEventListener("change", (e) => {
+  const pair = { "q-dir": ["q-cat", "식비"], "fx-dir": ["fx-cat", "주거·통신"] }[e.target.id];
+  if (!pair) return;
+  const input = document.getElementById(pair[0]), btn = document.querySelector(`[data-act="cat-open"][data-for="${pair[0]}"]`);
+  if (!input || input.dataset.picked) return;
+  const v = e.target.value === "in" ? "급여·수입" : input.value === "급여·수입" ? pair[1] : input.value;
+  input.value = v;
+  if (btn) { btn.querySelector("span").textContent = v; btn.querySelector(".tx-dot").style.background = catColor(v); }
+});
+document.addEventListener("change", (e) => {
+  if (e.target.id === "cap-files") { readCaptures(e.target.files); e.target.value = ""; return; }
+  if (e.target.dataset.cap && ui.capture?.items) {
+    const t = ui.capture.items[Number(e.target.dataset.i)];
+    if (e.target.dataset.cap === "skip") t.skip = !e.target.checked;
+    if (e.target.dataset.cap === "cat") t.cat = e.target.value;
+    render();
+    return;
+  }
+});
+document.addEventListener("change", (e) => {
+  const el = e.target;
+  const f = el.dataset.field;
+  if (!f || !profile) return;
+  const p = profile;
+  const int = (v) => { const n = parseInt(String(v).replace(/[^0-9-]/g, ""), 10); return Number.isFinite(n) ? n : null; };
+  const i = Number(el.dataset.i);
+  if (f === "nickname") p.nickname = el.value.trim().slice(0, 12);
+  else if (f === "age") p.age = int(el.value);
+  else if (f === "gender") p.gender = el.value;
+  else if (f === "sido") p.region = { ...(p.region || {}), sido: el.value };
+  else if (f === "sigungu") p.region = { ...(p.region || {}), sigungu: el.value.trim().slice(0, 10) };
+  else if (f === "status") p.status = el.value;
+  else if (f === "school") p.school = el.value.trim().slice(0, 20);
+  else if (f === "income") p.income = Number(el.value) || null;
+  else if (f === "household") p.household = el.value;
+  else if (f === "avert") p.avert = Number(el.value);
+  else if (["cash", "invest", "other"].includes(f)) p.assets[f] = int(el.value);
+  else if (f === "payday") { const d = int(el.value); p.payday = d >= 1 && d <= 31 ? d : null; }
+  else if (f === "qty") p.watch[i].qty = int(el.value);
+  else if (f === "goal-saved") p.goals[i].saved = readAmount(`gs-${i}`) ?? 0;
+  else if (f === "goal-target") p.goals[i].target = readAmount(`gt-${i}`) || p.goals[i].target;
+  else if (f === "goal-due") p.goals[i].due = readDue(`gd-${i}`);
+  else if (f === "debt-name") p.debts[i].name = el.value.trim().slice(0, 20);
+  else if (f === "debt-amount") p.debts[i].amount = int(el.value);
+  else if (f === "debt-rate") { const r = parseFloat(el.value); p.debts[i].rate = Number.isFinite(r) ? r : null; }
+  else if (f === "debt-kind") p.debts[i].kind = el.value;
+  else if (f === "debt-day") { const d = int(el.value); p.debts[i].day = d >= 1 && d <= 31 ? d : null; }
+  saveProfile();
+  render();
+  if (["sido", "sigungu", "status", "age"].includes(f)) { data.benefitsApi = null; loadBenefits(); }
+});
+
+// 슬라이더를 끄는 동안엔 화면을 다시 그리지 않고 숫자만 바꾼다 (다시 그리면 드래그가 끊김)
+function showAvert(v) {
+  const a = document.getElementById("avert-val"), b = document.getElementById("avert-type");
+  if (a) a.textContent = `${v}/10`;
+  if (b) b.textContent = riskType(v);
+  const c = document.getElementById("avert-desc");
+  if (c) c.textContent = riskShort(v);
+}
+function riskShort(v) { const t = riskType(v); return `${t}: ${RISK_DESC[t].split(".")[0]}.`; }
+
+// 마이페이지 '저장하기': 지금 쓰고 있던 칸의 값까지 반영해서 저장
+// (버튼을 누르는 순간 칸에서 벗어나며 화면이 다시 그려져 클릭이 사라질 수 있어서, 누르는 즉시(pointerdown) 처리한다)
+let lastSave = 0;
+function saveMy() {
+  if (Date.now() - lastSave < 600) return;
+  lastSave = Date.now();
+  const a = document.activeElement;
+  if (a?.dataset?.field) a.dispatchEvent(new Event("change", { bubbles: true }));
+  saveProfile();
+  const t = new Date();
+  ui.savedAt = `${t.getHours()}:${String(t.getMinutes()).padStart(2, "0")}`;
+  render();
+  toast("저장했어요");
+}
+document.addEventListener("pointerdown", (e) => {
+  if (e.target.closest('[data-act="save-my"]')) { e.preventDefault(); saveMy(); }
+});
+
+let searchTimer, remoteTimer;
+document.addEventListener("input", (e) => {
+  const el = e.target;
+  if (el.id === "q") {
+    ui.q = el.value;
+    refreshResults();
+    clearTimeout(remoteTimer);
+    const q = el.value.trim();
+    ui.sremote = [];
+    if (q.length >= 2) remoteTimer = setTimeout(async () => {
+      try {
+        const j = await getJson(`/api/market?search=${encodeURIComponent(q)}&kr=1`);
+        if (ui.q.trim() === q) { ui.sremote = j.results || []; refreshResults(); }
+      } catch {}
+    }, 350);
+    return;
+  }
+  if (el.id === "letter-text") { ui.letter.text = el.value; return; }
+  if (el.id === "tx-q") { ui.txQ = el.value; const box = document.getElementById("m-list"); if (box) box.innerHTML = txListHtml(); return; }
+  if (el.dataset.o) { // 첫 설문 입력
+    const d = ui.onb.draft;
+    if (el.dataset.o === "nickname") d.nickname = el.value.slice(0, 12);
+    if (el.dataset.o === "age") d.age = parseInt(el.value, 10) || null;
+    if (el.dataset.o === "sido" || el.dataset.o === "sigungu") { d.region = { ...d.region, [el.dataset.o]: el.dataset.o === "sido" ? el.value : el.value.trim().slice(0, 10) }; const b = document.querySelector('[data-act="onb-next"]'); if (b && ui.onb.step === 1) b.textContent = d.region.sido || d.status ? "다음" : "건너뛰기"; return; }
+    if (el.dataset.o === "avert") { d.avert = Number(el.value); showAvert(d.avert); return; }
+    const btn = document.querySelector('[data-act="onb-next"]');
+    if (btn) btn.disabled = !(d.nickname.trim() && d.age > 0);
+    return;
+  }
+  if (el.dataset.field === "avert") { showAvert(Number(el.value)); return; } // 저장은 손을 뗄 때(change)
+  if (el.dataset.search) {
+    ui.search.q = el.value;
+    clearTimeout(searchTimer);
+    const q = el.value.trim();
+    const paint = () => { const box = document.getElementById("stock-results"); if (box) box.innerHTML = stockResults(); };
+    if (!q) { ui.search.results = []; paint(); return; }
+    searchTimer = setTimeout(async () => {
+      try {
+        const j = await getJson(`/api/market?search=${encodeURIComponent(q)}&kr=1`);
+        if (ui.search.q.trim() !== q) return;
+        ui.search.results = j.results || []; ui.search.sample = !!j.sample;
+      } catch { ui.search.results = []; }
+      paint();
+    }, 300);
+  }
+});
+
+document.addEventListener("submit", (e) => {
+  // 단답식 입력칸에서 Enter를 누르면 '확인'을 누른 것과 같다
+  if (e.target.classList.contains("sa-form")) { e.preventDefault(); e.target.querySelector("button[data-act]:not([disabled])")?.click(); return; }
+  if (e.target.id !== "searchform") return;
+  e.preventDefault();
+  const q = ui.q.trim();
+  if (!q) return;
+  // 질문처럼 보이거나 앱 안에서 찾은 게 없으면 바로 캐릭터에게 물어본다
+  const found = document.querySelectorAll("#sresults .si:not(.ask)").length > 1;
+  if (/[?？]$|뭐|어떻게|왜|할까|될까|얼마/.test(q) || !found) askAi(q);
+  else document.getElementById("q")?.blur();
+});
+
+document.addEventListener("focusin", (e) => {
+  if (e.target.id === "q") { ui.searchOpen = true; document.getElementById("searchwrap")?.classList.add("open"); }
+});
+document.addEventListener("pointerdown", (e) => {
+  if (ui.searchOpen && !e.target.closest("#searchwrap")) { ui.searchOpen = false; document.getElementById("searchwrap")?.classList.remove("open"); }
+});
+
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && ui.drawer) { ui.drawer = false; render(); }
+  else if (e.key === "Escape" && ui.sheet) { ui.sheet = null; lastSet("sheet", null); render(); }
+  else if (e.key === "Enter" && e.target?.id === "topicIn") { e.preventDefault(); makeTopic(); }
+  else if (e.key === "Escape" && ui.searchOpen) { ui.searchOpen = false; document.getElementById("searchwrap")?.classList.remove("open"); document.getElementById("q")?.blur(); }
+});
+
+// 새로 고치기 전에 보던 루미의 답(오늘 것, 닫지 않았을 때)과 이번 기간 가계부 피드백을 되살린다
+{ const L = lastGet(); if (profile && L.sheet?.day === ymd(today0())) ui.sheet = { q: L.sheet.q, a: L.sheet.a }; ui.moneyFb = lastFb(ui.moneyKind || "week"); }
+render();
+loadAll();
+// 로딩 화면은 최소 0.7초 보여주고 부드럽게 사라짐
+(() => {
+  const sp = document.getElementById("splash");
+  if (!sp) return;
+  const shown = performance.now();
+  setTimeout(() => { sp.classList.add("hide"); setTimeout(() => sp.remove(), 400); }, Math.max(0, 700 - shown));
+})();
+
+// 팝업 광고: 로딩 화면(0.7초)이 사라진 뒤 하루 한 번
+setTimeout(showOpenAd, 1200);
+
+// 기기 연결: 로그인돼 있으면 앱을 열 때 계정 기록과 맞춘다. 다른 탭·기기에서 돌아왔을 때도
+startSync();
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && sync.on && fb) reconcile(false).catch(() => {}); else if (document.visibilityState === "hidden" && sync.changedAt) pushNow().catch(() => {}); });
+// 앱처럼 설치(PWA): 서비스 워커 등록 (지원하지 않는 브라우저는 그냥 넘어감)
+if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost")) {
+  window.addEventListener("load", () => navigator.serviceWorker.register("/sw.js").catch(() => {}));
+}

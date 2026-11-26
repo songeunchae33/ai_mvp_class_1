@@ -1,4 +1,4 @@
-// 앱 계산(index.html의 METRICS 블록) = SQL 결과(analysis/results)인지 합성 데이터로 확인하는 테스트
+// 앱 계산(app.js의 METRICS 블록) = SQL 결과(analysis/results)인지 합성 데이터로 확인하는 테스트
 // 실행: python analysis/python/run_sql.py --quiet && node scripts/check-metrics.mjs
 // 확인하는 것
 //  1) 이번 달 현황(monthToDate) = 08_month_to_date.sql
@@ -12,7 +12,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const html = fs.readFileSync(path.join(ROOT, "index.html"), "utf8");
+const html = fs.readFileSync(path.join(ROOT, "app.js"), "utf8"); // 화면 코드(예전엔 index.html 안)
 const block = html.slice(html.indexOf("// ── METRICS:START"), html.indexOf("// ── METRICS:END"));
 const ctx = {};
 vm.createContext(ctx);

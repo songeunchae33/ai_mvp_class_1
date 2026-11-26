@@ -1,8 +1,8 @@
 // 앱처럼 설치(PWA)하기 위한 서비스 워커.
-// 화면(index.html)은 늘 인터넷에서 새로 받고, 인터넷이 끊겼을 때만 저장해 둔 것을 보여준다.
+// 화면(index.html·app.js)은 늘 인터넷에서 새로 받고, 인터넷이 끊겼을 때만 저장해 둔 것을 보여준다.
 // 시세·뉴스 같은 /api 응답은 저장하지 않는다(오래된 숫자를 보여주지 않게).
-const CACHE = "myeco-v3";
-const SHELL = ["/", "/manifest.json", "/img/lumi/app-192.png", "/img/lumi/icon.png", "/img/lumi/main.png"];
+const CACHE = "myeco-v4";
+const SHELL = ["/", "/app.js", "/manifest.json", "/img/lumi/app-192.png", "/img/lumi/icon.png", "/img/lumi/main.png"];
 
 self.addEventListener("install", (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
@@ -23,6 +23,15 @@ self.addEventListener("fetch", (e) => {
       caches.open(CACHE).then((c) => c.put("/", copy));
       return r;
     }).catch(() => caches.match("/")));
+    return;
+  }
+  // 화면 코드(app.js): 화면처럼 인터넷 먼저, 안 되면 저장본 (예전엔 index.html 안에 있었음)
+  if (url.pathname === "/app.js") {
+    e.respondWith(fetch(e.request).then((r) => {
+      const copy = r.clone();
+      caches.open(CACHE).then((c) => c.put("/app.js", copy));
+      return r;
+    }).catch(() => caches.match("/app.js")));
     return;
   }
   // 루미 그림 등: 저장본 먼저

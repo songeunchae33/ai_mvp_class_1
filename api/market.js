@@ -527,6 +527,21 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: true, share });
     } catch (e) { console.error(e); return res.status(200).json({ error: "공유 설정을 저장하지 못했어요" }); }
   }
+  // 내 정보 전부 지우기: 모의투자 순위에 남은 내 기록(닉네임·거래 기록·주문 시각·공유 설정·공유 종목)을 모든 시즌에서 지운다. 로그인 표로 본인 확인
+  if (req.query.game === "forget") {
+    if (req.method !== "POST" || !adminReady()) return res.status(400).json({ error: "잘못된 요청이에요" });
+    res.setHeader("Cache-Control", "no-store");
+    try {
+      const me = await whoIs(req);
+      if (!me) return res.status(401).json({ error: "로그인이 필요해요" });
+      const now = kstYmd(0), seasons = new Set([`${now.slice(0, 4)}-${now.slice(4, 6)}`]);
+      for (const d of await fsList("invest").catch(() => [])) if (/^\d{4}-\d{2}$/.test(d.id)) seasons.add(d.id);
+      const paths = [`investMeta/${me}`];
+      for (const sn of seasons) paths.push(`invest/${sn}/trades/${me}`, `invest/${sn}/players/${me}`, `invOrders/${sn}_${me}`, `privHold/${sn}_${me}`);
+      await Promise.all(paths.map((x) => fsDel(x).catch(() => {})));
+      return res.status(200).json({ ok: true, seasons: seasons.size });
+    } catch (e) { console.error(e); return res.status(200).json({ error: "지우지 못했어요" }); }
+  }
   if (req.query.game === "order") {
     if (req.method !== "POST") return res.status(400).json({ error: "잘못된 요청이에요" });
     res.setHeader("Cache-Control", "no-store");
