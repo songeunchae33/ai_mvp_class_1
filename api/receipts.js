@@ -4,6 +4,7 @@
 // POST /api/receipts { mode: "insight", facts: {...} }       → { insight } | { fallback: true }  (소비 인텔리전스 3단계)
 // 사진은 저장하지 않고 읽는 데만 쓴다. Gemini 무료 등급 먼저, 안 되면 OpenAI (api/_ai.js)
 import { generate, aiReady } from "./_ai.js";
+import { quota, crossSite } from "./_util.js";
 export const CATS = ["식비", "카페·간식", "쇼핑", "교통", "주거·통신", "구독", "의료·건강", "문화·여가", "여행", "교육", "경조사·선물",
   "금융·수수료", "급여·수입", "내부이체", "기타"];
 
@@ -121,27 +122,19 @@ export function numbersOk(text, facts) {
   return { ok: bad.length === 0, bad };
 }
 
-// 아주 단순한 남용 방지 (서버 인스턴스마다 IP별 하루 사진 수 제한)
-const hits = new Map();
-function allow(ip, n) {
-  const day = new Date().toISOString().slice(0, 10);
-  const h = hits.get(ip);
-  const cur = h && h.day === day ? h.count : 0;
-  if (cur + n > 20) return false; // 1인 최대 캡처 12장(무료 3 + 광고 9) + 피드백 4번에 여유분. 1인 한도는 앱이 지킨다
-  hits.set(ip, { day, count: cur + n });
-  return true;
-}
+// 남용 방지: 기기 하나 하루 20(1인 최대 캡처 12장(무료 3 + 광고 9) + 피드백 4번에 여유분), 같은 인터넷 주소 120 (api/_util.js quota)
+const allow = (req, n) => quota(req, "receipts", 20, 120, n);
 
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "POST만 지원해요" });
   if (!aiReady()) return res.status(503).json({ error: "AI 기능이 아직 설정되지 않았어요" });
   const body = req.body || {};
-  const ip = String(req.headers["x-forwarded-for"] || "").split(",")[0] || "local";
+  if (crossSite(req)) return res.status(403).json({ error: "다른 사이트에서는 쓸 수 없어요" });
 
   try {
     if (body.mode === "feedback") {
       const summary = JSON.stringify(body.summary || {}).slice(0, 3000);
-      if (!allow(ip, 1)) return res.status(429).json({ error: "오늘은 더 이상 요청할 수 없어요. 내일 다시 해주세요" });
+      if (!(await allow(req, 1))) return res.status(429).json({ error: "오늘은 더 이상 요청할 수 없어요. 내일 다시 해주세요" });
       const r = await generate({ system: FEEDBACK_RULES, text: summary, schema: FB_SCHEMA, schemaName: "money_feedback", maxTokens: 900 });
       const fb = JSON.parse(r.text);
       // 예전 화면용 글도 함께 (고민 → 처방 순서)
@@ -152,7 +145,7 @@ export default async function handler(req, res) {
     if (body.mode === "insight") {
       const facts = cleanFacts(body.facts);
       if (facts.spent_to_date_man === null) return res.status(400).json({ error: "소비 숫자가 없어요" });
-      if (!allow(ip, 1)) return res.status(429).json({ error: "오늘은 더 이상 요청할 수 없어요. 내일 다시 해주세요" });
+      if (!(await allow(req, 1))) return res.status(429).json({ error: "오늘은 더 이상 요청할 수 없어요. 내일 다시 해주세요" });
       const r = await generate({ system: INSIGHT_RULES, text: JSON.stringify({ facts }), schema: INSIGHT_SCHEMA, schemaName: "spend_insight", maxTokens: 700 });
       const insight = JSON.parse(r.text);
       const check = numbersOk(Object.values(insight).join(" "), facts);
@@ -165,7 +158,7 @@ export default async function handler(req, res) {
     if (!images.length) return res.status(400).json({ error: "사진이 없어요" });
     if (images.length > 8) return res.status(400).json({ error: "한 번에 8장까지 올릴 수 있어요" });
     if (images.reduce((s, x) => s + x.length, 0) > 4_000_000) return res.status(400).json({ error: "사진이 너무 커요" });
-    if (!allow(ip, images.length)) return res.status(429).json({ error: "오늘 읽을 수 있는 사진 수를 넘었어요. 내일 다시 해주세요" });
+    if (!(await allow(req, images.length))) return res.status(429).json({ error: "오늘 읽을 수 있는 사진 수를 넘었어요. 내일 다시 해주세요" });
 
     const today = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
     const text = `오늘은 ${today}이야. 아래 캡처 ${images.length}장의 거래를 모두 뽑아줘.` + (body.pieces

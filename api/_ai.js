@@ -2,6 +2,9 @@
 // 파일명이 _로 시작해서 주소(엔드포인트)는 생기지 않는다. ask·brief·receipts가 같이 쓴다.
 // Gemini: Interactions API (https://aistudio.google.com/docs/text-generation · image-understanding · structured-output)
 import OpenAI from "openai";
+import { quotaAll } from "./_util.js";
+// 제미나이가 실패해 유료 OpenAI로 넘어가는 건 모든 사용자를 합쳐 하루 이만큼까지 (사진은 한 장마다 1을 더 셈)
+const OPENAI_DAILY = 120;
 
 // 3.8 Flash는 사용량이 몰리면 503·20초 초과가 잦아서, 무료 등급이 있고 안정판인 3.5 Flash-Lite를 쓴다 (https://aistudio.google.com/docs/models)
 const GEMINI_MODEL = "gemini-3.5-flash-lite";
@@ -92,6 +95,7 @@ export async function generate({ system, text, images = [], schema, schemaName, 
   }
   if (geminiOnly) throw new Error(why ? `gemini only: ${why}` : "GEMINI_API_KEY가 없어요");
   if (!process.env.OPENAI_API_KEY) throw new Error("AI 키가 없어요");
+  if (!(await quotaAll("openai", OPENAI_DAILY, 1 + images.length))) throw new Error(`gemini: ${why || "없음"} / openai: 오늘 한도(${OPENAI_DAILY})를 다 썼어요`);
   // ai: 화면에는 안 보임. Gemini가 실패했으면 이유(오류 코드·메시지, 키는 없음)를 붙여 확인할 수 있게
   try { return { text: await openai(req), ai: why ? `openai (${why})` : "openai" }; }
   catch (e) { throw new Error(`gemini: ${why || "없음"} / openai: ${String(e.message).slice(0, 200)}`); } // 둘 다 왜 실패했는지 함께

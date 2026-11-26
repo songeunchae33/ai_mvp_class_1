@@ -1,6 +1,7 @@
 // 하단 질문창: 사용자 상황(요약)과 오늘 시세를 붙여 짧게 답한다. Gemini 무료 등급 먼저, 안 되면 OpenAI (api/_ai.js).
 // POST /api/ask { question, profile, market }
 // POST /api/ask { topic }  → 경제 공부 '기타' 주제: 개념 3개 × OX 3단계를 만든다 (앱이 이 기기에 저장해 다시 부르지 않음)
+import { quota, crossSite } from "./_util.js";
 import { generate, aiReady } from "./_ai.js";
 
 const SYSTEM = `너는 '나만의 경제' 앱의 금융 길잡이 캐릭터 '루미'(이루미)야. 사용자의 길을 밝혀주는 다정한 친구 같은 말투로. 2030 사용자에게 경제를 친근한 존댓말(~요)로 설명해.
@@ -13,28 +14,8 @@ const SYSTEM = `너는 '나만의 경제' 앱의 금융 길잡이 캐릭터 '루
 
 // 하루 질문 한도 (IP 기준, 서버 인스턴스마다 따로 세는 대략적인 보호).
 // 1인 한도(루미의 피드백 하루 1번 + 광고 3번)는 앱이 지키고, 여기는 같은 와이파이를 쓰는 여러 사람을 막지 않게 넉넉히 둔다
-const DAILY = 10;
-const hits = new Map();
-function allow(ip) {
-  const day = new Date().toISOString().slice(0, 10);
-  const h = hits.get(ip);
-  const n = h && h.day === day ? h.n : 0;
-  if (n >= DAILY) return false;
-  hits.set(ip, { day, n: n + 1 });
-  return true;
-}
 
 // 주제 공부 만들기 한도: 1인 하루 2주제는 앱이 지키고, 여기는 IP마다 넉넉히
-const TOPIC_DAILY = 6;
-const topicHits = new Map();
-function allowTopic(ip) {
-  const day = new Date().toISOString().slice(0, 10);
-  const h = topicHits.get(ip);
-  const n = h && h.day === day ? h.n : 0;
-  if (n >= TOPIC_DAILY) return false;
-  topicHits.set(ip, { day, n: n + 1 });
-  return true;
-}
 const OX = { type: "object", additionalProperties: false, required: ["q", "a", "ex"], properties: {
   q: { type: "string", description: "'~다?'로 끝나는 OX 문제 한 문장" },
   a: { type: "string", enum: ["O", "X"] },
@@ -82,14 +63,7 @@ async function makeTopic(topic, lv) {
 }
 
 // 영어 버전 번역: IP마다 하루 400번(한 번에 최대 40줄)
-const TR_DAILY = 400;
-const trHits = new Map(), trCache = new Map();
-function allowTr(ip) {
-  const day = new Date().toISOString().slice(0, 10), h = trHits.get(ip), n = h && h.day === day ? h.n : 0;
-  if (n >= TR_DAILY) return false;
-  trHits.set(ip, { day, n: n + 1 });
-  return true;
-}
+const trCache = new Map();
 const TR_SCHEMA = { type: "object", additionalProperties: false, required: ["en"], properties: { en: { type: "array", items: { type: "string" } } } };
 const TR_RULES = `You translate the screen text of a Korean personal-finance app for people in their 20s-30s into natural, short, friendly English.
 - The input is a JSON array of Korean strings. Return {"en": [...]} with exactly the same number of items, in the same order.
@@ -101,13 +75,13 @@ const TR_RULES = `You translate the screen text of a Korean personal-finance app
 
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "POST만 지원해요" });
-  const ip = String(req.headers["x-forwarded-for"] || "").split(",")[0] || "local";
   if (!aiReady()) return res.status(503).json({ error: "AI 질문 기능이 아직 설정되지 않았어요" });
+  if (crossSite(req)) return res.status(403).json({ error: "다른 사이트에서는 쓸 수 없어요" });
 
   // 영어 버전: 화면 글자 번역 (제미나이만, 서버가 같은 글자를 기억해 다시 쓴다)
   if (Array.isArray(req.body?.translate)) {
     const list = [...new Set(req.body.translate.filter((s) => typeof s === "string" && s.trim() && s.length <= 1500))].slice(0, 40);
-    if (!allowTr(ip)) return res.status(429).json({ error: "too many" });
+    if (!(await quota(req, "tr", 150, 600))) return res.status(429).json({ error: "too many" });
     const tr = {}, need = [];
     for (const s of list) if (trCache.has(s)) tr[s] = trCache.get(s); else need.push(s);
     if (need.length) {
@@ -124,7 +98,7 @@ export default async function handler(req, res) {
   if (req.body?.topic !== undefined) {
     const topic = String(req.body.topic || "").replace(/\s+/g, " ").trim();
     if (!topic || topic.length > 20) return res.status(400).json({ error: "주제는 20자 이내로 적어 주세요" });
-    if (!allowTopic(ip)) return res.status(429).json({ error: "오늘은 주제를 다 만들었어요. 내일 다시 해 주세요!" });
+    if (!(await quota(req, "topic", 6, 30))) return res.status(429).json({ error: "오늘은 주제를 다 만들었어요. 내일 다시 해 주세요!" });
     try {
       const r = await makeTopic(topic, req.body?.lv);
       return res.status(200).json(r.ok ? r : { ok: false, error: "경제·돈과 관련된 주제로 적어 주세요" });
@@ -138,7 +112,7 @@ export default async function handler(req, res) {
   if (typeof question !== "string" || !question.trim() || question.length > 300) {
     return res.status(400).json({ error: "질문은 300자 이내로 적어주세요" });
   }
-  if (!allow(ip)) return res.status(429).json({ error: "오늘 질문은 다 썼어요. 내일 다시 물어봐 주세요!" });
+  if (!(await quota(req, "ask", 10, 60))) return res.status(429).json({ error: "오늘 질문은 다 썼어요. 내일 다시 물어봐 주세요!" });
   const context = JSON.stringify({ profile: profile || {}, market: market || {} }).slice(0, 2000);
 
   try {

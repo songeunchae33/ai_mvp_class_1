@@ -1761,7 +1761,10 @@ function newProfile() {
 }
 
 // ───────────────────────── 데이터 불러오기 ─────────────────────────
+// 이 기기의 무작위 표시: 서버가 AI 하루 횟수를 기기마다 세는 데만 쓴다(이름·계정과 이어지지 않음)
+const DEV_ID = (() => { try { let v = localStorage.getItem("myeco.dev"); if (!v) { v = Math.random().toString(36).slice(2) + Date.now().toString(36); localStorage.setItem("myeco.dev", v); } return v; } catch { return ""; } })();
 async function getJson(url, opt) {
+  if (DEV_ID && /^\/api\/(ask|brief|receipts)/.test(url)) opt = { ...(opt || {}), headers: { ...(opt?.headers || {}), "X-Dev": DEV_ID } };
   const r = await fetch(url, opt);
   const j = await r.json().catch(() => ({}));
   if (!r.ok) throw Object.assign(new Error(j.error || r.status), { body: j });

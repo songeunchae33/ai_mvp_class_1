@@ -108,3 +108,46 @@ export async function fsGetMany(paths, fields) {
   for (const x of await r.json()) if (x.found) out[x.found.name.slice(root.length + 1)] = fromFs({ mapValue: { fields: x.found.fields || {} } });
   return out;
 }
+
+// ── AI 남용 막기: 하루 횟수를 Firestore(aiQuota)에 센다 ──
+// 서버가 여러 대이거나 새로 켜져도 같이 센다. IP·기기 표시는 그대로 적지 않고 알아볼 수 없게 바꿔(해시) 적는다.
+// 기기 표시(X-Dev)는 앱이 이 기기에서 만든 무작위 글자. 앱 밖에서(기기 표시 없이) 부르면 IP 한도를 기기 한도만큼으로 줄인다.
+export function clientIp(req) { return String(req.headers["x-forwarded-for"] || "").split(",")[0].trim() || "local"; }
+// 다른 사이트의 화면이 우리 AI 주소를 부르면(브라우저가 cross-site라고 알려 줌) 받지 않는다
+export function crossSite(req) { return String(req.headers["sec-fetch-site"] || "") === "cross-site"; }
+const qid = (s) => crypto.createHash("sha256").update(`${s}|${process.env.FIREBASE_PROJECT_ID || "myeco"}`).digest("hex").slice(0, 20);
+const memQ = new Map();
+function memIncr(id, n) {
+  const day = kstYmd(0), h = memQ.get(id), v = (h && h.day === day ? h.v : 0) + n;
+  memQ.set(id, { day, v });
+  if (memQ.size > 5000) memQ.clear();
+  return v;
+}
+async function fsIncr(ids, n) {
+  const t = await adminToken(), root = `projects/${process.env.FIREBASE_PROJECT_ID}/databases/(default)/documents`;
+  const r = await fetch(`https://firestore.googleapis.com/v1/${root}:commit`, {
+    method: "POST", headers: { Authorization: `Bearer ${t}`, "Content-Type": "application/json" }, signal: AbortSignal.timeout(6000),
+    body: JSON.stringify({ writes: ids.map((id) => ({ transform: { document: `${root}/aiQuota/${id}`, fieldTransforms: [{ fieldPath: "n", increment: { integerValue: String(n) } }] } })) }),
+  });
+  if (!r.ok) throw new Error(`firestore commit ${r.status}`);
+  return (await r.json()).writeResults.map((w) => Number(fromFs(w.transformResults?.[0]) ?? 0));
+}
+async function incr(ids, n) {
+  if (adminReady()) {
+    try { return await fsIncr(ids, n); } catch (e) { console.error("quota", e.message); } // Firestore가 막히면 이 서버 기억으로
+  }
+  return ids.map((id) => memIncr(id, n));
+}
+// → true면 허락. kind: 기능 이름, perDev: 기기 하나 하루 한도, perIp: 같은 인터넷 주소(학교 와이파이 등) 하루 한도
+export async function quota(req, kind, perDev, perIp, n = 1) {
+  const day = kstYmd(0), dev = String(req.headers["x-dev"] || "").replace(/[^a-z0-9]/gi, "").slice(0, 32);
+  const keys = [[`${day}_${kind}_ip_${qid(clientIp(req))}`, dev ? perIp : perDev]];
+  if (dev) keys.push([`${day}_${kind}_dev_${qid(dev)}`, perDev]);
+  const vals = await incr(keys.map((k) => k[0]), n);
+  return vals.every((v, i) => v <= keys[i][1]);
+}
+// 모두 합친 하루 한도 (유료 OpenAI로 넘어가는 횟수)
+export async function quotaAll(kind, max, n = 1) {
+  const [v] = await incr([`${kstYmd(0)}_${kind}_all`], n);
+  return v <= max;
+}

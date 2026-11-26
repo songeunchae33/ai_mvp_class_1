@@ -3,7 +3,7 @@
 // GET  /api/brief?interests=삼성전자,여행   → 오늘 경제 정책 풀이 (1시간 동안 같은 결과를 재사용해 비용 절약)
 // POST /api/brief { text }                  → 붙여넣은 뉴스레터 풀이 (저장하지 않음)
 import { generate, aiReady, levelRule } from "./_ai.js";
-import { cache } from "./_util.js";
+import { cache, quota, crossSite } from "./_util.js";
 import { newsdata } from "./_news.js";
 import { pressReleases, isEcon, interestScore, hotScores, atKey } from "./_policy.js";
 
@@ -44,22 +44,16 @@ async function ask(system, text) {
   return { ...JSON.parse(out.text), ai: out.ai };
 }
 
-// 뉴스레터 붙여넣기 풀이: 하루 5번 (IP 기준)
-const letterHits = new Map();
 
 export default async function handler(req, res) {
   if (!aiReady()) return res.status(200).json({ available: false });
+  if (crossSite(req)) return res.status(403).json({ error: "다른 사이트에서는 쓸 수 없어요" });
 
   // 뉴스레터 붙여넣기 풀이
   if (req.method === "POST") {
-    const ip = String(req.headers["x-forwarded-for"] || "").split(",")[0] || "local";
-    const day = new Date().toISOString().slice(0, 10);
-    const h = letterHits.get(ip);
-    const used = h && h.day === day ? h.n : 0;
-    if (used >= 5) return res.status(429).json({ error: "오늘 풀이는 다 썼어요. 내일 다시 해주세요!" });
     const text = String(req.body?.text || "").trim();
     if (text.length < 50) return res.status(400).json({ error: "내용을 조금 더 붙여넣어 주세요" }); // 짧은 글은 횟수를 깎지 않는다
-    letterHits.set(ip, { day, n: used + 1 });
+    if (!(await quota(req, "letter", 5, 30))) return res.status(429).json({ error: "오늘 풀이는 다 썼어요. 내일 다시 해주세요!" });
     try {
       const out = await ask(RULES + levelRule(req.body?.lv) + (req.body?.lang === "en" ? EN_RULE : "") + "\n- 사용자가 구독하는 뉴스레터 내용을 붙여넣었어. 핵심 2~3개만 골라 points로 정리하고, sources는 빈 배열로 둬.", text.slice(0, 6000));
       return res.status(200).json({ available: true, ...out });
@@ -73,6 +67,8 @@ export default async function handler(req, res) {
 
   const interests = String(req.query.interests || "").split(",").map((s) => s.trim()).filter(Boolean).slice(0, 5);
   const who = String(req.query.who || "").slice(0, 60); // 예: "대학생, 전세·내 집 마련"
+  // 여기까지 왔다면 CDN에 저장된 풀이가 없어 새로 만드는 것. 조건을 바꿔 가며 계속 새로 만들게 하는 남용을 막는다
+  if (!(await quota(req, "brief", 6, 40))) return res.status(200).json({ available: true, mood: "", points: [], error: "오늘은 풀이를 많이 만들었어요. 내일 다시 볼 수 있어요" });
   try {
     // 최근 7일 경제 보도자료 중 오늘의 큰 화제(여러 보도자료에 같이 나오는 낱말·시장 낱말·핵심 경제 부처)와
     // 최근 것(오늘·어제)을 앞에, 관심사와 겹치는 것을 그다음으로 40개까지
